@@ -189,7 +189,14 @@ def plot_rainflow_histogram(cycles, filename="03_rainflow_histogram.png"):
 
     if len(rngs) > 0:
         total_cycles = float(np.sum(cnts))
-        ax.bar(rngs, cnts, width=2.0, color="#aa88ff", alpha=0.8, edgecolor="#ffffff44")
+        
+        if len(rngs) > 1:
+            min_spacing = np.min(np.diff(np.sort(rngs)))
+            bar_width = min(0.8, min_spacing * 0.9)
+        else:
+            bar_width = 0.8
+        
+        ax.bar(rngs, cnts, width=bar_width, color="#aa88ff", alpha=0.8, edgecolor="#ffffff44")
         ax.set_xlabel("Stress Range (MPa)")
         ax.set_ylabel("Cycle Count")
         ax.set_title(f"Rainflow Cycle Histogram  ({len(rngs)} bins, {total_cycles:.1f} total cycles)")
