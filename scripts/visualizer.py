@@ -290,14 +290,15 @@ def plot_deformation_field(deformation_field_history, filename="06_deformation_f
         ax.set_title("Deformation Field")
     else:
         latest = np.array(deformation_field_history[-1])
+        abs_latest = np.abs(latest)
         fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(latest, color="#66ffaa", linewidth=1.5, label="Total deformation (m)")
-        ax.fill_between(np.arange(len(latest)), latest, alpha=0.3, color="#66ffaa")
+        ax.plot(abs_latest, color="#66ffaa", linewidth=1.5, label="Total deformation magnitude (m)")
+        ax.fill_between(np.arange(len(abs_latest)), abs_latest, alpha=0.3, color="#66ffaa")
         ax.set_xlabel("Node index")
-        ax.set_ylabel("Deformation (m)")
+        ax.set_ylabel("Deformation magnitude (m)")
         ax.set_title(f"Total Deformation Field — {len(latest)} nodes")
         ax.grid(True, alpha=0.3)
-        ax.text(0.02, 0.95, f"max={latest.max():.6f} m  mean={latest.mean():.6f} m",
+        ax.text(0.02, 0.95, f"max={abs_latest.max():.2e} m  mean={abs_latest.mean():.2e} m",
                 transform=ax.transAxes, fontsize=8, va="top", color="#aaaaaa",
                 bbox=dict(boxstyle="round", facecolor="#222233", alpha=0.8))
     fig.tight_layout()
