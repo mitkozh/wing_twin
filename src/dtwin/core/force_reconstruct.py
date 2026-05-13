@@ -3,11 +3,17 @@ Force reconstruction module for digital twin.
 
 Implements the core force reconstruction algorithm using the
 Moore-Penrose pseudoinverse of the strain sensitivity matrix.
+
+Note: The strain unit conversion requires verification against actual
+Ans Ansys FEA export format. The SSA states Ansys exports strain in meters
+(m), but if strain is already dimensionless (m/m), the 1e-6 scale factor
+introduces a systematic error. Current implementation assumes input is in
+µε and converts to meters for compatibility with Ansys-exported matrices.
 """
 
 import numpy as np
 
-STRAIN_METER_SCALE = 1e-6  # Convert µε to meters
+STRAIN_METER_SCALE = 1e-6
 
 
 def solve_forces(H_inv: np.ndarray, strain_vector: np.ndarray) -> np.ndarray:
@@ -15,10 +21,6 @@ def solve_forces(H_inv: np.ndarray, strain_vector: np.ndarray) -> np.ndarray:
     Reconstruct force vector from strain measurements.
 
     Uses the pseudoinverse relationship: F = H⁺ · ε
-
-    Note: The H_inv matrix expects strain in METERS (from Ansys FEA export).
-    If input strain is in µε (microstrain), it must be converted to meters
-    by multiplying by 1e-6.
 
     Args:
         H_inv: Moore-Penrose pseudoinverse of strain sensitivity matrix.
@@ -28,6 +30,10 @@ def solve_forces(H_inv: np.ndarray, strain_vector: np.ndarray) -> np.ndarray:
 
     Returns:
         Reconstructed force vector. Shape: (n_forces,)
+
+    Note:
+        Input strain is converted from µε to meters using STRAIN_METER_SCALE.
+        This requires verification against actual Ansys export units.
     """
     strain_vector = np.asarray(strain_vector, dtype=np.float64).ravel()
     # Convert µε to meters (Ansys export unit)

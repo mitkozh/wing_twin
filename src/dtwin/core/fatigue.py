@@ -162,9 +162,9 @@ def update_confidence(state: FatigueState, observed: float, expected: float) -> 
     if expected == 0 or np.isnan(expected):
         return state.confidence
 
-    residual = abs(observed - expected) / abs(expected)
+    residual = (observed - expected) / expected
     state.filtered_residual = EMA_ALPHA * residual + (1 - EMA_ALPHA) * state.filtered_residual
-    state.confidence = 100.0 * (1.0 - state.filtered_residual)
+    state.confidence = np.clip(100.0 * (1.0 - state.filtered_residual), 0.0, 100.0)
 
     if state.confidence < CONFIDENCE_THRESHOLD:
         state.low_confidence_frames += 1
