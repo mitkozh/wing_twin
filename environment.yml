@@ -1,0 +1,14 @@
+name: wing_twin
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.13
+  - pip
+  - pip:
+    - paho-mqtt>=2.0.0
+    - numpy>=1.24.0
+    - scipy>=1.10.0
+    - websockets>=11.0.0
+    - py_fatigue>=2.0.0
+    - matplotlib
