@@ -14,6 +14,7 @@ import json
 import argparse
 import threading
 import asyncio
+import time
 import numpy as np
 from collections import deque
 from dataclasses import dataclass, field
@@ -31,6 +32,7 @@ from dtwin import (
     decide_control,
 )
 from dtwin.core import FatigueState, check_maintenance_needed
+from dtwin.core.actuator import ActuatorModel, apply_force_target
 from dtwin.core.matrices import matrix_info
 from dtwin.core.fatigue import DAMAGE_SAFE, DAMAGE_WARNING
 
@@ -78,6 +80,7 @@ class Orchestrator:
         self.matrices: Optional[object] = None
         self.num_gauges = 3
         self.running = True
+        self.paused = False
         self.state = WingState()
         self.fatigue_state = FatigueState()
         self.strain_buffers: dict[str, deque] = {}
@@ -87,8 +90,19 @@ class Orchestrator:
         self.mqtt_port = mqtt_port
         self.mqtt_client = mqtt.Client()
 
+        self.params = {
+            "osc_amp": 50.0,
+            "osc_freq": 0.5,
+            "sample_rate": 10,
+            "base_strain": 100.0,
+        }
+
+        self.actuator = ActuatorModel()
+        self.target_force = 0.0
+        self.target_force_active = False
+
     def process_frame(self):
-        if len(self.strain_buffers) == 0 or self.matrices is None:
+        if self.paused or len(self.strain_buffers) == 0 or self.matrices is None:
             return
 
         primary_buffer = list(self.strain_buffers.values())[0]
@@ -165,13 +179,99 @@ class Orchestrator:
         print(f"[WEBSOCKET] Unity client connected ({len(self.connected_unity_clients)} total)")
         try:
             await ws.send(json.dumps(self.state.for_unity()))
-            async for _ in ws:
-                await ws.send(json.dumps(self.state.for_unity()))
+            async for msg in ws:
+                response = self.handle_command(msg)
+                if response:
+                    await ws.send(json.dumps(response))
         except websockets.ConnectionClosed:
             pass
         finally:
             self.connected_unity_clients.discard(ws)
             print(f"[WEBSOCKET] Unity client disconnected")
+
+    def handle_command(self, msg: str) -> Optional[dict]:
+        try:
+            cmd = json.loads(msg)
+        except json.JSONDecodeError:
+            return {"cmd": "error", "message": "Invalid JSON"}
+
+        command = cmd.get("cmd")
+        if command is None:
+            return {"cmd": "error", "message": "Missing 'cmd' field"}
+
+        if command == "ping":
+            return {"cmd": "pong", "time": time.time()}
+
+        elif command == "play":
+            self.paused = False
+            print("[CMD] Simulation resumed")
+            return {"cmd": "ack", "action": "play"}
+
+        elif command == "pause":
+            self.paused = True
+            print("[CMD] Simulation paused")
+            return {"cmd": "ack", "action": "pause"}
+
+        elif command == "reset":
+            target = cmd.get("target", "damage")
+            if target == "damage":
+                self.fatigue_state.damage = 0.0
+                self.state.damage = 0.0
+            elif target == "strain":
+                self.strain_buffers.clear()
+            elif target == "all":
+                self.fatigue_state.damage = 0.0
+                self.state.damage = 0.0
+                self.strain_buffers.clear()
+            print(f"[CMD] Reset {target}")
+            return {"cmd": "ack", "action": "reset", "target": target}
+
+        elif command == "set_param":
+            key = cmd.get("key")
+            value = cmd.get("value")
+            if key and value is not None:
+                if key in self.params:
+                    try:
+                        self.params[key] = float(value)
+                        print(f"[CMD] Set {key} = {self.params[key]}")
+                        return {"cmd": "ack", "action": "set_param", "key": key, "value": self.params[key]}
+                    except (TypeError, ValueError):
+                        return {"cmd": "error", "message": f"Invalid value for {key}"}
+                else:
+                    return {"cmd": "error", "message": f"Unknown parameter: {key}"}
+            return {"cmd": "error", "message": "Missing 'key' or 'value'"}
+
+        elif command == "apply_force":
+            force_target = cmd.get("force")
+            if force_target is None:
+                return {"cmd": "error", "message": "Missing 'force' value"}
+            try:
+                force_target = float(force_target)
+            except (TypeError, ValueError):
+                return {"cmd": "error", "message": "Force must be a number"}
+            
+            pwm, speed_pct = apply_force_target(force_target)
+            self.state.speed_pct = speed_pct
+            
+            payload = json.dumps({"servo": speed_pct, "led": self.state.led_state})
+            self.mqtt_client.publish(MQTT_CONTROL_TOPIC, payload)
+            
+            print(f"[CMD] Apply force: {force_target}N -> {speed_pct}% speed ({pwm}us PWM)")
+            return {"cmd": "ack", "action": "apply_force", "force": force_target, "speed_pct": speed_pct, "pwm_us": pwm}
+
+        elif command == "status":
+            return {
+                "cmd": "status",
+                "running": not self.paused,
+                "damage": self.state.damage,
+                "confidence": self.state.confidence,
+                "led_state": self.state.led_state,
+                "speed": self.state.speed_pct,
+                "params": self.params,
+            }
+
+        else:
+            return {"cmd": "error", "message": f"Unknown command: {command}"}
 
     async def broadcast_state(self):
         while self.running:

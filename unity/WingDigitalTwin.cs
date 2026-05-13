@@ -10,6 +10,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
@@ -31,6 +32,7 @@ public class WingDigitalTwin : MonoBehaviour
     [Header("Wing Visualization")]
     [SerializeField] private Renderer wingRenderer;
     [SerializeField] private Gradient stressGradient;
+    [SerializeField] private bool usePerVertexHeatmap = true;
 
     [Header("LED Colors")]
     [SerializeField] private Color greenColor = new Color(0.1f, 1.0f, 0.1f);
@@ -49,6 +51,12 @@ public class WingDigitalTwin : MonoBehaviour
     private float[] deformationField = Array.Empty<float>();
     private float ledFlashTimer = 0f;
     private bool ledFlash = false;
+
+    private Mesh mesh;
+    private Color[] vertexColors;
+    private float[] meshStressValues;
+    private System.Collections.Generic.Dictionary<string, System.Action<string>> pendingCommands =
+        new System.Collections.Generic.Dictionary<string, System.Action<string>>();
 
     private readonly System.Collections.Generic.Queue<Action> mainThreadQueue =
         new System.Collections.Generic.Queue<Action>();
@@ -92,6 +100,21 @@ public class WingDigitalTwin : MonoBehaviour
     {
         try
         {
+            if (json.Contains("\"cmd\":"))
+            {
+                var cmdResponse = JsonUtility.FromJson<CommandResponse>(json);
+                if (cmdResponse.cmd == "status")
+                {
+                    var status = JsonUtility.FromJson<StatusResponse>(json);
+                    currentDamage = status.damage;
+                    currentSpeed = status.speed;
+                    currentState = status.led_state;
+                    currentConfidence = status.confidence;
+                    Enqueue(UpdateUI);
+                }
+                return;
+            }
+
             var data = JsonUtility.FromJson<TwinState>(json);
             currentDamage = data.damage;
             currentSpeed = data.speed;
@@ -111,6 +134,23 @@ public class WingDigitalTwin : MonoBehaviour
         {
             Debug.LogError($"[WS] Parse error: {ex.Message}");
         }
+    }
+
+    [Serializable]
+    public class CommandResponse
+    {
+        public string cmd;
+    }
+
+    [Serializable]
+    public class StatusResponse
+    {
+        public string cmd;
+        public bool running;
+        public float damage;
+        public float confidence;
+        public string led_state;
+        public int speed;
     }
 
     void UpdateUI()
@@ -152,9 +192,16 @@ public class WingDigitalTwin : MonoBehaviour
     {
         if (wingRenderer == null || stressGradient == null) return;
 
-        float t = Mathf.Clamp01(currentDamage);
-        Color stressColor = stressGradient.Evaluate(t);
-        wingRenderer.material.color = stressColor;
+        if (usePerVertexHeatmap && mesh != null && stressField.Length > 0)
+        {
+            UpdateHeatmap();
+        }
+        else
+        {
+            float t = Mathf.Clamp01(currentDamage);
+            Color stressColor = stressGradient.Evaluate(t);
+            wingRenderer.material.color = stressColor;
+        }
 
         if (currentState == "red")
         {
@@ -164,8 +211,95 @@ public class WingDigitalTwin : MonoBehaviour
         else
         {
             wingRenderer.material.DisableKeyword("_EMISSION");
-            float em = Mathf.Lerp(0.3f, 0.0f, t);
+            float em = Mathf.Lerp(0.3f, 0.0f, currentDamage);
             wingRenderer.material.SetColor("_EmissionColor", new Color(em, em, em));
+        }
+    }
+
+    void UpdateHeatmap()
+    {
+        if (mesh == null || stressField.Length == 0) return;
+
+        int vertexCount = mesh.vertexCount;
+        if (stressField.Length != vertexCount)
+        {
+            Debug.LogWarning($"Stress field length ({stressField.Length}) != vertex count ({vertexCount})");
+            return;
+        }
+
+        if (vertexColors == null || vertexColors.Length != vertexCount)
+            vertexColors = new Color[vertexCount];
+
+        float minS = stressField.Min();
+        float maxS = stressField.Max();
+        float range = maxS - minS;
+
+        if (range < 0.001f) range = 1f;
+
+        for (int i = 0; i < vertexCount; i++)
+        {
+            float t = Mathf.InverseLerp(minS, maxS, stressField[i]);
+            vertexColors[i] = stressGradient.Evaluate(t);
+        }
+
+        mesh.colors = vertexColors;
+        mesh.MarkDynamic();
+    }
+
+    public void LoadMeshFromJson(string jsonPath)
+    {
+        try
+        {
+            string json = System.IO.File.ReadAllText(jsonPath);
+            var meshData = JsonUtility.FromJson<MeshData>(json);
+
+            mesh = new Mesh();
+            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+
+            Vector3[] vertices = meshData.vertices.Select(v => new Vector3(v[0], v[2], v[1])).ToArray();
+            mesh.vertices = vertices;
+
+            int[] triangles = meshData.triangles.SelectMany(t => t).ToArray();
+            mesh.triangles = triangles;
+
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            GetComponent<MeshFilter>().mesh = mesh;
+            meshStressValues = new float[vertices.Length];
+
+            Debug.Log($"Loaded mesh: {vertices.Length} vertices, {triangles.Length / 3} triangles");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Failed to load mesh: {ex.Message}");
+        }
+    }
+
+    [Serializable]
+    public class MeshData
+    {
+        public List<float[]> vertices;
+        public List<List<int>> triangles;
+    }
+
+    void SendCommand(string cmd, System.Collections.Generic.Dictionary<string, object> args = null, System.Action<string> callback = null)
+    {
+        if (ws == null || ws.State != WebSocketState.Open) return;
+
+        var payload = new System.Collections.Generic.Dictionary<string, object> { { "cmd", cmd } };
+        if (args != null)
+        {
+            foreach (var kv in args) payload[kv.Key] = kv.Value;
+        }
+
+        string json = JsonUtility.ToJson(payload);
+        ws.SendText(json);
+
+        if (callback != null)
+        {
+            string requestId = cmd + "_" + System.DateTime.Now.Ticks;
+            pendingCommands[requestId] = callback;
         }
     }
 
@@ -214,6 +348,36 @@ public class WingDigitalTwin : MonoBehaviour
             _ = ConnectAsync();
         if (Input.GetKeyDown(KeyCode.Escape) && ws != null)
             _ = ws.Close();
+
+        if (connected)
+        {
+            if (Input.GetKeyDown(KeyCode.P))
+            {
+                SendCommand("pause");
+            }
+            if (Input.GetKeyDown(KeyCode.R))
+            {
+                SendCommand("reset", new System.Collections.Generic.Dictionary<string, object> { { "target", "damage" } });
+            }
+            if (Input.GetKeyDown(KeyCode.S))
+            {
+                SendCommand("status");
+            }
+            if (Input.GetKeyDown(KeyCode.F))
+            {
+                ApplyForce(10.0f);
+            }
+            if (Input.GetKeyDown(KeyCode.G))
+            {
+                ApplyForce(-10.0f);
+            }
+        }
+    }
+
+    public void ApplyForce(float forceNewtons)
+    {
+        SendCommand("apply_force", new System.Collections.Generic.Dictionary<string, object> { { "force", forceNewtons } });
+        Debug.Log($"[CMD] Applying force: {forceNewtons}N");
     }
 
     [Serializable]
