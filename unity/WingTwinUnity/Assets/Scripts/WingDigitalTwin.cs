@@ -70,7 +70,7 @@ public class WingDigitalTwin : MonoBehaviour
     {
         try
         {
-            ws = WebSocketFactory.CreateInstance(WebSocketFactory.WSType.WSSECURE, serverUrl);
+            ws = new WebSocket(serverUrl);
             ws.OnOpen += () =>
             {
                 connected = true;
@@ -122,10 +122,10 @@ public class WingDigitalTwin : MonoBehaviour
             currentConfidence = data.confidence;
             maintenanceAlert = data.maintenance_alert;
 
-            if (data.stress_field != null && data.stress_field.Length > 0)
-                stressField = data.stress_field;
-            if (data.deformation_field != null && data.deformation_field.Length > 0)
-                deformationField = data.deformation_field;
+            if (data.stress_field != null && data.stress_field.Count > 0)
+                stressField = data.stress_field.ToArray();
+            if (data.deformation_field != null && data.deformation_field.Count > 0)
+                deformationField = data.deformation_field.ToArray();
 
             Enqueue(UpdateUI);
             Enqueue(() => UpdateWingVisualization(data));
