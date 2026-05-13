@@ -130,8 +130,8 @@ def main():
         vtkhdf_path = args.input
 
     if args.output is None:
-        base_name = DEFAULT_MESH_DIR / vtkhdf_path.split("/")[-1].replace(".vtkhdf", "").replace(".cgns", "")
-        out_json_path = str(DEFAULT_MESH_DIR / f"{base_name.name}_surface.json")
+        base_name = vtkhdf_path.split("/")[-1].replace(".vtkhdf", "").replace(".cgns", "")
+        out_json_path = str(DEFAULT_MESH_DIR / f"{base_name}_surface.json")
     else:
         out_json_path = args.output
 
