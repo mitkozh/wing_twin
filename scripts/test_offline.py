@@ -100,7 +100,7 @@ def main():
             accumulate_damage(buffer, fatigue_state)
             cum_damage = fatigue_state.damage
 
-            led_state, speed_pct = decide_control(cum_damage)
+            led_state, speed_pct = decide_control(cum_damage, fatigue_state.confidence)
             if cum_damage >= DAMAGE_WARNING:
                 state_str, speed_str = "CRITICAL", "0%"
             elif cum_damage >= DAMAGE_SAFE:

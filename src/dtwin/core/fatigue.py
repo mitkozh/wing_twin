@@ -35,6 +35,11 @@ STRAIN_TO_STRESS = 0.5
 # Rainflow parameters
 RAINFLOW_RANGE_BIN_WIDTH = 2.0    # MPa bin width for cycle counting
 
+# Critical node parameters
+CRITICAL_STRESS_THRESHOLD = 50.0  # MPa - nodes above this are critical
+CRITICAL_NODE_PERCENTILE = 90     # Top 10% of nodes by stress are critical
+MAX_CRITICAL_NODES = 100           # Maximum critical nodes to track
+
 # Demo mode: Use aggressive S-N curve for visible damage in short demos
 # With intercept=8, stress=50MPa gives N=800 cycles → 10 cycles = 1.25% damage
 DEMO_SN_CURVE = SNCurve(
@@ -199,3 +204,107 @@ def set_random_seed(seed: Optional[int] = None) -> None:
     """
     if seed is not None:
         np.random.seed(seed)
+
+
+def identify_critical_nodes(
+    stress_field: np.ndarray,
+    threshold: float = CRITICAL_STRESS_THRESHOLD,
+    percentile: float = CRITICAL_NODE_PERCENTILE,
+    max_nodes: int = MAX_CRITICAL_NODES,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Identify critical (high-stress) nodes from stress field.
+
+    Nodes are selected based on:
+    1. Absolute stress above threshold
+    2. Within top percentile of all nodes
+
+    Args:
+        stress_field: Stress values at each node (MPa)
+        threshold: Minimum stress to consider (MPa)
+        percentile: Percentile for top stress nodes (0-100)
+        max_nodes: Maximum number of critical nodes to return
+
+    Returns:
+        Tuple of (critical_node_indices, critical_stresses)
+    """
+    stress_field = np.asarray(stress_field, dtype=np.float64)
+    if stress_field.size == 0:
+        return np.array([], dtype=int), np.array([])
+
+    abs_stress = np.abs(stress_field)
+
+    above_threshold = np.where(abs_stress >= threshold)[0]
+
+    if len(above_threshold) > 0:
+        critical_indices = above_threshold
+    else:
+        p = np.percentile(abs_stress, percentile)
+        critical_indices = np.where(abs_stress >= p)[0]
+
+    if len(critical_indices) > max_nodes:
+        top_indices = np.argsort(abs_stress[critical_indices])[-max_nodes:]
+        critical_indices = critical_indices[top_indices]
+
+    critical_stresses = abs_stress[critical_indices]
+
+    return critical_indices, critical_stresses
+
+
+def accumulate_damage_at_nodes(
+    stress_field: np.ndarray,
+    state: FatigueState,
+    sn_curve: Optional[SNCurve] = None,
+) -> Tuple[float, int]:
+    """
+    Accumulate fatigue damage only at critical nodes (per-node rainfall).
+
+    Args:
+        stress_field: Stress values at each node (MPa)
+        state: FatigueState with buffers for each critical node
+        sn_curve: S-N curve for damage calculation
+
+    Returns:
+        Tuple of (incremental_damage, num_critical_nodes)
+    """
+    if stress_field.size == 0:
+        return 0.0, 0
+
+    if not hasattr(state, "node_buffers"):
+        state.node_buffers = {}
+        state.node_damages = {}
+
+    critical_indices, critical_stresses = identify_critical_nodes(stress_field)
+
+    if len(critical_indices) == 0:
+        return 0.0, 0
+
+    if sn_curve is None:
+        sn_curve = DEMO_SN_CURVE
+
+    total_damage = 0.0
+    buffer_size = 500
+
+    for node_idx, stress_val in zip(critical_indices, critical_stresses):
+        if node_idx not in state.node_buffers:
+            state.node_buffers[node_idx] = deque(maxlen=buffer_size)
+            state.node_damages[node_idx] = 0.0
+
+        state.node_buffers[node_idx].append(stress_val)
+
+        if len(state.node_buffers[node_idx]) >= MIN_BUFFER_FOR_DAMAGE:
+            stress_arr = np.array(state.node_buffers[node_idx], dtype=np.float64)
+
+            cc = CycleCount.from_timeseries(
+                stress_arr,
+                unit="MPa",
+                range_bin_width=RAINFLOW_RANGE_BIN_WIDTH,
+            )
+
+            damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
+            node_damage = float(np.sum(damage_per_bin))
+
+            state.node_damages[node_idx] = min(state.node_damages[node_idx] + node_damage, 1.0)
+            total_damage += node_damage
+
+    return total_damage, len(critical_indices)

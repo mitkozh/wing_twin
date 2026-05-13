@@ -121,7 +121,9 @@ def orchestrator_thread(state: SimulationState):
             state.cycle_history.extend(new_cycles)
             state.current_damage = state.fatigue_state.damage
 
-            state.led_state, state.current_speed_pct = decide_control(state.current_damage)
+            state.led_state, state.current_speed_pct = decide_control(
+                state.current_damage, state.fatigue_state.confidence
+            )
 
             state.damage_history.append(state.fatigue_state.damage)
             state.times_history.append(current_time)

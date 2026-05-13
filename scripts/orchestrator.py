@@ -127,7 +127,9 @@ class Orchestrator:
         self.state.confidence = self.fatigue_state.confidence
         self.state.maintenance_alert = check_maintenance_needed(self.fatigue_state)
 
-        self.state.led_state, self.state.speed_pct = decide_control(self.state.damage)
+        self.state.led_state, self.state.speed_pct = decide_control(
+            self.state.damage, self.fatigue_state.confidence
+        )
 
         print(
             f"[ORCH] D={self.state.damage:.4f} | {self.state.led_state.upper()} | "
