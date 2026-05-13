@@ -4,16 +4,13 @@ Force reconstruction module for digital twin.
 Implements the core force reconstruction algorithm using the
 Moore-Penrose pseudoinverse of the strain sensitivity matrix.
 
-Note: The strain unit conversion requires verification against actual
- Ansys FEA export format. The SSA states Ansys exports strain in meters
- (m), but if strain is already dimensionless (m/m), the 1e-6 scale factor
- introduces a systematic error. Current implementation assumes input is in
- micro-strain and converts to meters for compatibility with Ansys-exported matrices.
+Note: Strain is dimensionless (ratio, no units). Input values in
+ micro-strain (1e-6) are converted to dimensionless by multiplying by 1e-6.
 """
 
 import numpy as np
 
-STRAIN_METER_SCALE = 1e-6
+STRAIN_SCALE_FACTOR = 1e-6  # Convert micro-strain to dimensionless (m/m)
 
 
 def solve_forces(H_inv: np.ndarray, strain_vector: np.ndarray) -> np.ndarray:
@@ -32,13 +29,12 @@ def solve_forces(H_inv: np.ndarray, strain_vector: np.ndarray) -> np.ndarray:
         Reconstructed force vector. Shape: (n_forces,)
 
     Note:
-        Input strain is converted from micro-strain to meters using STRAIN_METER_SCALE.
-        This requires verification against actual Ansys export units.
+        Input strain is converted from micro-strain to dimensionless (m/m)
+        by multiplying by STRAIN_SCALE_FACTOR.
     """
     strain_vector = np.asarray(strain_vector, dtype=np.float64).ravel()
-    # Convert micro-strain to meters (Ansys export unit)
-    strain_meters = strain_vector * STRAIN_METER_SCALE
-    return H_inv @ strain_meters
+    strain_dimensionless = strain_vector * STRAIN_SCALE_FACTOR
+    return H_inv @ strain_dimensionless
 
 
 def force_vector_info(F: np.ndarray) -> dict:
