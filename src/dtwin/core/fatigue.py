@@ -29,7 +29,7 @@ STRAIN_BUFFER_SIZE = 3000          # Maximum strain buffer size
 MIN_BUFFER_FOR_DAMAGE = 100       # Minimum samples needed for damage calculation
 
 # Strain to stress conversion for aluminum (Young's modulus ~70 GPa)
-# Using 0.5 MPa/µε as per documentation (may include safety factors)
+# Using 0.5 MPa/micro-strain as per documentation (may include safety factors)
 STRAIN_TO_STRESS = 0.5
 
 # Rainflow parameters
@@ -41,7 +41,7 @@ CRITICAL_NODE_PERCENTILE = 90     # Top 10% of nodes by stress are critical
 MAX_CRITICAL_NODES = 100           # Maximum critical nodes to track
 
 # Demo mode: Use aggressive S-N curve for visible damage in short demos
-# With intercept=8, stress=50MPa gives N=800 cycles → 10 cycles = 1.25% damage
+# With intercept=8, stress=50MPa gives N=800 cycles -> 10 cycles = 1.25% damage
 DEMO_SN_CURVE = SNCurve(
     slope=3.0,
     intercept=8.0,    # Lower = more damage per cycle (for demo visibility)

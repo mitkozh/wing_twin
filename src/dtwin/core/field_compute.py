@@ -14,7 +14,7 @@ def compute_stress_field(S: np.ndarray, F: np.ndarray) -> np.ndarray:
     """
     Compute stress field from force vector using transfer matrix.
 
-    Uses: σ = S · F_kN
+    Uses: sigma = S * F_kN
 
     Args:
         S: Stress field transfer matrix. Shape: (n_nodes, n_forces)

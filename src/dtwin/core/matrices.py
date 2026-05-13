@@ -137,7 +137,7 @@ def matrix_info(matrices: TransferMatrices) -> dict:
         Dictionary with matrix shapes and descriptions
     """
     return {
-        "H_inv": f"{matrices.H_inv.shape} (strain→force)",
-        "S": f"{matrices.S.shape} (force→stress field)",
-        "U": f"{matrices.U.shape} (force→deformation field)",
+        "H_inv": f"{matrices.H_inv.shape} (strain->force)",
+        "S": f"{matrices.S.shape} (force->stress field)",
+        "U": f"{matrices.U.shape} (force->deformation field)",
     }
