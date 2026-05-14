@@ -1,13 +1,13 @@
 """
-MQTT handler - manages MQTT connection and message processing.
+MQTT handler - Receives sensor data from MQTT broker.
 """
 
 import json
 import threading
 from typing import Callable, Optional
 from collections import deque
-import numpy as np
 
+import numpy as np
 import paho.mqtt.client as mqtt
 
 from ..config import MqttConfig
@@ -15,7 +15,7 @@ from ..config import MqttConfig
 
 class MqttHandler:
     """
-    Handles MQTT connection, subscriptions, and message parsing.
+    Handles MQTT connection and message processing for sensor data.
     """
 
     def __init__(self, config: Optional[MqttConfig] = None):

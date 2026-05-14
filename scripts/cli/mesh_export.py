@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Wing Digital Twin Mesh Export CLI Entry Point.
 """

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Wing Digital Twin Visualizer CLI Entry Point.
 """
@@ -8,7 +7,7 @@ import argparse
 from pathlib import Path
 
 from scripts.config import PROJECT_ROOT
-from scripts.visualization import VisualizationGenerator
+from scripts.viz import VisualizationGenerator
 from scripts.analysis import DataLoader
 
 

@@ -1,15 +1,15 @@
 """
-Sensor data simulator - generates synthetic strain data.
+Simulator data source - Generates synthetic sensor data.
 """
 
 import math
-import time
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
+
 import numpy as np
 
-from .data_source import DataSource, SensorReading
+from .base import DataSource, SensorReading
 from ..config import SimulationConfig
 
 
@@ -17,13 +17,11 @@ from ..config import SimulationConfig
 class SimulatorState:
     """Runtime state for the simulator."""
     time_elapsed: float = 0.0
-    current_damage: float = 0.0
     speed_pct: int = 100
     num_gauges: int = 1
-    matrices: any = None
 
 
-class SensorSimulator(DataSource):
+class SimulatorSource(DataSource):
     """
     Generates synthetic multi-gauge strain data for testing.
     """
@@ -39,25 +37,14 @@ class SensorSimulator(DataSource):
         return self._state
 
     def set_speed(self, speed_pct: int) -> None:
-        """Update the speed percentage (e.g., from control command)."""
+        """Update the speed percentage."""
         with self._lock:
             self._state.speed_pct = max(0, min(100, speed_pct))
-
-    def set_damage(self, damage: float) -> None:
-        """Update the current damage (e.g., from orchestrator)."""
-        with self._lock:
-            self._state.current_damage = damage
 
     def set_num_gauges(self, num: int) -> None:
         """Set the number of strain gauges."""
         with self._lock:
             self._state.num_gauges = num
-
-    def set_matrices(self, matrices: any) -> None:
-        """Set transfer matrices to determine gauge count."""
-        self._state.matrices = matrices
-        if matrices is not None:
-            self._state.num_gauges = matrices.H_inv.shape[1]
 
     def connect(self) -> bool:
         self._running = True
@@ -90,7 +77,8 @@ class SensorSimulator(DataSource):
                 for i in range(self._state.num_gauges)
             ], dtype=np.float64)
 
-        accel_z = self._generate_accel_z(t, speed)
+        accel_z = -effective_amp * (2 * math.pi * self.config.osc_freq) ** 2 * math.sin(2 * math.pi * self.config.osc_freq * t)
+        accel_z += np.random.normal(0, 50)
 
         with self._lock:
             self._state.time_elapsed += 1.0 / self.config.sample_rate
@@ -102,38 +90,3 @@ class SensorSimulator(DataSource):
             timestamp=int(t * 1000),
             gauge_id="primary" if self._state.num_gauges == 1 else "vector"
         )
-
-    def _generate_accel_z(self, t: float, speed: int) -> float:
-        """Calculate vertical acceleration from wing oscillation."""
-        effective_amp = self.config.osc_amp * (speed / 100.0)
-        accel = -effective_amp * (2 * math.pi * self.config.osc_freq) ** 2 * math.sin(2 * math.pi * self.config.osc_freq * t)
-        return accel + np.random.normal(0, 50)
-
-    def generate_strain_vector(self) -> list:
-        """Generate a strain vector for direct use."""
-        reading = self.read()
-        if reading.strain_vector is not None:
-            return reading.strain_vector.tolist()
-        return [reading.strain]
-
-    def run_offline(self, duration_s: Optional[float] = None) -> None:
-        """Run simulator in offline mode, printing to console."""
-        print("\n=== Offline Mode (no MQTT) ===")
-        print(f"{'Time':<10} {'Strain':<12} {'AccelZ':<12} {'Damage':<10}")
-        print("-" * 44)
-
-        try:
-            while True:
-                reading = self.read()
-                strain_val = reading.strain if reading.strain_vector is None else reading.strain_vector[0]
-                print(f"{self._state.time_elapsed:<10.1f} {strain_val:<12.2f} {reading.accel_z:<12.0f} {self._state.current_damage:<10.4f}")
-
-                if duration_s and self._state.time_elapsed >= duration_s:
-                    break
-                if self._state.current_damage >= 1.0:
-                    print("\n=== Wing Failed! ===")
-                    break
-
-                time.sleep(1 / self.config.sample_rate)
-        except KeyboardInterrupt:
-            pass

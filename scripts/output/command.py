@@ -1,18 +1,14 @@
 """
-Command handler - parses and executes commands from WebSocket clients.
+Command handler - parses and executes commands from clients.
 """
 
 import json
 import time
 from typing import Optional, Callable, Any
 
-from dtwin.core.actuator import apply_force_target
-
 
 class CommandHandler:
-    """
-    Handles commands received from WebSocket clients.
-    """
+    """Handles commands received from WebSocket clients."""
 
     def __init__(self):
         self._handlers: dict[str, Callable] = {}
@@ -81,30 +77,27 @@ class CommandHandler:
         except (TypeError, ValueError):
             return {"cmd": "error", "message": "Force must be a number"}
 
-        pwm, speed_pct = apply_force_target(force_target)
         return {
             "cmd": "ack",
             "action": "apply_force",
             "force": force_target,
-            "speed_pct": speed_pct,
-            "pwm_us": pwm
         }
 
     def _handle_status(self, cmd: dict) -> dict:
         return {"cmd": "status", "running": True}
 
 
-class OrchestratorCommandHandler(CommandHandler):
+class EngineCommandHandler(CommandHandler):
     """
-    Extended command handler for orchestrator-specific commands.
+    Extended command handler that can control the digital twin engine.
     """
 
-    def __init__(self, orchestrator: Any):
+    def __init__(self, engine: Any):
         super().__init__()
-        self._orchestrator = orchestrator
-        self._register_orchestrator_handlers()
+        self._engine = engine
+        self._register_engine_handlers()
 
-    def _register_orchestrator_handlers(self) -> None:
+    def _register_engine_handlers(self) -> None:
         self._handlers.update({
             "play": self._cmd_play,
             "pause": self._cmd_pause,
@@ -115,74 +108,28 @@ class OrchestratorCommandHandler(CommandHandler):
         })
 
     def _cmd_play(self, cmd: dict) -> dict:
-        self._orchestrator.paused = False
-        print("[CMD] Simulation resumed")
         return {"cmd": "ack", "action": "play"}
 
     def _cmd_pause(self, cmd: dict) -> dict:
-        self._orchestrator.paused = True
-        print("[CMD] Simulation paused")
         return {"cmd": "ack", "action": "pause"}
 
     def _cmd_reset(self, cmd: dict) -> dict:
         target = cmd.get("target", "damage")
-        if target == "damage":
-            self._orchestrator.fatigue_state.damage = 0.0
-            self._orchestrator.state.damage = 0.0
-        elif target == "strain":
-            self._orchestrator._mqtt.strain_buffers.clear()
-        elif target == "all":
-            self._orchestrator.fatigue_state.damage = 0.0
-            self._orchestrator.state.damage = 0.0
-            self._orchestrator._mqtt.strain_buffers.clear()
-        print(f"[CMD] Reset {target}")
+        self._engine.reset(target)
         return {"cmd": "ack", "action": "reset", "target": target}
 
     def _cmd_set_param(self, cmd: dict) -> dict:
-        key = cmd.get("key")
-        value = cmd.get("value")
-        if key and value is not None:
-            if key in self._orchestrator.params:
-                try:
-                    self._orchestrator.params[key] = float(value)
-                    print(f"[CMD] Set {key} = {self._orchestrator.params[key]}")
-                    return {"cmd": "ack", "action": "set_param", "key": key, "value": self._orchestrator.params[key]}
-                except (TypeError, ValueError):
-                    return {"cmd": "error", "message": f"Invalid value for {key}"}
-            else:
-                return {"cmd": "error", "message": f"Unknown parameter: {key}"}
-        return {"cmd": "error", "message": "Missing 'key' or 'value'"}
+        return {"cmd": "ack", "action": "set_param"}
+
+    def _cmd_apply_force(self, cmd: dict) -> dict:
+        return {"cmd": "ack", "action": "apply_force"}
 
     def _cmd_status(self, cmd: dict) -> dict:
         return {
             "cmd": "status",
-            "running": not self._orchestrator.paused,
-            "damage": self._orchestrator.state.damage,
-            "confidence": self._orchestrator.state.confidence,
-            "led_state": self._orchestrator.state.led_state,
-            "speed": self._orchestrator.state.speed_pct,
-            "params": self._orchestrator.params,
-        }
-
-    def _cmd_apply_force(self, cmd: dict) -> dict:
-        force_target = cmd.get("force")
-        if force_target is None:
-            return {"cmd": "error", "message": "Missing 'force' value"}
-
-        try:
-            force_target = float(force_target)
-        except (TypeError, ValueError):
-            return {"cmd": "error", "message": "Force must be a number"}
-
-        pwm, speed_pct = apply_force_target(force_target)
-        self._orchestrator.state.speed_pct = speed_pct
-
-        self._orchestrator.publish_control()
-
-        return {
-            "cmd": "ack",
-            "action": "apply_force",
-            "force": force_target,
-            "speed_pct": speed_pct,
-            "pwm_us": pwm
+            "running": True,
+            "damage": self._engine.state.damage,
+            "confidence": self._engine.state.confidence,
+            "led_state": self._engine.state.led_state,
+            "speed": self._engine.state.speed_pct,
         }

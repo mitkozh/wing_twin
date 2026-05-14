@@ -2,10 +2,6 @@
  * Wing Digital Twin - Unity WebSocket Client
  * Receives {strain, forces, stress_field, deformation_field, damage, confidence, speed, led_state, maintenance_alert}
  * from Python WebSocket via force-reconstruction pipeline.
- *
- * Required Unity package: NativeWebSocket
- *   Window > Package Manager > Add package from git URL:
- *   https://github.com/NaMi-Design/NativeWebSocket.git?path=/package
  */
 
 using System;
@@ -21,6 +17,9 @@ public class WingDigitalTwin : MonoBehaviour
 {
     [Header("Connection")]
     [SerializeField] private string serverUrl = "ws://localhost:8765";
+    [SerializeField] private float reconnectDelay = 2f;
+    [SerializeField] private float maxReconnectDelay = 30f;
+    [SerializeField] private float heartbeatInterval = 5f;
 
     [Header("HUD")]
     [SerializeField] private Slider damageSlider;
@@ -29,6 +28,7 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] private Text confidenceLabel;
     [SerializeField] private Image ledImage;
     [SerializeField] private Text alertLabel;
+    [SerializeField] private Text connectionLabel;
 
     [Header("Wing Visualization")]
     [SerializeField] private Renderer wingRenderer;
@@ -42,6 +42,10 @@ public class WingDigitalTwin : MonoBehaviour
 
     private WebSocket ws;
     private bool connected = false;
+    private float currentReconnectDelay;
+    private float lastHeartbeatTime;
+    private float lastMessageTime;
+    private bool reconnectScheduled = false;
 
     private float currentDamage = 0f;
     private int currentSpeed = 100;
@@ -67,6 +71,8 @@ public class WingDigitalTwin : MonoBehaviour
         string meshPath = System.IO.Path.Combine(
             Application.streamingAssetsPath, "FinalMesh_surface.json");
         LoadMeshFromJson(meshPath);
+
+        currentReconnectDelay = reconnectDelay;
         await ConnectAsync();
     }
 
@@ -74,14 +80,25 @@ public class WingDigitalTwin : MonoBehaviour
     {
         try
         {
+            if (ws != null)
+            {
+                ws.OnOpen = null;
+                ws.OnMessage = null;
+                ws.OnClose = null;
+                ws.OnError = null;
+            }
+
             ws = new WebSocket(serverUrl);
             ws.OnOpen += () =>
             {
                 connected = true;
+                currentReconnectDelay = reconnectDelay;
+                lastHeartbeatTime = Time.time;
                 Debug.Log("[WS] Connected");
             };
             ws.OnMessage += (byte[] data) =>
             {
+                lastMessageTime = Time.time;
                 string msg = System.Text.Encoding.UTF8.GetString(data);
                 Enqueue(() => HandleMessage(msg));
             };
@@ -89,14 +106,42 @@ public class WingDigitalTwin : MonoBehaviour
             {
                 connected = false;
                 Debug.Log($"[WS] Closed: {code}");
+                ScheduleReconnect();
             };
-            ws.OnError += (err) => Debug.LogError($"[WS] Error: {err}");
+            ws.OnError += (err) =>
+            {
+                Debug.LogError($"[WS] Error: {err}");
+                connected = false;
+                ScheduleReconnect();
+            };
 
             await ws.Connect();
         }
         catch (Exception e)
         {
             Debug.LogError($"[WS] Connection error: {e.Message}");
+            ScheduleReconnect();
+        }
+    }
+
+    private async void ScheduleReconnect()
+    {
+        if (reconnectScheduled) return;
+        reconnectScheduled = true;
+
+        Debug.Log($"[WS] Scheduling reconnect in {currentReconnectDelay}s...");
+        await Task.Delay(TimeSpan.FromSeconds(currentReconnectDelay));
+        reconnectScheduled = false;
+
+        await ConnectAsync();
+        currentReconnectDelay = Mathf.Min(currentReconnectDelay * 1.5f, maxReconnectDelay);
+    }
+
+    private void SendHeartbeat()
+    {
+        if (ws != null && ws.State == WebSocketState.Open)
+        {
+            ws.SendText("{\"cmd\":\"ping\"}");
         }
     }
 
@@ -106,20 +151,26 @@ public class WingDigitalTwin : MonoBehaviour
         {
             if (json.Contains("\"cmd\":"))
             {
-                var cmdResponse = JsonUtility.FromJson<CommandResponse>(json);
+                var cmdResponse = JsonConvert.DeserializeObject<CommandResponse>(json);
                 if (cmdResponse.cmd == "status")
                 {
-                    var status = JsonUtility.FromJson<StatusResponse>(json);
+                    var status = JsonConvert.DeserializeObject<StatusResponse>(json);
                     currentDamage = status.damage;
                     currentSpeed = status.speed;
                     currentState = status.led_state;
                     currentConfidence = status.confidence;
                     Enqueue(UpdateUI);
                 }
+                else if (cmdResponse.cmd == "pong")
+                {
+                    Debug.Log("[WS] Heartbeat received");
+                }
                 return;
             }
 
-            var data = JsonUtility.FromJson<TwinState>(json);
+            var data = JsonConvert.DeserializeObject<TwinState>(json);
+            if (data == null) return;
+
             currentDamage = data.damage;
             currentSpeed = data.speed;
             currentState = data.led_state;
@@ -331,9 +382,13 @@ public class WingDigitalTwin : MonoBehaviour
 
     void OnGUI()
     {
-        GUILayout.BeginArea(new Rect(10, 10, 360, 260));
+        float msgAge = Time.time - lastMessageTime;
+
+        GUILayout.BeginArea(new Rect(10, 10, 380, 300));
         GUI.skin.label.fontSize = 16;
         GUILayout.Label($"WebSocket: {(connected ? "CONNECTED" : "DISCONNECTED")}");
+        if (connected)
+            GUILayout.Label($"Last msg:   {(msgAge * 1000):F0}ms ago");
         GUILayout.Label($"Damage:      {currentDamage * 100:F1}%");
         GUILayout.Label($"Vmax:        {currentSpeed}%");
         GUILayout.Label($"Confidence:  {currentConfidence:F1}%");
@@ -345,6 +400,7 @@ public class WingDigitalTwin : MonoBehaviour
             GUILayout.Label($"Deform nodes: {deformationField.Length}");
         GUILayout.Space(10);
         GUILayout.Label("SPACE = reconnect  |  ESC = disconnect");
+        GUILayout.Label($"Reconnect delay: {currentReconnectDelay:F1}s");
         GUILayout.EndArea();
 
         if (!connected && GUI.Button(new Rect(10, Screen.height - 40, 150, 30), "Reconnect"))
@@ -353,6 +409,23 @@ public class WingDigitalTwin : MonoBehaviour
 
     void Update()
     {
+        // Connection health monitoring
+        if (connected)
+        {
+            float timeSinceLastMsg = Time.time - lastMessageTime;
+            if (timeSinceLastMsg > heartbeatInterval * 2)
+            {
+                Debug.LogWarning("[WS] No messages received, reconnecting...");
+                connected = false;
+                ScheduleReconnect();
+            }
+            else if (Time.time - lastHeartbeatTime > heartbeatInterval)
+            {
+                SendHeartbeat();
+                lastHeartbeatTime = Time.time;
+            }
+        }
+
         if (!connected && Input.GetKeyDown(KeyCode.Space))
             _ = ConnectAsync();
         if (Input.GetKeyDown(KeyCode.Escape) && ws != null)
@@ -380,6 +453,14 @@ public class WingDigitalTwin : MonoBehaviour
             {
                 ApplyForce(-10.0f);
             }
+        }
+
+        // Update connection label
+        if (connectionLabel != null)
+        {
+            float latency = (Time.time - lastMessageTime) * 1000;
+            connectionLabel.text = connected ? $"CONNECTED ({latency:F0}ms)" : "DISCONNECTED";
+            connectionLabel.color = connected ? Color.green : Color.red;
         }
     }
 

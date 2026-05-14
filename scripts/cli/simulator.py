@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Wing Digital Twin Sensor Simulator CLI Entry Point.
 """
@@ -10,7 +9,7 @@ import time
 import paho.mqtt.client as mqtt
 
 from scripts.config import SimulationConfig
-from scripts.sensors import SensorSimulator
+from scripts.sources import SimulatorSource
 
 
 def main():
@@ -21,7 +20,7 @@ def main():
     args = parser.parse_args()
 
     config = SimulationConfig()
-    simulator = SensorSimulator(config)
+    simulator = SimulatorSource(config)
 
     try:
         from dtwin.core.matrices import load_transfer_matrices

@@ -1,53 +1,31 @@
-#!/usr/bin/env python3
 """
-Wing Digital Twin Full Stack Demo CLI Entry Point.
+Wing Digital Twin Demo CLI Entry Point.
 """
 
 import argparse
 import asyncio
-import math
 import threading
 import time
-import json
-from collections import deque
 from dataclasses import dataclass, field
+from typing import Optional
 
 import numpy as np
-import websockets
 
-from dtwin import (
-    load_transfer_matrices,
-    solve_forces,
-    compute_stress_field,
-    compute_deformation_field,
-    accumulate_damage,
-    decide_control,
-)
-from dtwin.core import FatigueState
-from dtwin.core.fatigue import STRAIN_BUFFER_SIZE, set_random_seed, DAMAGE_SAFE, DAMAGE_WARNING
+from dtwin.core.fatigue import DAMAGE_SAFE, DAMAGE_WARNING
 
 from pathlib import Path
 
-from ..config import SimulationConfig, PROJECT_ROOT
-from ..sensors import SensorSimulator
+from ..config import PROJECT_ROOT
 from ..analysis import DataExporter, DataLoader
-from ..visualization import VisualizationGenerator
+from ..viz import VisualizationGenerator
+from ..engine import DigitalTwinEngine, EngineConfig
+from ..sources import SimulatorSource
+from ..output import WebSocketBroadcaster
 
 
 @dataclass
-class DemoState:
-    """Runtime state for the demo."""
-    running: bool = True
-    sensor_queue: deque = field(default_factory=lambda: deque(maxlen=100))
-    control_queue: deque = field(default_factory=lambda: deque(maxlen=10))
-    strain_buffer: deque = field(default_factory=lambda: deque(maxlen=STRAIN_BUFFER_SIZE))
-    current_damage: float = 0.0
-    current_speed_pct: int = 100
-    led_state: str = "green"
-    fatigue_state: FatigueState = field(default_factory=FatigueState)
-    matrices = None
-    num_gauges: int = 3
-    record_strain: bool = True
+class HistoryState:
+    """Tracks history for visualization and export."""
     strain_history: list = field(default_factory=list)
     force_history: list = field(default_factory=list)
     stress_field_history: list = field(default_factory=list)
@@ -57,184 +35,88 @@ class DemoState:
     cycle_history: list = field(default_factory=list)
 
 
-SAMPLE_RATE = 10
-OSC_AMP = 50.0
-OSC_FREQ = 0.5
+async def run_demo_async(
+    duration_s: int,
+    seed: Optional[int] = None,
+    record: bool = True
+) -> tuple[DigitalTwinEngine, HistoryState]:
+    """Run demo with WebSocket broadcasting."""
+    config = EngineConfig(seed=seed)
+    engine = DigitalTwinEngine(config)
+
+    print("[MATRICES] Loading transfer matrices...")
+    try:
+        engine.load_matrices()
+        print(f"[MATRICES] Loaded successfully ({engine.num_gauges} gauge channels)")
+    except FileNotFoundError as e:
+        print(f"[MATRICES] {e}")
+        print("[MATRICES] Running without transfer matrices")
+
+    simulator = SimulatorSource()
+    engine.data_source = simulator
+
+    history = HistoryState()
+    running = [True]  # Use list for mutability across threads
+    start_time = time.time()
+
+    broadcaster = WebSocketBroadcaster()
+
+    def state_provider():
+        return engine.state.for_unity()
+
+    broadcaster.set_state_provider(state_provider)
+
+    display_task = asyncio.create_task(broadcaster.start())
+
+    async def process_loop():
+        while running[0]:
+            if engine.step():
+                if record:
+                    history.strain_history.append(
+                        engine.state.strain_vector[0] if engine.state.strain_vector else 0.0
+                    )
+                    history.force_history.append(engine.state.forces.copy())
+                    history.stress_field_history.append(engine.state.stress_field.copy())
+                    history.deformation_field_history.append(engine.state.deformation_field.copy())
+                    history.damage_history.append(engine.state.damage)
+                    history.times_history.append(time.time() - start_time)
+                    history.cycle_history.extend(engine.cycles)
+                    engine.clear_cycles()
+            await asyncio.sleep(0.05)
+            if broadcaster.connected_clients > 0:
+                await broadcaster.broadcast()
+
+    process_task = asyncio.create_task(process_loop())
+    display_thread = threading.Thread(target=_display_thread, args=(engine, running), daemon=True)
+    display_thread.start()
+
+    try:
+        await asyncio.sleep(duration_s)
+    except KeyboardInterrupt:
+        pass
+
+    running[0] = False
+    await asyncio.sleep(0.5)
+
+    print(f"\n[SIM] Recorded {len(history.strain_history)} samples over {duration_s}s")
+
+    return engine, history
 
 
-def generate_strain(t: float, speed_pct: int) -> float:
-    """Generate strain value - matches old demo exactly."""
-    effective_amp = OSC_AMP * (speed_pct / 100.0)
-    base = 100.0 + np.random.uniform(-5, 5)
-    osc = effective_amp * math.sin(2 * math.pi * OSC_FREQ * t)
-    noise = np.random.normal(0, 10)
-    return base + osc + noise
-
-
-def simulator_thread(state: DemoState):
-    print("[SIM] Simulator started")
-    t = 0.0
-    dt = 1.0 / SAMPLE_RATE
-    while state.running:
-        strain = generate_strain(t, state.current_speed_pct)
-        state.sensor_queue.append({
-            "strain": round(strain, 2),
-            "accel_z": round(
-                -state.current_speed_pct / 100.0 * OSC_AMP * (2 * math.pi * OSC_FREQ) ** 2
-                * math.sin(2 * math.pi * OSC_FREQ * t) + np.random.normal(0, 50),
-                1,
-            ),
-            "timestamp": int(t * 1000),
-        })
-        time.sleep(dt)
-        t += dt
-
-
-def orchestrator_thread(state: DemoState):
-    print("[ORCH] Orchestrator started")
-    while state.running:
-        samples_processed = 0
-        while state.sensor_queue:
-            data = state.sensor_queue.popleft()
-            state.strain_buffer.append(data["strain"])
-            if state.record_strain:
-                state.strain_history.append(data["strain"])
-            samples_processed += 1
-
-        if samples_processed > 0 and len(state.strain_buffer) >= state.num_gauges:
-            current_time = (len(state.strain_history) - 1) / SAMPLE_RATE
-            arr = np.array(list(state.strain_buffer)[-state.num_gauges:], dtype=np.float64).ravel()
-
-            if state.matrices is not None:
-                F = solve_forces(state.matrices.H_inv, arr)
-                stress = compute_stress_field(state.matrices.S, F)
-                deformation = compute_deformation_field(state.matrices.U, F)
-                state.force_history.append(F.tolist())
-                state.stress_field_history.append(stress.tolist())
-                state.deformation_field_history.append(deformation.tolist())
-            else:
-                state.force_history.append([0.0])
-                state.stress_field_history.append([0.0])
-                state.deformation_field_history.append([0.0])
-
-            damage_inc, new_cycles = accumulate_damage(state.strain_buffer, state.fatigue_state)
-            state.cycle_history.extend(new_cycles)
-            state.current_damage = state.fatigue_state.damage
-
-            state.led_state, state.current_speed_pct = decide_control(
-                state.current_damage, state.fatigue_state.confidence
-            )
-
-            state.damage_history.append(state.fatigue_state.damage)
-            state.times_history.append(current_time)
-            state.control_queue.append({
-                "servo": state.current_speed_pct,
-                "led": state.led_state,
-                "damage": state.current_damage,
-                "speed": state.current_speed_pct,
-            })
-
-        time.sleep(0.05)
-
-
-def display_thread(state: DemoState):
+def _display_thread(engine, running_ref):
+    """Thread that displays live dashboard."""
     print("\n" + "=" * 60)
     print("  Wing Digital Twin — Live Dashboard")
     print("=" * 60)
     tick = 0
-    while state.running:
+    while running_ref[0]:
         tick += 1
         bar_len = 30
-        filled = int(state.current_damage * bar_len)
+        filled = int(engine.state.damage * bar_len)
         bar = "#" * filled + "-" * (bar_len - filled)
-        state_sym = {"green": "GREEN", "yellow": "YELLOW", "red": "RED"}.get(state.led_state, "UNKNOWN")
-        print(f"[{tick:4d}s] |{bar}| {state.current_damage*100:5.1f}%  {state_sym:7s}  Vmax={state.current_speed_pct:3d}%")
+        state_sym = {"green": "GREEN", "yellow": "YELLOW", "red": "RED"}.get(engine.state.led_state, "UNKNOWN")
+        print(f"[{tick:4d}s] |{bar}| {engine.state.damage*100:5.1f}%  {state_sym:7s}  Vmax={engine.state.speed_pct:3d}%")
         time.sleep(1)
-
-
-async def websocket_server(state: DemoState):
-    connected_clients = set()
-
-    async def handler(ws):
-        connected_clients.add(ws)
-        print(f"[WS] Client connected ({len(connected_clients)} total)")
-        try:
-            await ws.send(json.dumps({
-                "strain": 0.0, "forces": [], "stress_field": [],
-                "deformation_field": [], "damage": 0.0, "speed": 100, "led_state": "green"
-            }))
-            async for _ in ws:
-                pass
-        except Exception:
-            pass
-        finally:
-            connected_clients.discard(ws)
-
-    async with websockets.serve(handler, "localhost", 8765):
-        print("[WS]  WebSocket server running on ws://localhost:8765")
-        while state.running:
-            if connected_clients and state.control_queue:
-                latest = state.control_queue[-1]
-                msg = {
-                    "strain": float(np.mean(state.strain_history[-100:])) if state.strain_history else 0.0,
-                    "forces": state.force_history[-1] if state.force_history else [0.0],
-                    "stress_field": state.stress_field_history[-1][:5] if state.stress_field_history else [],
-                    "deformation_field": state.deformation_field_history[-1][:5] if state.deformation_field_history else [],
-                    "damage": round(latest["damage"], 4),
-                    "speed": latest["speed"],
-                    "led_state": latest["led"],
-                }
-                await asyncio.gather(*[ws.send(json.dumps(msg)) for ws in connected_clients], return_exceptions=True)
-            await asyncio.sleep(0.1)
-
-
-def websocket_thread_wrapper(state: DemoState):
-    asyncio.run(websocket_server(state))
-
-
-def run_simulation(duration_s: int, state: DemoState, seed: int = None):
-    if seed is not None:
-        set_random_seed(seed)
-    state.running = True
-    state.strain_history = []
-    state.force_history = []
-    state.stress_field_history = []
-    state.deformation_field_history = []
-    state.damage_history = []
-    state.times_history = []
-    state.cycle_history = []
-    state.fatigue_state = FatigueState()
-    state.sensor_queue.clear()
-    state.control_queue.clear()
-    state.strain_buffer.clear()
-
-    print("[MATRICES] Loading transfer matrices...")
-    try:
-        state.matrices = load_transfer_matrices()
-        state.num_gauges = state.matrices.H_inv.shape[1]
-        print(f"[MATRICES] Loaded successfully ({state.num_gauges} gauge channels)")
-    except FileNotFoundError as e:
-        print(f"[MATRICES] {e}")
-        print("[MATRICES] Running without transfer matrices (forces/fields will be zero)")
-
-    t1 = threading.Thread(target=simulator_thread, args=(state,), daemon=True)
-    t2 = threading.Thread(target=orchestrator_thread, args=(state,), daemon=True)
-    t3 = threading.Thread(target=websocket_thread_wrapper, args=(state,), daemon=True)
-    t4 = threading.Thread(target=display_thread, args=(state,), daemon=True)
-    for t in [t1, t2, t3, t4]:
-        t.start()
-
-    try:
-        time.sleep(duration_s)
-    except KeyboardInterrupt:
-        pass
-
-    state.running = False
-    time.sleep(0.5)
-
-    n = min(len(state.strain_history), len(state.damage_history), len(state.times_history))
-    print(f"\n[SIM] Recorded {len(state.strain_history)} samples over {duration_s}s")
-    print(f"       (truncating to {n} synchronized points for figures)")
 
 
 def main():
@@ -263,28 +145,27 @@ def main():
             generator.generate(strain, times, damage, cycles or [], stress_fields, deformations)
         return
 
-    state = DemoState()
-    run_simulation(args.duration, state, seed=args.seed)
+    engine, history = asyncio.run(run_demo_async(args.duration, args.seed, record=True))
 
-    if args.figures and state.strain_history:
+    if args.figures and history.strain_history:
         exporter = DataExporter(PROJECT_ROOT / "figures")
         exporter.save(
-            state.strain_history,
-            state.times_history,
-            state.damage_history,
-            state.cycle_history,
-            state.force_history,
-            state.stress_field_history,
-            state.deformation_field_history,
+            history.strain_history,
+            history.times_history,
+            history.damage_history,
+            history.cycle_history,
+            history.force_history,
+            history.stress_field_history,
+            history.deformation_field_history,
         )
         generator = VisualizationGenerator(PROJECT_ROOT / "figures")
         generator.generate(
-            state.strain_history,
-            state.times_history,
-            state.damage_history,
-            state.cycle_history,
-            state.stress_field_history,
-            state.deformation_field_history,
+            history.strain_history,
+            history.times_history,
+            history.damage_history,
+            history.cycle_history,
+            history.stress_field_history,
+            history.deformation_field_history,
         )
 
 

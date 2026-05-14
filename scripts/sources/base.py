@@ -1,5 +1,5 @@
 """
-Protocol for data sources - abstracts input data generation.
+Data source abstractions.
 """
 
 from abc import ABC, abstractmethod
@@ -19,10 +19,7 @@ class SensorReading:
 
 
 class DataSource(ABC):
-    """
-    Abstract interface for data sources.
-    Implement this to create custom data providers (MQTT, file, hardware, etc.)
-    """
+    """Abstract interface for data sources."""
 
     @abstractmethod
     def connect(self) -> bool:
