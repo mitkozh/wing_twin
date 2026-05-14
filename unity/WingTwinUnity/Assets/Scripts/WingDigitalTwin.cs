@@ -80,14 +80,6 @@ public class WingDigitalTwin : MonoBehaviour
     {
         try
         {
-            if (ws != null)
-            {
-                ws.OnOpen = null;
-                ws.OnMessage = null;
-                ws.OnClose = null;
-                ws.OnError = null;
-            }
-
             ws = new WebSocket(serverUrl);
             ws.OnOpen += () =>
             {
