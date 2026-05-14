@@ -4,7 +4,7 @@ Mesh exporter - exports VTK meshes to JSON for Unity.
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 import vtk
@@ -56,6 +56,14 @@ class MeshExporter:
         surface_filter.Update()
         surface = surface_filter.GetOutput()
 
+        # Get mapping from surface point IDs to original point IDs
+        point_map = surface.GetPointData().GetArray("GlobalNodeID")
+        if point_map is None:
+            n_surface = surface.GetNumberOfPoints()
+            point_ids = list(range(n_surface))
+        else:
+            point_ids = [int(point_map.GetValue(i)) for i in range(surface.GetNumberOfPoints())]
+
         points_data = surface.GetPoints().GetData()
         vertices = vtk_to_numpy(points_data)
 
@@ -74,6 +82,7 @@ class MeshExporter:
         output_data = {
             "vertices": vertices.tolist(),
             "triangles": triangles,
+            "node_ids": point_ids,  # Original FEA node IDs for each surface vertex
             "metadata": {
                 "num_vertices": len(vertices),
                 "num_triangles": len(triangles),
@@ -86,6 +95,7 @@ class MeshExporter:
 
         print(f"Exported {len(vertices)} vertices, {len(triangles)} triangles")
         print(f"Saved to: {out_json_path}")
+        print(f"Node ID mapping: {len(point_ids)} surface -> {max(point_ids) + 1 if point_ids else 0} original")
         return output_data
 
     def list_available(self) -> list:

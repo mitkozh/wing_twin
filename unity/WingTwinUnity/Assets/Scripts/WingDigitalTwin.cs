@@ -19,7 +19,7 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] private string serverUrl = "ws://localhost:8765";
     [SerializeField] private float reconnectDelay = 2f;
     [SerializeField] private float maxReconnectDelay = 30f;
-    [SerializeField] private float heartbeatInterval = 5f;
+    [SerializeField] private float heartbeatInterval = 10f;
 
     [Header("HUD")]
     [SerializeField] private Slider damageSlider;

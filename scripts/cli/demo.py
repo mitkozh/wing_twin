@@ -90,15 +90,24 @@ async def run_demo_async(
     display_thread = threading.Thread(target=_display_thread, args=(engine, running), daemon=True)
     display_thread.start()
 
-    try:
-        await asyncio.sleep(duration_s)
-    except KeyboardInterrupt:
-        pass
+    if duration_s > 0:
+        try:
+            await asyncio.sleep(duration_s)
+        except KeyboardInterrupt:
+            pass
+    else:
+        # Run indefinitely until keyboard interrupt
+        try:
+            while running[0]:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            pass
 
     running[0] = False
     await asyncio.sleep(0.5)
 
-    print(f"\n[SIM] Recorded {len(history.strain_history)} samples over {duration_s}s")
+    if duration_s > 0:
+        print(f"\n[SIM] Recorded {len(history.strain_history)} samples over {duration_s}s")
 
     return engine, history
 
@@ -121,11 +130,16 @@ def _display_thread(engine, running_ref):
 
 def main():
     parser = argparse.ArgumentParser(description="Wing Digital Twin Demo")
-    parser.add_argument("--duration", type=int, default=30, help="Simulation duration in seconds")
+    parser.add_argument("--duration", type=int, default=30, help="Simulation duration in seconds (use 0 for infinite)")
+    parser.add_argument("--run", action="store_true", help="Run indefinitely until Ctrl+C")
     parser.add_argument("--figures", action="store_true", help="Generate PNG figures after simulation")
     parser.add_argument("--figures-only", action="store_true", help="Regenerate figures from last saved data")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible results")
     args = parser.parse_args()
+
+    # Override duration for --run flag
+    if args.run:
+        args.duration = 0
 
     if args.seed is not None:
         print(f"[SEED] Random seed set to {args.seed}")
