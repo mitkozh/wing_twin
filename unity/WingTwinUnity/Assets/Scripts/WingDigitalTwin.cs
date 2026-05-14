@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
 using NativeWebSocket;
+using Newtonsoft.Json;
 
 public class WingDigitalTwin : MonoBehaviour
 {
@@ -63,6 +64,9 @@ public class WingDigitalTwin : MonoBehaviour
 
     async void Start()
     {
+        string meshPath = System.IO.Path.Combine(
+            Application.streamingAssetsPath, "FinalMesh_surface.json");
+        LoadMeshFromJson(meshPath);
         await ConnectAsync();
     }
 
@@ -248,38 +252,43 @@ public class WingDigitalTwin : MonoBehaviour
 
     public void LoadMeshFromJson(string jsonPath)
     {
-        try
+        if (!System.IO.File.Exists(jsonPath))
         {
-            string json = System.IO.File.ReadAllText(jsonPath);
-            var meshData = JsonUtility.FromJson<MeshData>(json);
-
-            mesh = new Mesh();
-            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-
-            Vector3[] vertices = meshData.vertices.Select(v => new Vector3(v[0], v[2], v[1])).ToArray();
-            mesh.vertices = vertices;
-
-            int[] triangles = meshData.triangles.SelectMany(t => t).ToArray();
-            mesh.triangles = triangles;
-
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-
-            GetComponent<MeshFilter>().mesh = mesh;
-            meshStressValues = new float[vertices.Length];
-
-            Debug.Log($"Loaded mesh: {vertices.Length} vertices, {triangles.Length / 3} triangles");
+            Debug.LogError($"Mesh file not found: {jsonPath}");
+            return;
         }
-        catch (Exception ex)
+
+        string json = System.IO.File.ReadAllText(jsonPath);
+        MeshData data = JsonConvert.DeserializeObject<MeshData>(json);
+
+        if (data?.vertices == null || data?.triangles == null)
         {
-            Debug.LogError($"Failed to load mesh: {ex.Message}");
+            Debug.LogError("Failed to load mesh: parsed data is null.");
+            return;
         }
+
+        mesh = new Mesh();
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+
+        Vector3[] vertices = data.vertices.Select(v => new Vector3(v[0], v[2], v[1])).ToArray();
+        mesh.vertices = vertices;
+
+        int[] triangles = data.triangles.SelectMany(t => t).ToArray();
+        mesh.triangles = triangles;
+
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+
+        GetComponent<MeshFilter>().mesh = mesh;
+        meshStressValues = new float[vertices.Length];
+
+        Debug.Log($"Loaded mesh: {vertices.Length} vertices, {triangles.Length / 3} triangles");
     }
 
     [Serializable]
     public class MeshData
     {
-        public List<float[]> vertices;
+        public List<List<float>> vertices;
         public List<List<int>> triangles;
     }
 
