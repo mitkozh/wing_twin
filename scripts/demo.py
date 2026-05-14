@@ -9,12 +9,14 @@ Usage:
 """
 
 import argparse
+import asyncio
 import threading
 import time
 import json
 import math
 import os
 import numpy as np
+import websockets
 from collections import deque
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -152,25 +154,45 @@ def display_thread(state: SimulationState):
         time.sleep(1)
 
 
-def websocket_sim_thread(state: SimulationState):
-    print("[WS]  WebSocket simulation started (ws://localhost:8765)")
-    print("[WS]  Unity receives: {strain, forces, stress_field, deformation_field, damage, speed, led_state}\n")
-    last_state = None
-    last_print = 0
-    while state.running:
-        if time.time() - last_print > 5 and state.control_queue:
-            latest = state.control_queue[-1]
-            state_str = json.dumps({
-                "strain": float(np.mean(state.strain_history[-100:])) if state.strain_history else 0.0,
-                "damage": round(latest["damage"], 4),
-                "speed": latest["speed"],
-                "led_state": latest["led"],
-            }, indent=2)
-            if state_str != last_state:
-                print(f"[WS] → Unity: {state_str}")
-                last_state = state_str
-                last_print = time.time()
-        time.sleep(0.5)
+async def websocket_server(state: SimulationState):
+    connected_clients = set()
+
+    async def handler(ws):
+        connected_clients.add(ws)
+        print(f"[WS] Client connected ({len(connected_clients)} total)")
+        try:
+            await ws.send(json.dumps({
+                "strain": 0.0, "forces": [], "stress_field": [], 
+                "deformation_field": [], "damage": 0.0, "speed": 100, "led_state": "green"
+            }))
+            async for _ in ws:
+                pass
+        except Exception:
+            pass
+        finally:
+            connected_clients.discard(ws)
+
+    async with websockets.serve(handler, "localhost", 8765):
+        print("[WS]  WebSocket server running on ws://localhost:8765")
+        print("[WS]  Clients can connect and receive: {strain, forces, stress_field, deformation_field, damage, speed, led_state}")
+        while state.running:
+            if connected_clients and state.control_queue:
+                latest = state.control_queue[-1]
+                msg = {
+                    "strain": float(np.mean(state.strain_history[-100:])) if state.strain_history else 0.0,
+                    "forces": state.force_history[-1] if state.force_history else [0.0],
+                    "stress_field": state.stress_field_history[-1][:5] if state.stress_field_history else [],
+                    "deformation_field": state.deformation_field_history[-1][:5] if state.deformation_field_history else [],
+                    "damage": round(latest["damage"], 4),
+                    "speed": latest["speed"],
+                    "led_state": latest["led"],
+                }
+                await asyncio.gather(*[ws.send(json.dumps(msg)) for ws in connected_clients], return_exceptions=True)
+            await asyncio.sleep(0.1)
+
+
+def websocket_thread_wrapper(state: SimulationState):
+    asyncio.run(websocket_server(state))
 
 
 def run_simulation(duration_s: int, state: SimulationState):
@@ -198,7 +220,7 @@ def run_simulation(duration_s: int, state: SimulationState):
 
     t1 = threading.Thread(target=simulator_thread, args=(state,), daemon=True)
     t2 = threading.Thread(target=orchestrator_thread, args=(state,), daemon=True)
-    t3 = threading.Thread(target=websocket_sim_thread, args=(state,), daemon=True)
+    t3 = threading.Thread(target=websocket_thread_wrapper, args=(state,), daemon=True)
     t4 = threading.Thread(target=display_thread, args=(state,), daemon=True)
     for t in [t1, t2, t3, t4]:
         t.start()
