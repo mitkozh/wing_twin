@@ -38,7 +38,8 @@ class HistoryState:
 async def run_demo_async(
     duration_s: int,
     seed: Optional[int] = None,
-    record: bool = True
+    record: bool = True,
+    record_figures: bool = False
 ) -> tuple[DigitalTwinEngine, HistoryState]:
     """Run demo with WebSocket broadcasting."""
     config = EngineConfig(seed=seed)
@@ -73,18 +74,22 @@ async def run_demo_async(
 
     async def process_loop():
         broadcast_count = 0
+        record_interval = 10
+        frame_count = 0
         while running[0]:
             if engine.step():
-                if record:
+                frame_count += 1
+                if record and frame_count % record_interval == 0:
                     history.strain_history.append(
                         engine.state.strain_vector[0] if engine.state.strain_vector else 0.0
                     )
-                    history.force_history.append(engine.state.forces.copy())
-                    history.stress_field_history.append(engine.state.stress_field.copy())
-                    history.deformation_field_history.append(engine.state.deformation_field.copy())
                     history.damage_history.append(engine.state.damage)
                     history.times_history.append(time.time() - start_time)
                     history.cycle_history.extend(engine.cycles)
+                    if record_figures:
+                        history.force_history.append(list(engine.state.forces))
+                        history.stress_field_history.append(list(engine.state.stress_field))
+                        history.deformation_field_history.append(list(engine.state.deformation_field))
                     engine.clear_cycles()
             
             clients = len(broadcaster._clients)
@@ -169,7 +174,7 @@ def main():
             generator.generate(strain, times, damage, cycles or [], stress_fields, deformations)
         return
 
-    engine, history = asyncio.run(run_demo_async(args.duration, args.seed, record=True))
+    engine, history = asyncio.run(run_demo_async(args.duration, args.seed, record=True, record_figures=args.figures))
 
     if args.figures and history.strain_history:
         exporter = DataExporter(PROJECT_ROOT / "figures")
