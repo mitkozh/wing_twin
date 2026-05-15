@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
+using TMPro;
 using UnityEngine.UI;
 using NativeWebSocket;
 using Newtonsoft.Json;
@@ -23,12 +24,12 @@ public class WingDigitalTwin : MonoBehaviour
 
     [Header("HUD")]
     [SerializeField] private Slider damageSlider;
-    [SerializeField] private Text damageLabel;
-    [SerializeField] private Text speedLabel;
-    [SerializeField] private Text confidenceLabel;
+    [SerializeField] private TextMeshProUGUI damageLabel;
+    [SerializeField] private TextMeshProUGUI speedLabel;
+    [SerializeField] private TextMeshProUGUI confidenceLabel;
     [SerializeField] private Image ledImage;
-    [SerializeField] private Text alertLabel;
-    [SerializeField] private Text connectionLabel;
+    [SerializeField] private TextMeshProUGUI alertLabel;
+    [SerializeField] private TextMeshProUGUI connectionLabel;
 
     [Header("Wing Visualization")]
     [SerializeField] private Renderer wingRenderer;
@@ -443,7 +444,7 @@ async Task ConnectAsync()
         if (connectionLabel != null)
         {
             float latency = (Time.time - lastMessageTime) * 1000;
-            connectionLabel.text = connected ? $"CONNECTED ({latency:F0}ms)" : "DISCONNECTED";
+            connectionLabel.text = connected ? $"CONNECTED" : "DISCONNECTED";
             connectionLabel.color = connected ? Color.green : Color.red;
         }
     }
