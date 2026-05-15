@@ -361,7 +361,7 @@ async Task ConnectAsync()
             foreach (var kv in args) payload[kv.Key] = kv.Value;
         }
 
-        string json = JsonUtility.ToJson(payload);
+        string json = JsonConvert.SerializeObject(payload);
         ws.SendText(json);
 
         if (callback != null)
