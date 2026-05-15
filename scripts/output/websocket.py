@@ -4,7 +4,7 @@ WebSocket broadcaster - sends state to Unity clients.
 
 import asyncio
 import json
-from typing import Callable, Optional, Set
+from typing import Any, Callable, Optional, Set
 
 import websockets
 from websockets import WebSocketServerProtocol
@@ -18,11 +18,16 @@ class WebSocketBroadcaster:
         self.port = port
         self._clients: Set[WebSocketServerProtocol] = set()
         self._state_provider: Optional[Callable[[], dict]] = None
+        self._command_handler: Optional[Any] = None
         self._running = False
 
     def set_state_provider(self, provider: Callable[[], dict]) -> None:
         """Set callback that returns current state dict."""
         self._state_provider = provider
+
+    def set_command_handler(self, handler: Any) -> None:
+        """Set command handler for processing incoming commands."""
+        self._command_handler = handler
 
     @property
     def connected_clients(self) -> int:
@@ -41,8 +46,11 @@ class WebSocketBroadcaster:
                 if self._state_provider:
                     await ws.send(json.dumps(self._state_provider()))
 
-                async for _ in ws:
-                    pass
+                async for message in ws:
+                    if self._command_handler:
+                        response = self._command_handler.handle(message)
+                        if response:
+                            await ws.send(json.dumps(response))
             except Exception as e:
                 print(f"[WS] Client error: {e}")
             finally:

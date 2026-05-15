@@ -20,7 +20,7 @@ from ..analysis import DataExporter, DataLoader
 from ..viz import VisualizationGenerator
 from ..engine import DigitalTwinEngine, EngineConfig
 from ..sources import SimulatorSource
-from ..output import WebSocketBroadcaster
+from ..output import WebSocketBroadcaster, EngineCommandHandler
 
 
 @dataclass
@@ -61,11 +61,13 @@ async def run_demo_async(
     start_time = time.time()
 
     broadcaster = WebSocketBroadcaster()
+    command_handler = EngineCommandHandler(engine)
 
     def state_provider():
         return engine.state.for_unity()
 
     broadcaster.set_state_provider(state_provider)
+    broadcaster.set_command_handler(command_handler)
 
     display_task = asyncio.create_task(broadcaster.start())
 
