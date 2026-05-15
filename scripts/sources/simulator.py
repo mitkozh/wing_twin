@@ -66,11 +66,11 @@ class SimulatorSource(DataSource):
 
         steady = self.config.base_strain * (load_factor ** 2)
 
-        bending_1 = 40.0 * load_factor * math.sin(2 * math.pi * 4.2 * t)
+        bending_1 = self.config.osc_amp * load_factor * math.sin(2 * math.pi * 4.2 * t)
 
-        bending_2 = 12.0 * load_factor * math.sin(2 * math.pi * 11.5 * t + 0.4)
+        bending_2 = self.config.osc_amp * 0.3 * load_factor * math.sin(2 * math.pi * 11.5 * t + 0.4)
 
-        torsion = 8.0 * load_factor * math.sin(2 * math.pi * 18.3 * t + 1.1)
+        torsion = self.config.osc_amp * 0.2 * load_factor * math.sin(2 * math.pi * 18.3 * t + 1.1)
 
         turb_amp = 20.0 * load_factor
         turbulence = turb_amp * np.random.normal(0, 1) * (1.0 + 0.5 * math.sin(2 * math.pi * 0.3 * t))

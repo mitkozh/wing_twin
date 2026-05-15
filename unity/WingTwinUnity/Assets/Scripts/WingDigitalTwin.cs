@@ -291,15 +291,13 @@ async Task ConnectAsync()
         if (vertexColors == null || vertexColors.Length != vertexCount)
             vertexColors = new Color[vertexCount];
 
-        float minS = stressField.Min();
-        float maxS = stressField.Max();
-        float range = maxS - minS;
-
-        if (range < 0.001f) range = 1f;
+        float minS = 0f;
+        float maxS = 270000000f;
 
         for (int i = 0; i < vertexCount; i++)
         {
-            float t = Mathf.InverseLerp(minS, maxS, stressField[i]);
+            float absStress = Mathf.Abs(stressField[i]);
+            float t = Mathf.Clamp01(absStress / maxS);
             vertexColors[i] = stressGradient.Evaluate(t);
         }
 

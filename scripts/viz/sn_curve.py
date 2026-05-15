@@ -13,17 +13,21 @@ class SnCurvePlotter(BasePlotter):
 
     def plot(self, cycles, filename: str = "04_sn_curve.png") -> Path:
         """Plot S-N curve with cycle amplitudes."""
+        # S-N CURVE OPTIONS:
+        # DEMO: a=8.0, endurance=1e4 (for visible damage in demos)
+        # ALUMINUM: a=15.0, endurance=1e7 (realistic physics)
+        a, m = 8.0, 3.0  # DEMO curve for demo visibility
+
         plt = self._get_plt()
         fig, ax = plt.subplots(figsize=(10, 5))
 
         n_points = np.logspace(3, 10, 100)
-        a, m = 8.0, 3.0
         stress_curve = 10 ** ((a - np.log10(n_points)) / m)
 
         ax.plot(n_points, stress_curve, color="#ffaa44", linewidth=2.5,
                 label="S-N curve (demo)")
-        ax.axhline(80, color="#22cc66", linestyle=":", linewidth=1, alpha=0.7,
-                   label="Endurance limit (80 MPa)")
+        ax.axhline(100, color="#22cc66", linestyle=":", linewidth=1, alpha=0.7,
+                   label="Endurance limit (100 MPa)")
 
         rngs, cnts = self._parse_cycles(cycles)
 
@@ -44,7 +48,7 @@ class SnCurvePlotter(BasePlotter):
         ax.legend(loc="upper right")
         ax.grid(True, which="both", alpha=0.3)
         ax.set_xlim(1e3, 1e10)
-        ax.set_ylim(0, 100)
+        ax.set_ylim(0, 300)
 
         fig.tight_layout()
         path = self.output_dir / filename
@@ -57,7 +61,7 @@ class SnCurvePlotter(BasePlotter):
         """Calculate cycles to failure from stress amplitude."""
         if amp <= 0:
             return float("inf")
-        a, m = 8.0, 3.0
+        a, m = 8.0, 3.0  # DEMO curve
         log_n = a - m * np.log10(amp)
         return 10 ** log_n
 

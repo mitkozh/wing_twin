@@ -7,7 +7,7 @@ using pre-computed transfer matrices from FEA.
 
 import numpy as np
 
-FORCE_SCALE = 1000.0  # Convert N to kN (S/U matrices expect kN as far as I can tell)
+FORCE_SCALE = 1.0  # Forces in N, ANSYS used 1N unit force, S expects N input
 
 
 def compute_stress_field(S: np.ndarray, F: np.ndarray) -> np.ndarray:
@@ -25,10 +25,10 @@ def compute_stress_field(S: np.ndarray, F: np.ndarray) -> np.ndarray:
     """
     F = np.asarray(F, dtype=np.float64).ravel()
     S = np.asarray(S, dtype=np.float64)
-    F_kN = F / FORCE_SCALE  # Convert N to kN
+    F_scaled = F * FORCE_SCALE
     if S.ndim == 2:
-        return S @ F_kN
-    return S * F_kN
+        return S @ F_scaled
+    return S * F_scaled
 
 
 def compute_deformation_field(U: np.ndarray, F: np.ndarray) -> np.ndarray:
@@ -46,10 +46,10 @@ def compute_deformation_field(U: np.ndarray, F: np.ndarray) -> np.ndarray:
     """
     F = np.asarray(F, dtype=np.float64).ravel()
     U = np.asarray(U, dtype=np.float64)
-    F_kN = F / FORCE_SCALE  # Convert N to kN
+    F_scaled = F * FORCE_SCALE
     if U.ndim == 2:
-        return U @ F_kN
-    return U * F_kN
+        return U @ F_scaled
+    return U * F_scaled
 
 
 def field_summary(stress: np.ndarray, deformation: np.ndarray) -> dict:

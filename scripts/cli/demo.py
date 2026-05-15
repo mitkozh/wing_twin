@@ -15,7 +15,7 @@ from dtwin.core.fatigue import DAMAGE_SAFE, DAMAGE_WARNING
 
 from pathlib import Path
 
-from ..config import PROJECT_ROOT
+from ..config import PROJECT_ROOT, SimulationConfig
 from ..analysis import DataExporter, DataLoader
 from ..viz import VisualizationGenerator
 from ..engine import DigitalTwinEngine, EngineConfig
@@ -52,7 +52,8 @@ async def run_demo_async(
         print(f"[MATRICES] {e}")
         print("[MATRICES] Running without transfer matrices")
 
-    simulator = SimulatorSource()
+    sim_config = SimulationConfig()
+    simulator = SimulatorSource(sim_config)
     engine.data_source = simulator
 
     history = HistoryState()
@@ -91,7 +92,7 @@ async def run_demo_async(
                 if broadcast_count % 20 == 0:
                     print(f"[WS] Sent {broadcast_count} broadcasts")
             
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(1.0 / sim_config.sample_rate)
 
     process_task = asyncio.create_task(process_loop())
     display_thread = threading.Thread(target=_display_thread, args=(engine, running), daemon=True)
@@ -154,7 +155,7 @@ def main():
     print("=" * 60)
     print("  Wing Digital Twin — Full Stack Demo")
     print("=" * 60)
-    print(f"  Sample rate:  10 Hz")
+    print(f"  Sample rate:  {SimulationConfig().sample_rate} Hz")
     print(f"  Thresholds:   SAFE<{DAMAGE_SAFE}  WARN<{DAMAGE_WARNING}  CRIT>={DAMAGE_WARNING}")
     print("=" * 60)
 

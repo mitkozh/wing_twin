@@ -28,15 +28,15 @@ CONFIDENCE_FRAMES_THRESHOLD = 10   # Frames below threshold before alert
 STRAIN_BUFFER_SIZE = 3000          # Maximum strain buffer size
 MIN_BUFFER_FOR_DAMAGE = 100       # Minimum samples needed for damage calculation
 
-# Strain to stress conversion for aluminum (Young's modulus ~70 GPa)
-# Using 0.5 MPa/micro-strain as per documentation (may include safety factors)
-STRAIN_TO_STRESS = 0.5
+# Strain to stress conversion for aluminum (Young's modulus ~70 GPa = 70e9 Pa)
+# 1 µε = 1e-6 strain -> stress = 1e-6 * 70e9 = 70,000 Pa/µε = 0.07 MPa/µε
+STRAIN_TO_STRESS = 70_000.0  # Pa/µε
 
 # Rainflow parameters
 RAINFLOW_RANGE_BIN_WIDTH = 2.0    # MPa bin width for cycle counting
 
 # Critical node parameters
-CRITICAL_STRESS_THRESHOLD = 50.0  # MPa - nodes above this are critical
+CRITICAL_STRESS_THRESHOLD = 50_000_000.0  # 50 MPa in Pa
 CRITICAL_NODE_PERCENTILE = 90     # Top 10% of nodes by stress are critical
 MAX_CRITICAL_NODES = 100           # Maximum critical nodes to track
 
@@ -126,7 +126,7 @@ def accumulate_damage(
         sn_curve = DEMO_SN_CURVE  # Use demo curve for visible damage
 
     strain_arr = np.array(strain_buffer, dtype=np.float64)
-    stress_arr = strain_arr * STRAIN_TO_STRESS
+    stress_arr = strain_arr * STRAIN_TO_STRESS / 1e6  # Convert Pa to MPa for py_fatigue
 
     cc = CycleCount.from_timeseries(
         stress_arr,
