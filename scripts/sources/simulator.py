@@ -62,31 +62,54 @@ class SimulatorSource(DataSource):
             speed = self._state.speed_pct
             t = self._state.time_elapsed
 
-        effective_amp = self.config.osc_amp * (speed / 100.0)
-        base = self.config.base_strain + np.random.uniform(-5, 5)
-        oscillation = effective_amp * math.sin(2 * math.pi * self.config.osc_freq * t)
-        noise = np.random.normal(0, self.config.noise_std)
+        load_factor = speed / 100.0
 
-        if self._state.num_gauges == 1:
-            strain = base + oscillation + noise
-            strain_vector = None
-        else:
-            strain = None
-            strain_vector = np.array([
-                base + oscillation * math.sin(i * 0.1) + noise + np.random.normal(0, self.config.gauge_noise_std)
-                for i in range(self._state.num_gauges)
-            ], dtype=np.float64)
+        steady = self.config.base_strain * (load_factor ** 2)
 
-        accel_z = -effective_amp * (2 * math.pi * self.config.osc_freq) ** 2 * math.sin(2 * math.pi * self.config.osc_freq * t)
-        accel_z += np.random.normal(0, 50)
+        bending_1 = 40.0 * load_factor * math.sin(2 * math.pi * 4.2 * t)
+
+        bending_2 = 12.0 * load_factor * math.sin(2 * math.pi * 11.5 * t + 0.4)
+
+        torsion = 8.0 * load_factor * math.sin(2 * math.pi * 18.3 * t + 1.1)
+
+        turb_amp = 20.0 * load_factor
+        turbulence = turb_amp * np.random.normal(0, 1) * (1.0 + 0.5 * math.sin(2 * math.pi * 0.3 * t))
+
+        gust = 0.0
+        if np.random.random() < 1 / (60 * self.config.sample_rate):
+            self._gust_remaining = int(0.5 * self.config.sample_rate)
+        if getattr(self, '_gust_remaining', 0) > 0:
+            gust = 150.0 * load_factor * math.sin(math.pi * (1 - self._gust_remaining / (0.5 * self.config.sample_rate)))
+            self._gust_remaining -= 1
+
+        noise = np.random.normal(0, self.config.noise_std * 0.5)
+
+        strain = steady + bending_1 + bending_2 + torsion + turbulence + gust + noise
+
+        gauge_positions = [1.0, 0.7, 0.4]
+        strain_vector = np.array([
+            strain * pos + np.random.normal(0, self.config.gauge_noise_std)
+            for pos in gauge_positions
+        ], dtype=np.float64)
+
+        accel_z = -(bending_1 + bending_2) * 0.01 + np.random.normal(0, 0.5)
 
         with self._lock:
             self._state.time_elapsed += 1.0 / self.config.sample_rate
 
-        return SensorReading(
-            strain=strain if strain_vector is None else strain_vector[0],
-            strain_vector=strain_vector,
-            accel_z=accel_z,
-            timestamp=int(t * 1000),
-            gauge_id="primary" if self._state.num_gauges == 1 else "vector"
-        )
+        if self._state.num_gauges == 1:
+            return SensorReading(
+                strain=float(strain),
+                strain_vector=None,
+                accel_z=accel_z,
+                timestamp=int(t * 1000),
+                gauge_id="primary"
+            )
+        else:
+            return SensorReading(
+                strain=float(strain_vector[0]),
+                strain_vector=strain_vector,
+                accel_z=accel_z,
+                timestamp=int(t * 1000),
+                gauge_id="vector"
+            )

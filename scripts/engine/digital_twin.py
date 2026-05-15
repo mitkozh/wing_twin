@@ -16,7 +16,7 @@ from dtwin import (
     decide_control,
 )
 from dtwin.core import FatigueState
-from dtwin.core.fatigue import STRAIN_BUFFER_SIZE, set_random_seed
+from dtwin.core.fatigue import STRAIN_BUFFER_SIZE, set_random_seed, ALUMINUM_SN_CURVE
 from dtwin.core.matrices import TransferMatrices
 
 from .config import EngineConfig
@@ -95,7 +95,7 @@ class DigitalTwinEngine:
             self.state.stress_field = stress.tolist()
             self.state.deformation_field = deformation.tolist()
 
-        _, new_cycles = accumulate_damage(self._strain_buffer, self.fatigue_state)
+        _, new_cycles = accumulate_damage(self._strain_buffer, self.fatigue_state, sn_curve=ALUMINUM_SN_CURVE)
         self._cycles.extend(new_cycles)
         self.state.damage = self.fatigue_state.damage
         self.state.confidence = self.fatigue_state.confidence

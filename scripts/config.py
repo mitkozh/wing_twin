@@ -27,12 +27,12 @@ class WebSocketConfig:
 
 @dataclass
 class SimulationConfig:
-    sample_rate: int = 10
-    base_strain: float = 100.0
-    osc_amp: float = 50.0
-    osc_freq: float = 0.5
-    noise_std: float = 10.0
-    gauge_noise_std: float = 5.0
+    sample_rate: int = 50
+    base_strain: float = 250.0
+    osc_amp: float = 40.0
+    osc_freq: float = 4.2
+    noise_std: float = 5.0
+    gauge_noise_std: float = 2.0
 
 
 @dataclass
