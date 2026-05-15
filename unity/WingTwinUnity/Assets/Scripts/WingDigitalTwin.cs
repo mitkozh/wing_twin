@@ -336,7 +336,7 @@ async Task ConnectAsync()
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
 
-        GetComponent<MeshFilter>().mesh = mesh;
+        wingRenderer.GetComponent<MeshFilter>().mesh = mesh;
         meshStressValues = new float[vertices.Length];
 
         Debug.Log($"Loaded mesh: {vertices.Length} vertices, {triangles.Length / 3} triangles");
