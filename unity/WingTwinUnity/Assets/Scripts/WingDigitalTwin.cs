@@ -40,6 +40,9 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] private Color yellowColor = new Color(1.0f, 0.9f, 0.1f);
     [SerializeField] private Color redColor = new Color(1.0f, 0.1f, 0.1f);
 
+    [Header("Help Panel")]
+    [SerializeField] private GameObject helpPanel;
+
     private WebSocket ws;
     private bool connected = false;
     private float currentReconnectDelay;
@@ -412,15 +415,15 @@ async Task ConnectAsync()
         {
             if (Input.GetKeyDown(KeyCode.P))
             {
-                SendCommand("pause");
+                UI_Pause();
             }
             if (Input.GetKeyDown(KeyCode.R))
             {
-                SendCommand("reset", new System.Collections.Generic.Dictionary<string, object> { { "target", "damage" } });
+                UI_Reset();
             }
             if (Input.GetKeyDown(KeyCode.S))
             {
-                SendCommand("status");
+                UI_Status();
             }
             if (Input.GetKeyDown(KeyCode.F))
             {
@@ -429,6 +432,10 @@ async Task ConnectAsync()
             if (Input.GetKeyDown(KeyCode.G))
             {
                 ApplyForce(-10.0f);
+            }
+            if (Input.GetKeyDown(KeyCode.H))
+            {
+                ToggleHelp();
             }
         }
 
@@ -440,6 +447,17 @@ async Task ConnectAsync()
             connectionLabel.color = connected ? Color.green : Color.red;
         }
     }
+
+    public void ToggleHelp()
+    {
+        if (helpPanel != null)
+            helpPanel.SetActive(!helpPanel.activeSelf);
+    }
+
+    public void UI_Pause()  => SendCommand("pause");
+    public void UI_Reset()  => SendCommand("reset",
+        new Dictionary<string, object> { { "target", "damage" } });
+    public void UI_Status() => SendCommand("status");
 
     public void ApplyForce(float forceNewtons)
     {
