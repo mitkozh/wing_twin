@@ -69,6 +69,7 @@ async def run_demo_async(
     display_task = asyncio.create_task(broadcaster.start())
 
     async def process_loop():
+        broadcast_count = 0
         while running[0]:
             if engine.step():
                 if record:
@@ -82,9 +83,15 @@ async def run_demo_async(
                     history.times_history.append(time.time() - start_time)
                     history.cycle_history.extend(engine.cycles)
                     engine.clear_cycles()
-            await asyncio.sleep(0.05)
-            if broadcaster.connected_clients > 0:
+            
+            clients = len(broadcaster._clients)
+            if clients > 0:
                 await broadcaster.broadcast()
+                broadcast_count += 1
+                if broadcast_count % 20 == 0:
+                    print(f"[WS] Sent {broadcast_count} broadcasts")
+            
+            await asyncio.sleep(0.05)
 
     process_task = asyncio.create_task(process_loop())
     display_thread = threading.Thread(target=_display_thread, args=(engine, running), daemon=True)

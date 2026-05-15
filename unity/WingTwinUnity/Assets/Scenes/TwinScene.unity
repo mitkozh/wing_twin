@@ -359,7 +359,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 569526632}
-  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  m_Mesh: {fileID: 0}
 --- !u!4 &569526636
 Transform:
   m_ObjectHideFlags: 0
@@ -1367,12 +1367,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   serverUrl: ws://localhost:8765
+  reconnectDelay: 2
+  maxReconnectDelay: 30
+  heartbeatInterval: 30
   damageSlider: {fileID: 1002031039}
   damageLabel: {fileID: 1611577459}
   speedLabel: {fileID: 409048798}
   confidenceLabel: {fileID: 2108636527}
   ledImage: {fileID: 65742175}
   alertLabel: {fileID: 1728307869}
+  connectionLabel: {fileID: 0}
   wingRenderer: {fileID: 569526634}
   stressGradient:
     serializedVersion: 2

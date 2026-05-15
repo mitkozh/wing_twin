@@ -19,7 +19,7 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] private string serverUrl = "ws://localhost:8765";
     [SerializeField] private float reconnectDelay = 2f;
     [SerializeField] private float maxReconnectDelay = 30f;
-    [SerializeField] private float heartbeatInterval = 10f;
+    [SerializeField] private float heartbeatInterval = 30f;
 
     [Header("HUD")]
     [SerializeField] private Slider damageSlider;
@@ -43,8 +43,8 @@ public class WingDigitalTwin : MonoBehaviour
     private WebSocket ws;
     private bool connected = false;
     private float currentReconnectDelay;
-    private float lastHeartbeatTime;
-    private float lastMessageTime;
+    private float lastHeartbeatTime = 0f;
+    private float lastMessageTime = 0f;
     private bool reconnectScheduled = false;
 
     private float currentDamage = 0f;
@@ -73,19 +73,30 @@ public class WingDigitalTwin : MonoBehaviour
         LoadMeshFromJson(meshPath);
 
         currentReconnectDelay = reconnectDelay;
+        lastMessageTime = Time.time;
+        lastHeartbeatTime = Time.time;
         await ConnectAsync();
     }
 
-    async Task ConnectAsync()
+async Task ConnectAsync()
     {
+        if (connected) return;
+
         try
         {
+            if (ws != null)
+            {
+                try { _ = ws.Close(); } catch { }
+            }
+
             ws = new WebSocket(serverUrl);
             ws.OnOpen += () =>
             {
                 connected = true;
+                reconnectScheduled = false;
                 currentReconnectDelay = reconnectDelay;
                 lastHeartbeatTime = Time.time;
+                lastMessageTime = Time.time;
                 Debug.Log("[WS] Connected");
             };
             ws.OnMessage += (byte[] data) =>
@@ -98,13 +109,15 @@ public class WingDigitalTwin : MonoBehaviour
             {
                 connected = false;
                 Debug.Log($"[WS] Closed: {code}");
-                ScheduleReconnect();
+                if (!reconnectScheduled)
+                    ScheduleReconnect();
             };
             ws.OnError += (err) =>
             {
                 Debug.LogError($"[WS] Error: {err}");
                 connected = false;
-                ScheduleReconnect();
+                if (!reconnectScheduled)
+                    ScheduleReconnect();
             };
 
             await ws.Connect();
@@ -112,7 +125,8 @@ public class WingDigitalTwin : MonoBehaviour
         catch (Exception e)
         {
             Debug.LogError($"[WS] Connection error: {e.Message}");
-            ScheduleReconnect();
+            if (!reconnectScheduled)
+                ScheduleReconnect();
         }
     }
 
@@ -370,33 +384,6 @@ public class WingDigitalTwin : MonoBehaviour
     async void OnDestroy()
     {
         if (ws != null) await ws.Close();
-    }
-
-    void OnGUI()
-    {
-        float msgAge = Time.time - lastMessageTime;
-
-        GUILayout.BeginArea(new Rect(10, 10, 380, 300));
-        GUI.skin.label.fontSize = 16;
-        GUILayout.Label($"WebSocket: {(connected ? "CONNECTED" : "DISCONNECTED")}");
-        if (connected)
-            GUILayout.Label($"Last msg:   {(msgAge * 1000):F0}ms ago");
-        GUILayout.Label($"Damage:      {currentDamage * 100:F1}%");
-        GUILayout.Label($"Vmax:        {currentSpeed}%");
-        GUILayout.Label($"Confidence:  {currentConfidence:F1}%");
-        GUILayout.Label($"LED State:   {currentState.ToUpper()}");
-        GUILayout.Label($"Maintenance: {(maintenanceAlert ? "ACTIVE" : "none")}");
-        if (stressField.Length > 0)
-            GUILayout.Label($"Stress nodes: {stressField.Length}");
-        if (deformationField.Length > 0)
-            GUILayout.Label($"Deform nodes: {deformationField.Length}");
-        GUILayout.Space(10);
-        GUILayout.Label("SPACE = reconnect  |  ESC = disconnect");
-        GUILayout.Label($"Reconnect delay: {currentReconnectDelay:F1}s");
-        GUILayout.EndArea();
-
-        if (!connected && GUI.Button(new Rect(10, Screen.height - 40, 150, 30), "Reconnect"))
-            _ = ConnectAsync();
     }
 
     void Update()
