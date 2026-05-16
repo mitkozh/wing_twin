@@ -1,0 +1,86 @@
+"""
+S-N curve plotter.
+"""
+
+from pathlib import Path
+import numpy as np
+
+from .base import BasePlotter
+
+
+class SnCurvePlotter(BasePlotter):
+    """Plots S-N curve with operating points."""
+
+    def plot(self, cycles, filename: str = "04_sn_curve.png") -> Path:
+        """Plot S-N curve with cycle amplitudes."""
+        # S-N CURVE OPTIONS:
+        # DEMO: a=8.0, endurance=1e4 (for visible damage in demos)
+        # ALUMINUM: a=15.0, endurance=1e7 (realistic physics)
+        a, m = 8.0, 3.0  # DEMO curve for demo visibility
+
+        plt = self._get_plt()
+        fig, ax = plt.subplots(figsize=(10, 5))
+
+        n_points = np.logspace(3, 10, 100)
+        stress_curve = 10 ** ((a - np.log10(n_points)) / m)
+
+        ax.plot(n_points, stress_curve, color="#ffaa44", linewidth=2.5,
+                label="S-N curve (demo)")
+        ax.axhline(100, color="#22cc66", linestyle=":", linewidth=1, alpha=0.7,
+                   label="Endurance limit (100 MPa)")
+
+        rngs, cnts = self._parse_cycles(cycles)
+
+        if len(rngs) > 0:
+            op_amplitudes = rngs
+            op_cycles = np.array([self._sn_cycles(a) for a in op_amplitudes])
+            valid = (op_cycles < 1e12) & (op_cycles > 1e0)
+            if valid.sum() > 0:
+                sc = ax.scatter(op_cycles[valid], op_amplitudes[valid], c=cnts[valid],
+                               cmap="plasma", s=100, zorder=5, alpha=0.9,
+                               edgecolors="white", linewidths=0.5)
+                plt.colorbar(sc, ax=ax, label="Cycle count", shrink=0.7)
+
+        ax.set_xscale("log")
+        ax.set_xlabel("Cycles to Failure N")
+        ax.set_ylabel("Stress Amplitude (MPa)")
+        ax.set_title("S-N Curve with Simulation Operating Points")
+        ax.legend(loc="upper right")
+        ax.grid(True, which="both", alpha=0.3)
+        ax.set_xlim(1e3, 1e10)
+        ax.set_ylim(0, 300)
+
+        fig.tight_layout()
+        path = self.output_dir / filename
+        fig.savefig(path, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  [FIG] Saved {path}")
+        return path
+
+    def _sn_cycles(self, amp: float) -> float:
+        """Calculate cycles to failure from stress amplitude."""
+        if amp <= 0:
+            return float("inf")
+        a, m = 8.0, 3.0  # DEMO curve
+        log_n = a - m * np.log10(amp)
+        return 10 ** log_n
+
+    def _parse_cycles(self, cycles):
+        """Parse cycles into ranges and counts."""
+        if not cycles:
+            return np.array([]), np.array([])
+
+        if isinstance(cycles[0], (list, tuple, np.ndarray)) and len(cycles[0]) == 2:
+            ranges_arr = np.array([c[0] for c in cycles])
+            counts_arr = np.array([c[1] for c in cycles])
+            unique_ranges, _ = np.unique(ranges_arr, return_counts=True)
+            total_counts = np.zeros_like(unique_ranges)
+            for r, c in zip(ranges_arr, counts_arr):
+                idx = np.searchsorted(unique_ranges, r)
+                total_counts[idx] += c
+            return unique_ranges, total_counts
+
+        rngs = np.asarray(cycles)
+        if rngs.ndim == 2 and rngs.shape[1] == 3:
+            return rngs[:, 1], rngs[:, 2]
+        return np.asarray(cycles), np.ones(len(cycles))
