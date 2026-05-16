@@ -13,15 +13,25 @@ _surface_node_ids = None
 def _get_surface_node_ids():
     global _surface_node_ids
     if _surface_node_ids is None:
-        try:
-            import json
-            from pathlib import Path
-            mesh_path = Path(__file__).parent.parent.parent / "mesh" / "FinalMesh_surface.json"
-            with open(mesh_path) as f:
-                data = json.load(f)
-            _surface_node_ids = data.get("node_ids")
-        except Exception:
-            _surface_node_ids = []
+        import json
+        from pathlib import Path
+        mesh_path = Path(__file__).parent.parent.parent / "mesh" / "FinalMesh_surface.json"
+
+        if not mesh_path.exists():
+            raise FileNotFoundError(f"Surface mesh not found: {mesh_path}")
+
+        with open(mesh_path) as f:
+            data = json.load(f)
+
+        if "node_ids" not in data:
+            raise KeyError(f"'node_ids' key missing from {mesh_path}")
+
+        node_ids = data["node_ids"]
+        if not node_ids:
+            raise ValueError(f"node_ids is empty in {mesh_path}")
+
+        _surface_node_ids = node_ids
+
     return _surface_node_ids
 
 
@@ -37,6 +47,7 @@ class TwinState:
     speed_pct: int = 100
     led_state: str = "green"
     maintenance_alert: bool = False
+    node_damages: dict = field(default_factory=dict)
 
     def for_unity(self) -> dict:
         """Format state for Unity WebSocket."""
@@ -68,13 +79,21 @@ class TwinState:
         elif self.deformation_field:
             n_surface = len(node_ids) if node_ids else 9102
             surface_deform = [round(u, 6) for u in self.deformation_field[:n_surface]]
-        
+
+        surface_damage = []
+        if node_ids and self.node_damages:
+            for nid in node_ids:
+                surface_damage.append(round(self.node_damages.get(int(nid), 0.0), 4))
+        else:
+            surface_damage = [0.0] * (len(node_ids) if node_ids else 0)
+
         return {
             "strain": float(np.mean(self.strain_vector)) if self.strain_vector else 0.0,
             "forces": [round(f, 4) for f in self.forces],
             "stress_field": surface_stress,
             "deformation_field": surface_deform,
             "damage": round(self.damage, 4),
+            "node_damages": surface_damage,
             "confidence": round(self.confidence, 2),
             "speed": self.speed_pct,
             "led_state": self.led_state,
