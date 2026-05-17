@@ -3228,7 +3228,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0.00012207031, y: 0}
+  m_AnchoredPosition: {x: 0.00024414062, y: 0}
   m_SizeDelta: {x: 280, y: 220}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &1604243625
@@ -3807,21 +3807,21 @@ MonoBehaviour:
   stressGradient:
     serializedVersion: 2
     key0: {r: 0, g: 0, b: 1, a: 1}
-    key1: {r: 1, g: 0.88352054, b: 0, a: 1}
-    key2: {r: 1, g: 0, b: 0, a: 0}
-    key3: {r: 0, g: 0, b: 0, a: 0}
-    key4: {r: 0, g: 0, b: 0, a: 0}
-    key5: {r: 0, g: 0, b: 0, a: 0}
-    key6: {r: 0, g: 0, b: 0, a: 0}
-    key7: {r: 0, g: 0, b: 0, a: 0}
-    ctime0: 0
-    ctime1: 33076
-    ctime2: 65535
-    ctime3: 0
-    ctime4: 0
-    ctime5: 0
-    ctime6: 0
-    ctime7: 0
+    key1: {r: 0, g: 0.69803923, b: 1, a: 1}
+    key2: {r: 0, g: 1, b: 0.9347346, a: 0}
+    key3: {r: 0, g: 1, b: 0.297369, a: 0}
+    key4: {r: 0.69803923, g: 1, b: 0, a: 0}
+    key5: {r: 1, g: 1, b: 0, a: 0}
+    key6: {r: 1, g: 0.69803923, b: 0, a: 0}
+    key7: {r: 1, g: 0, b: 0, a: 0}
+    ctime0: 8192
+    ctime1: 16384
+    ctime2: 24576
+    ctime3: 32768
+    ctime4: 40959
+    ctime5: 49151
+    ctime6: 57343
+    ctime7: 65535
     atime0: 0
     atime1: 65535
     atime2: 0
@@ -3830,14 +3830,15 @@ MonoBehaviour:
     atime5: 0
     atime6: 0
     atime7: 0
-    m_Mode: 0
-    m_NumColorKeys: 3
+    m_Mode: 1
+    m_NumColorKeys: 8
     m_NumAlphaKeys: 2
   usePerVertexHeatmap: 1
   greenColor: {r: 0.1, g: 1, b: 0.1, a: 1}
   yellowColor: {r: 1, g: 0.9965496, b: 0, a: 1}
   redColor: {r: 1, g: 0.1, b: 0.1, a: 1}
   helpPanel: {fileID: 0}
+  scaling: 1
 --- !u!4 &1769155609
 Transform:
   m_ObjectHideFlags: 0

@@ -44,6 +44,9 @@ public class WingDigitalTwin : MonoBehaviour
     [Header("Help Panel")]
     [SerializeField] private GameObject helpPanel;
 
+    [Header("Simulation Parameters")]
+    [SerializeField] float scaling = 1f;
+
     private WebSocket ws;
     private bool connected = false;
     private float currentReconnectDelay;
@@ -62,6 +65,10 @@ public class WingDigitalTwin : MonoBehaviour
     private bool ledFlash = false;
 
     private Mesh mesh;
+    private Vector3[] originalVertices;
+    private Vector3[] deformedVertices;
+    
+
     private Color[] vertexColors;
     private float[] meshStressValues;
     private System.Collections.Generic.Dictionary<string, System.Action<string>> pendingCommands =
@@ -82,7 +89,7 @@ public class WingDigitalTwin : MonoBehaviour
         await ConnectAsync();
     }
 
-async Task ConnectAsync()
+    async Task ConnectAsync()
     {
         if (connected) return;
 
@@ -268,6 +275,11 @@ async Task ConnectAsync()
             wingRenderer.material.color = stressColor;
         }
 
+        if (deformationField.Length > 0)
+        {
+            UpdateDeformation();
+        }
+
         if (currentState == "red")
         {
             wingRenderer.material.EnableKeyword("_EMISSION");
@@ -279,6 +291,32 @@ async Task ConnectAsync()
             float em = Mathf.Lerp(0.3f, 0.0f, currentDamage);
             wingRenderer.material.SetColor("_EmissionColor", new Color(em, em, em));
         }
+    }
+
+    void UpdateDeformation()
+    {
+        if (mesh == null || deformationField.Length == 0) return;
+
+        if (deformationField.Length != originalVertices.Length)
+        {
+            Debug.LogWarning($"Deformation field length ({deformationField.Length}) != vertex count ({originalVertices.Length})");
+            return;
+        }
+
+        for (int i = 0; i < originalVertices.Length; i++)
+        {
+            float updatedY = originalVertices[i].y + deformationField[i] * scaling;
+
+            deformedVertices[i] = new Vector3(originalVertices[i].x,
+                updatedY,
+                originalVertices[i].z
+                );
+        }
+
+        mesh.vertices = deformedVertices;
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+
     }
 
     void UpdateHeatmap()
@@ -329,8 +367,10 @@ async Task ConnectAsync()
         mesh = new Mesh();
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 
-        Vector3[] vertices = data.vertices.Select(v => new Vector3(v[0], v[2], v[1])).ToArray();
-        mesh.vertices = vertices;
+        originalVertices = data.vertices.Select(v => new Vector3(v[0], v[2], v[1])).ToArray();
+        mesh.vertices = originalVertices;
+
+        deformedVertices = new Vector3[originalVertices.Length];
 
         int[] triangles = data.triangles.SelectMany(t => t).ToArray();
         mesh.triangles = triangles;
@@ -339,9 +379,9 @@ async Task ConnectAsync()
         mesh.RecalculateBounds();
 
         wingRenderer.GetComponent<MeshFilter>().mesh = mesh;
-        meshStressValues = new float[vertices.Length];
+        meshStressValues = new float[originalVertices.Length];
 
-        Debug.Log($"Loaded mesh: {vertices.Length} vertices, {triangles.Length / 3} triangles");
+        Debug.Log($"Loaded mesh: {originalVertices.Length} vertices, {triangles.Length / 3} triangles");
     }
 
     [Serializable]
@@ -455,8 +495,8 @@ async Task ConnectAsync()
             helpPanel.SetActive(!helpPanel.activeSelf);
     }
 
-    public void UI_Pause()  => SendCommand("pause");
-    public void UI_Reset()  => SendCommand("reset",
+    public void UI_Pause() => SendCommand("pause");
+    public void UI_Reset() => SendCommand("reset",
         new Dictionary<string, object> { { "target", "damage" } });
     public void UI_Status() => SendCommand("status");
 
