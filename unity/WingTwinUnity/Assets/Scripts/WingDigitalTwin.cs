@@ -4,15 +4,15 @@
  * from Python WebSocket via force-reconstruction pipeline.
  */
 
+using NativeWebSocket;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using UnityEngine;
 using TMPro;
+using UnityEngine;
 using UnityEngine.UI;
-using NativeWebSocket;
-using Newtonsoft.Json;
 
 public class WingDigitalTwin : MonoBehaviour
 {
@@ -30,6 +30,9 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] private Image ledImage;
     [SerializeField] private TextMeshProUGUI alertLabel;
     [SerializeField] private TextMeshProUGUI connectionLabel;
+    [SerializeField] private Image stressBar;
+    public int stressBarHeight = 256;
+    public int stressBarWidth = 16;
 
     [Header("Wing Visualization")]
     [SerializeField] private Renderer wingRenderer;
@@ -64,10 +67,17 @@ public class WingDigitalTwin : MonoBehaviour
     private float ledFlashTimer = 0f;
     private bool ledFlash = false;
 
+    public RectTransform stressBarRect;
+    public TMP_Text labelPrefab;
+    public Transform labelParent;
+
+    private readonly List<TMP_Text> stressLabels = new();
+
     private Mesh mesh;
     private Vector3[] originalVertices;
     private Vector3[] deformedVertices;
-    
+    private float stressMin;
+    private float stressMax;
 
     private Color[] vertexColors;
     private float[] meshStressValues;
@@ -79,6 +89,9 @@ public class WingDigitalTwin : MonoBehaviour
 
     async void Start()
     {
+        CreateStressBar();
+        BuildStressLegendLabels();
+        
         string meshPath = System.IO.Path.Combine(
             Application.streamingAssetsPath, "FinalMesh_surface.json");
         LoadMeshFromJson(meshPath);
@@ -87,6 +100,90 @@ public class WingDigitalTwin : MonoBehaviour
         lastMessageTime = Time.time;
         lastHeartbeatTime = Time.time;
         await ConnectAsync();
+    }
+
+    void CreateStressBar()
+    {
+        Texture2D tex = MakeGradientTexture(stressGradient);
+
+        stressBar.sprite = Sprite.Create(
+            tex,
+            new Rect(0, 0, tex.width, tex.height),
+            new Vector2(0.5f, 0.5f)
+        );
+
+        stressBar.type = Image.Type.Simple;
+        stressBar.preserveAspect = false;
+
+        RectTransform rt = stressBar.GetComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(stressBarWidth, stressBarHeight);
+    }
+
+    Texture2D MakeGradientTexture(Gradient gradient)
+    {
+        Texture2D tex = new Texture2D(stressBarWidth, stressBarHeight);
+
+        for (int y = 0; y < stressBarHeight; y++)
+        {
+            float t = y / (float)(stressBarHeight - 1);
+            Color c = gradient.Evaluate(t);
+
+            for (int x = 0; x < stressBarWidth; x++)
+                tex.SetPixel(x, y, c);
+        }
+
+        tex.Apply();
+        return tex;
+    }
+
+    void BuildStressLegendLabels()
+    {
+        float h = stressBarRect.rect.height;
+        float halfH = h * 0.5f;
+
+        int labelCount = stressGradient.colorKeys.Length + 1;
+
+        for (int i = 0; i < labelCount; i++)
+        {
+            float t = i / (float)(labelCount - 1);
+
+            TMP_Text label = Instantiate(labelPrefab, stressBarRect);
+            stressLabels.Add(label);
+
+            RectTransform rt = label.GetComponent<RectTransform>();
+
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(1f, 0.5f);
+
+            float y = Mathf.Lerp(-halfH, halfH, t);
+            float x = -10f;
+
+            rt.localPosition = new Vector3(x, y, 0f);
+        }
+    }
+
+    void UpdateStressLegendValues()
+    {
+        if (stressLabels == null || stressLabels.Count == 0)
+            return;
+
+        int labelCount = stressLabels.Count;
+
+        for (int i = 0; i < labelCount; i++)
+        {
+            float t = i / (float)(labelCount - 1);
+            float value = Mathf.Lerp(stressMin, stressMax, t);
+
+            string suffix = "";
+
+            if (i == labelCount - 1)
+                suffix = " Max";
+            else if (i == 0)
+                suffix = " Min";
+
+            stressLabels[i].text = $"{value:E3}{suffix}";
+        }
     }
 
     async Task ConnectAsync()
@@ -193,6 +290,8 @@ public class WingDigitalTwin : MonoBehaviour
             currentState = data.led_state;
             currentConfidence = data.confidence;
             maintenanceAlert = data.maintenance_alert;
+            stressMin = data.stress_min;
+            stressMax = data.stress_max;
 
             if (data.stress_field != null && data.stress_field.Count > 0)
                 stressField = data.stress_field.ToArray();
@@ -258,6 +357,10 @@ public class WingDigitalTwin : MonoBehaviour
                 };
             }
         }
+
+        UpdateStressLegendValues();
+
+
     }
 
     void UpdateWingVisualization(TwinState data)
@@ -518,5 +621,7 @@ public class WingDigitalTwin : MonoBehaviour
         public int speed;
         public string led_state;
         public bool maintenance_alert;
+        public float stress_min;
+        public float stress_max;
     }
 }

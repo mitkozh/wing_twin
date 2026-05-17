@@ -87,10 +87,17 @@ class TwinState:
         else:
             surface_damage = [0.0] * (len(node_ids) if node_ids else 0)
 
+        stress_abs = [abs(s) for s in surface_stress]
+
+        stress_min = min(stress_abs) if stress_abs else 0.0
+        stress_max = max(stress_abs) if stress_abs else 0.0
+
         return {
             "strain": float(np.mean(self.strain_vector)) if self.strain_vector else 0.0,
             "forces": [round(f, 4) for f in self.forces],
             "stress_field": surface_stress,
+            "stress_min": round(stress_min, 2),
+            "stress_max": round(stress_max, 2),
             "deformation_field": surface_deform,
             "damage": round(self.damage, 4),
             "node_damages": surface_damage,
