@@ -75,7 +75,13 @@ class WebSocketBroadcaster:
         state = self._state_provider()
         msg = json.dumps(state)
 
-        await asyncio.gather(
-            *[client.send(msg) for client in self._clients],
-            return_exceptions=True
-        )
+        disconnected = []
+        for client in self._clients:
+            try:
+                await client.send(msg)
+            except Exception as e:
+                print(f"[WS] Broadcast error: {e}")
+                disconnected.append(client)
+
+        for client in disconnected:
+            self._clients.discard(client)

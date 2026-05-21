@@ -11,7 +11,7 @@ from typing import Optional
 
 import numpy as np
 
-from dtwin.core.fatigue import DAMAGE_SAFE, DAMAGE_WARNING
+from dtwin.core.fatigue import FatigueConfig
 
 from pathlib import Path
 
@@ -55,6 +55,8 @@ async def run_demo_async(
 
     sim_config = SimulationConfig()
     simulator = SimulatorSource(sim_config)
+    if engine.matrices_loaded:
+        simulator.set_num_gauges(engine.num_gauges)
     engine.data_source = simulator
 
     history = HistoryState()
@@ -162,8 +164,9 @@ def main():
     print("=" * 60)
     print("  Wing Digital Twin — Full Stack Demo")
     print("=" * 60)
+    fatigue_config = FatigueConfig()
     print(f"  Sample rate:  {SimulationConfig().sample_rate} Hz")
-    print(f"  Thresholds:   SAFE<{DAMAGE_SAFE}  WARN<{DAMAGE_WARNING}  CRIT>={DAMAGE_WARNING}")
+    print(f"  Thresholds:   SAFE<{fatigue_config.damage_safe}  WARN<{fatigue_config.damage_warning}  CRIT>={fatigue_config.damage_warning}")
     print("=" * 60)
 
     if args.figures_only:

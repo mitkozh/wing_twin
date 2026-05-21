@@ -5,7 +5,7 @@ Damage progress plotter.
 from pathlib import Path
 import numpy as np
 
-from dtwin.core.fatigue import DAMAGE_SAFE, DAMAGE_WARNING
+from dtwin.core.fatigue import FatigueConfig
 
 from .base import BasePlotter
 
@@ -28,14 +28,18 @@ class DamagePlotter(BasePlotter):
         times = np.array(times[:min_len])
         damage = np.array(damage_history[:min_len])
 
+        config = FatigueConfig()
+        damage_safe = config.damage_safe
+        damage_warning = config.damage_warning
+
         fig, ax = plt.subplots(figsize=(10, 4))
 
-        ax.fill_between(times, 0, DAMAGE_SAFE, alpha=0.15, color="#22cc66", label="SAFE")
-        ax.fill_between(times, DAMAGE_SAFE, DAMAGE_WARNING, alpha=0.15, color="#ccaa22", label="WARNING")
-        ax.fill_between(times, DAMAGE_WARNING, 1.0, alpha=0.15, color="#cc3322", label="CRITICAL")
+        ax.fill_between(times, 0, damage_safe, alpha=0.15, color="#22cc66", label="SAFE")
+        ax.fill_between(times, damage_safe, damage_warning, alpha=0.15, color="#ccaa22", label="WARNING")
+        ax.fill_between(times, damage_warning, 1.0, alpha=0.15, color="#cc3322", label="CRITICAL")
 
-        ax.axhline(DAMAGE_SAFE, color="#ccaa22", linestyle="--", linewidth=1, alpha=0.8)
-        ax.axhline(DAMAGE_WARNING, color="#cc3322", linestyle="--", linewidth=1, alpha=0.8)
+        ax.axhline(damage_safe, color="#ccaa22", linestyle="--", linewidth=1, alpha=0.8)
+        ax.axhline(damage_warning, color="#cc3322", linestyle="--", linewidth=1, alpha=0.8)
 
         ax.plot(times, damage, color="#66ddff", linewidth=2, label="Accumulated damage D")
 
@@ -48,9 +52,9 @@ class DamagePlotter(BasePlotter):
         ax.set_ylim(0, 1.05)
 
         final_d = damage[-1]
-        if final_d >= DAMAGE_WARNING:
+        if final_d >= damage_warning:
             status, color = "CRITICAL", "#ff4444"
-        elif final_d >= DAMAGE_SAFE:
+        elif final_d >= damage_safe:
             status, color = "WARNING", "#ffcc22"
         else:
             status, color = "SAFE", "#44ff88"

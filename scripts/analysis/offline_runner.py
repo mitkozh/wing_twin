@@ -18,7 +18,7 @@ from dtwin import (
     decide_control,
 )
 from dtwin.core import FatigueState
-from dtwin.core.fatigue import STRAIN_BUFFER_SIZE, DAMAGE_SAFE, DAMAGE_WARNING, set_random_seed
+from dtwin.core.fatigue import set_random_seed, FatigueConfig
 
 
 @dataclass
@@ -75,7 +75,8 @@ class OfflineRunner:
         print(f"  Sample rate: {self.sample_rate} Hz, duration: {duration_s} s")
         print("=" * 60)
 
-        buffer = deque(maxlen=STRAIN_BUFFER_SIZE)
+        fatigue_config = FatigueConfig()
+        buffer = deque(maxlen=fatigue_config.strain_buffer_size)
         fatigue_state = FatigueState()
         t = 0.0
         dt = 1.0 / self.sample_rate
@@ -88,9 +89,8 @@ class OfflineRunner:
             buffer.append(strain)
             t += dt
 
-            if step % 6 == 0 and len(buffer) >= state.num_gauges:
-                arr = np.array(buffer, dtype=np.float64)
-                strain_vec = arr[-state.num_gauges:] if len(arr) >= state.num_gauges else arr
+            if step % 6 == 0:
+                strain_vec = np.array([strain] * state.num_gauges, dtype=np.float64)
 
                 if state.matrices is not None:
                     F = solve_forces(state.matrices.H_inv, strain_vec)
@@ -101,13 +101,13 @@ class OfflineRunner:
                     stress = np.array([0.0])
                     deformation = np.array([0.0])
 
-                accumulate_damage(buffer, fatigue_state)
+                accumulate_damage(buffer, fatigue_state, config=fatigue_config)
                 cum_damage = fatigue_state.damage
 
-                led_state, speed_pct = decide_control(cum_damage, fatigue_state.confidence)
-                if cum_damage >= DAMAGE_WARNING:
+                led_state, speed_pct = decide_control(cum_damage, fatigue_state.confidence, config=fatigue_config)
+                if cum_damage >= fatigue_config.damage_warning:
                     state_str, speed_str = "CRITICAL", "0%"
-                elif cum_damage >= DAMAGE_SAFE:
+                elif cum_damage >= fatigue_config.damage_safe:
                     state_str, speed_str = "WARNING", "50%"
                 else:
                     state_str, speed_str = "SAFE", "100%"
@@ -116,9 +116,9 @@ class OfflineRunner:
 
         final_damage = fatigue_state.damage
         print(f"\nFinal damage: {final_damage:.4f} ({final_damage*100:.1f}%)")
-        if final_damage < DAMAGE_SAFE:
+        if final_damage < fatigue_config.damage_safe:
             print("VERDICT: Wing SAFE for continued operation")
-        elif final_damage < DAMAGE_WARNING:
+        elif final_damage < fatigue_config.damage_warning:
             print("VERDICT: Wing WARNING — reduce Vmax to 50%")
         else:
             print("VERDICT: Wing CRITICAL — block launch, request maintenance")
