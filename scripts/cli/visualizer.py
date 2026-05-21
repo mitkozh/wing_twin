@@ -9,6 +9,9 @@ from pathlib import Path
 from scripts.config import PROJECT_ROOT
 from scripts.viz import VisualizationGenerator
 from scripts.analysis import DataLoader
+from scripts.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def main():
@@ -33,7 +36,7 @@ def main():
     strain, times, damage, forces, stress_fields, deformations, cycles = data_loader.load_tuple()
 
     if not strain:
-        print("No data found. Run demo.py with --figures first.")
+        logger.warning("No data found. Run demo.py with --figures first.")
         return
 
     generator = VisualizationGenerator(Path(args.output_dir))

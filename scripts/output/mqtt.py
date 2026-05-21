@@ -8,6 +8,9 @@ from typing import Optional
 import paho.mqtt.client as mqtt
 
 from ..config import MqttConfig
+from ..logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class MqttPublisher:
@@ -29,7 +32,7 @@ class MqttPublisher:
             self._thread.start()
             return True
         except Exception as e:
-            print(f"[MQTT] Connection failed: {e}")
+            logger.error("Connection failed: %s", e)
             return False
 
     def _loop(self) -> None:
@@ -53,6 +56,6 @@ class MqttPublisher:
     def _on_connect(self, client, userdata, flags, rc) -> None:
         if rc == 0:
             self._connected = True
-            print(f"[MQTT] Connected to {self.config.broker}")
+            logger.info("Connected to %s", self.config.broker)
         else:
-            print(f"[MQTT] Connection failed: {rc}")
+            logger.error("Connection failed: %s", rc)

@@ -9,6 +9,10 @@ from typing import Any, Callable, Optional, Set
 import websockets
 from websockets import WebSocketServerProtocol
 
+from ..logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class WebSocketBroadcaster:
     """WebSocket server that broadcasts engine state to Unity."""
@@ -40,7 +44,7 @@ class WebSocketBroadcaster:
         async def handler(ws: WebSocketServerProtocol) -> None:
             """Handle WebSocket client connection (websockets 16+ API)."""
             self._clients.add(ws)
-            print(f"[WS] Client connected ({len(self._clients)} total)")
+            logger.info("Client connected (%d total)", len(self._clients))
 
             try:
                 if self._state_provider:
@@ -52,13 +56,13 @@ class WebSocketBroadcaster:
                         if response:
                             await ws.send(json.dumps(response))
             except Exception as e:
-                print(f"[WS] Client error: {e}")
+                logger.error("Client error: %s", e)
             finally:
                 self._clients.discard(ws)
-                print(f"[WS] Client disconnected ({len(self._clients)} total)")
+                logger.info("Client disconnected (%d total)", len(self._clients))
 
         async with websockets.serve(handler, self.host, self.port):
-            print(f"[WS] WebSocket server running on ws://{self.host}:{self.port}")
+            logger.info("WebSocket server running on ws://%s:%d", self.host, self.port)
             await asyncio.Future()
 
     async def stop(self) -> None:
@@ -80,7 +84,7 @@ class WebSocketBroadcaster:
             try:
                 await client.send(msg)
             except Exception as e:
-                print(f"[WS] Broadcast error: {e}")
+                logger.error("Broadcast error: %s", e)
                 disconnected.append(client)
 
         for client in disconnected:

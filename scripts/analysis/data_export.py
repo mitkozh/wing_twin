@@ -6,6 +6,10 @@ import json
 from pathlib import Path
 from typing import Optional, Tuple, List, Any
 
+from ..logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class DataExporter:
     """Exports simulation data to JSON."""
@@ -42,7 +46,7 @@ class DataExporter:
 
         with open(path, "w") as f:
             json.dump(data, f)
-        print(f"  [DATA] Saved to {path}")
+        logger.info("Saved to %s", path)
         return path
 
 
@@ -56,11 +60,11 @@ class DataLoader:
         """Load simulation data from JSON file."""
         path = self.data_dir / filename
         if not path.exists():
-            print(f"  [DATA] No saved data at {path}")
+            logger.warning("No saved data at %s", path)
             return None
         with open(path) as f:
             data = json.load(f)
-        print(f"  [DATA] Loaded {len(data['strain'])} samples")
+        logger.info("Loaded %d samples", len(data['strain']))
         return data
 
     def load_tuple(

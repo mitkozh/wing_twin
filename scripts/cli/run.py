@@ -11,6 +11,9 @@ from scripts.config import Config
 from scripts.engine import DigitalTwinEngine, EngineConfig
 from scripts.sources import MqttSource
 from scripts.output import WebSocketBroadcaster, EngineCommandHandler
+from scripts.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 async def run_production(config: Config):
@@ -18,13 +21,13 @@ async def run_production(config: Config):
     engine_config = EngineConfig()
     engine = DigitalTwinEngine(engine_config)
 
-    print("[MATRICES] Loading transfer matrices...")
+    logger.info("Loading transfer matrices...")
     try:
         engine.load_matrices()
-        print(f"[MATRICES] Loaded successfully ({engine.num_gauges} gauge channels)")
+        logger.info("Loaded successfully (%d gauge channels)", engine.num_gauges)
     except FileNotFoundError as e:
-        print(f"[ERROR] {e}")
-        print("[ERROR] Cannot start without transfer matrices")
+        logger.error("%s", e)
+        logger.error("Cannot start without transfer matrices")
         return
 
     mqtt_source = MqttSource(config.mqtt)
@@ -34,12 +37,12 @@ async def run_production(config: Config):
     command_handler = EngineCommandHandler(engine)
     broadcaster.set_state_provider(engine.state.for_unity)
 
-    print("=" * 60)
-    print("  Wing Digital Twin - Production Mode")
-    print("=" * 60)
-    print(f"  MQTT:   {config.mqtt.broker}:{config.mqtt.port}")
-    print(f"  Topics: {config.mqtt.sensors_topic}")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("  Wing Digital Twin - Production Mode")
+    logger.info("=" * 60)
+    logger.info("  MQTT:   %s:%d", config.mqtt.broker, config.mqtt.port)
+    logger.info("  Topics: %s", config.mqtt.sensors_topic)
+    logger.info("=" * 60)
 
     async def process_loop():
         while True:
@@ -53,7 +56,7 @@ async def run_production(config: Config):
     try:
         await asyncio.gather(ws_task, process_task)
     except KeyboardInterrupt:
-        print("\n[RUNNER] Shutting down...")
+        logger.info("Shutting down...")
 
 
 def main():

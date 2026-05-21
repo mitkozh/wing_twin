@@ -11,6 +11,9 @@ import numpy as np
 import paho.mqtt.client as mqtt
 
 from ..config import MqttConfig
+from ..logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class MqttHandler:
@@ -54,7 +57,7 @@ class MqttHandler:
             self._thread.start()
             return True
         except Exception as e:
-            print(f"[MQTT] Connection failed: {e}")
+            logger.error("Connection failed: %s", e)
             return False
 
     def _loop(self) -> None:
@@ -77,11 +80,11 @@ class MqttHandler:
     def _on_connect(self, client, userdata, flags, rc) -> None:
         if rc == 0:
             self._connected = True
-            print(f"[MQTT] Connected to {self.config.broker}")
+            logger.info("Connected to %s", self.config.broker)
             client.subscribe(self.config.sensors_topic)
             client.subscribe(self.config.control_topic)
         else:
-            print(f"[MQTT] Connection failed: {rc}")
+            logger.error("Connection failed: %s", rc)
 
     def _on_message(self, client, userdata, msg) -> None:
         """Parse incoming sensor messages."""
@@ -108,4 +111,4 @@ class MqttHandler:
                 self._message_callback()
 
         except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
-            print(f"[MQTT] Parse error: {e}")
+            logger.error("Parse error: %s", e)

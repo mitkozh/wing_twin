@@ -10,6 +10,9 @@ import paho.mqtt.client as mqtt
 
 from scripts.config import SimulationConfig
 from scripts.sources import SimulatorSource
+from scripts.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def main():
@@ -26,17 +29,17 @@ def main():
         from dtwin.core.matrices import load_transfer_matrices
         matrices = load_transfer_matrices()
         simulator.set_matrices(matrices)
-        print(f"[MATRICES] Loaded: {simulator.state.num_gauges} gauge channels")
+        logger.info("Loaded: %d gauge channels", simulator.state.num_gauges)
     except Exception:
         pass
 
-    print("=" * 60)
-    print("  Wing Digital Twin - Sensor Simulator")
-    print("=" * 60)
-    print(f"  Sample rate:  {config.sample_rate} Hz")
-    print(f"  Oscillation: {config.osc_amp} us @ {config.osc_freq} Hz")
-    print(f"  Gauges:      {simulator.state.num_gauges}")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("  Wing Digital Twin - Sensor Simulator")
+    logger.info("=" * 60)
+    logger.info("  Sample rate:  %d Hz", config.sample_rate)
+    logger.info("  Oscillation: %d us @ %d Hz", config.osc_amp, config.osc_freq)
+    logger.info("  Gauges:      %d", simulator.state.num_gauges)
+    logger.info("=" * 60)
 
     if args.offline:
         simulator.run_offline()
@@ -48,9 +51,9 @@ def main():
 
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
-            print(f"[SIM] Connected to MQTT broker")
+            logger.info("Connected to MQTT broker")
         else:
-            print(f"[SIM] MQTT connection failed: {rc}")
+            logger.error("MQTT connection failed: %s", rc)
 
     def on_control(client, userdata, msg):
         try:
@@ -67,14 +70,14 @@ def main():
     try:
         mqtt_client.connect(args.broker, args.port, 60)
     except Exception as e:
-        print(f"[SIM] Cannot connect to MQTT: {e}")
-        print("Use --offline to run without MQTT")
+        logger.error("Cannot connect to MQTT: %s", e)
+        logger.info("Use --offline to run without MQTT")
         return
 
     mqtt_client.loop_start()
 
-    print(f"\n{'Time':<10} {'Strain[0]':<12} {'AccelZ':<12} {'Damage':<10}")
-    print("-" * 50)
+    logger.info("%-10s %-12s %-12s %-10s", "Time", "Strain[0]", "AccelZ", "Damage")
+    logger.info("-" * 50)
 
     try:
         while True:
@@ -96,11 +99,11 @@ def main():
 
             if int(simulator.state.time_elapsed * config.sample_rate) % 10 == 0:
                 strain_val = reading.strain if reading.strain_vector is None else reading.strain_vector[0]
-                print(f"{simulator.state.time_elapsed:<10.1f} {strain_val:<12.2f} {reading.accel_z:<12.0f} {simulator.state.current_damage:<10.4f}")
+                logger.info("%-10.1f %-12.2f %-12.0f %-10.4f", simulator.state.time_elapsed, strain_val, reading.accel_z, simulator.state.current_damage)
 
             time.sleep(1 / config.sample_rate)
     except KeyboardInterrupt:
-        print("\n[SIM] Stopping...")
+        logger.info("Stopping...")
         mqtt_client.loop_stop()
         mqtt_client.disconnect()
 
