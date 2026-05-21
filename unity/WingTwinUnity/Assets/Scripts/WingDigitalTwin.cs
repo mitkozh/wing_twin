@@ -25,11 +25,14 @@ public class WingDigitalTwin : MonoBehaviour
     [Header("HUD")]
     [SerializeField] private Slider damageSlider;
     [SerializeField] private TextMeshProUGUI damageLabel;
+    [SerializeField] private Slider avgDamageSlider;
+    [SerializeField] private TextMeshProUGUI avgDamageLabel;
     [SerializeField] private TextMeshProUGUI speedLabel;
     [SerializeField] private TextMeshProUGUI confidenceLabel;
-    [SerializeField] private Image ledImage;
     [SerializeField] private TextMeshProUGUI alertLabel;
     [SerializeField] private TextMeshProUGUI connectionLabel;
+    [SerializeField] private Toggle heatmapModeToggle;
+    [SerializeField] private Text heatmapToggleLabel;
     [SerializeField] private Image stressBar;
     public int stressBarHeight = 256;
     public int stressBarWidth = 16;
@@ -58,14 +61,15 @@ public class WingDigitalTwin : MonoBehaviour
     private bool reconnectScheduled = false;
 
     private float currentDamage = 0f;
+    private float currentAvgDamage = 0f;
     private int currentSpeed = 100;
     private string currentState = "green";
     private float currentConfidence = 100f;
     private bool maintenanceAlert = false;
     private float[] stressField = Array.Empty<float>();
     private float[] deformationField = Array.Empty<float>();
-    private float ledFlashTimer = 0f;
-    private bool ledFlash = false;
+    private float[] nodeDamages = Array.Empty<float>();
+    private bool showDamageHeatmap = false;
 
     public RectTransform stressBarRect;
     public TMP_Text labelPrefab;
@@ -89,9 +93,6 @@ public class WingDigitalTwin : MonoBehaviour
 
     async void Start()
     {
-        CreateStressBar();
-        BuildStressLegendLabels();
-        
         string meshPath = System.IO.Path.Combine(
             Application.streamingAssetsPath, "FinalMesh_surface.json");
         LoadMeshFromJson(meshPath);
@@ -99,6 +100,14 @@ public class WingDigitalTwin : MonoBehaviour
         currentReconnectDelay = reconnectDelay;
         lastMessageTime = Time.time;
         lastHeartbeatTime = Time.time;
+
+        if (heatmapModeToggle != null)
+        {
+            heatmapModeToggle.onValueChanged.AddListener(OnHeatmapModeChanged);
+            heatmapModeToggle.SetIsOnWithoutNotify(false);
+        }
+        UpdateHeatmapToggleLabel(false);
+
         await ConnectAsync();
     }
 
@@ -286,6 +295,7 @@ public class WingDigitalTwin : MonoBehaviour
             if (data == null) return;
 
             currentDamage = data.damage;
+            currentAvgDamage = data.avg_damage;
             currentSpeed = data.speed;
             currentState = data.led_state;
             currentConfidence = data.confidence;
@@ -297,6 +307,8 @@ public class WingDigitalTwin : MonoBehaviour
                 stressField = data.stress_field.ToArray();
             if (data.deformation_field != null && data.deformation_field.Count > 0)
                 deformationField = data.deformation_field.ToArray();
+            if (data.node_damages != null && data.node_damages.Count > 0)
+                nodeDamages = data.node_damages.ToArray();
 
             Enqueue(UpdateUI);
             Enqueue(() => UpdateWingVisualization(data));
@@ -326,8 +338,9 @@ public class WingDigitalTwin : MonoBehaviour
 
     void UpdateUI()
     {
-        if (damageSlider != null) damageSlider.value = currentDamage;
-        if (damageLabel != null) damageLabel.text = $"Damage: {currentDamage * 100:F1}%";
+        UpdateDamageSlider(damageSlider, damageLabel, currentDamage, "Max Damage");
+        UpdateDamageSlider(avgDamageSlider, avgDamageLabel, currentAvgDamage, "Avg Damage");
+        
         if (speedLabel != null) speedLabel.text = $"Vmax: {currentSpeed}%";
         if (confidenceLabel != null) confidenceLabel.text = $"Confidence: {currentConfidence:F1}%";
         if (alertLabel != null)
@@ -335,41 +348,39 @@ public class WingDigitalTwin : MonoBehaviour
             alertLabel.gameObject.SetActive(maintenanceAlert);
             if (maintenanceAlert) alertLabel.text = "MAINTENANCE REQUIRED";
         }
+    }
 
-        if (ledImage != null)
+    void UpdateDamageSlider(Slider slider, TextMeshProUGUI label, float value, string title)
+    {
+        if (slider != null)
         {
-            ledFlashTimer += Time.deltaTime;
-            if (currentState == "red" && ledFlashTimer > 0.4f)
+            slider.value = value;
+            Color sliderColor = value switch
             {
-                ledFlash = !ledFlash;
-                ledFlashTimer = 0f;
-                ledImage.color = ledFlash ? redColor : Color.black;
-            }
-            else if (ledFlashTimer > 0.4f)
-            {
-                ledFlash = false;
-                ledFlashTimer = 0f;
-                ledImage.color = currentState switch
-                {
-                    "green" => greenColor,
-                    "yellow" => yellowColor,
-                    _ => redColor,
-                };
-            }
+                >= 0.8f => redColor,
+                >= 0.3f => yellowColor,
+                _ => greenColor,
+            };
+            slider.fillRect.GetComponent<Image>().color = sliderColor;
         }
-
-        UpdateStressLegendValues();
-
-
+        if (label != null)
+            label.text = $"{title}: {value * 100:F1}%";
     }
 
     void UpdateWingVisualization(TwinState data)
     {
         if (wingRenderer == null || stressGradient == null) return;
 
-        if (usePerVertexHeatmap && mesh != null && stressField.Length > 0)
+        if (usePerVertexHeatmap && mesh != null)
         {
-            UpdateHeatmap();
+            if (showDamageHeatmap && nodeDamages.Length > 0)
+            {
+                UpdateDamageHeatmap();
+            }
+            else if (stressField.Length > 0)
+            {
+                UpdateHeatmap();
+            }
         }
         else
         {
@@ -394,6 +405,8 @@ public class WingDigitalTwin : MonoBehaviour
             float em = Mathf.Lerp(0.3f, 0.0f, currentDamage);
             wingRenderer.material.SetColor("_EmissionColor", new Color(em, em, em));
         }
+
+        UpdateStressLegendValues();
     }
 
     void UpdateDeformation()
@@ -443,6 +456,30 @@ public class WingDigitalTwin : MonoBehaviour
         {
             float absStress = Mathf.Abs(stressField[i]);
             float t = Mathf.Clamp01(absStress / maxS);
+            vertexColors[i] = stressGradient.Evaluate(t);
+        }
+
+        mesh.colors = vertexColors;
+        mesh.MarkDynamic();
+    }
+
+    void UpdateDamageHeatmap()
+    {
+        if (mesh == null || nodeDamages.Length == 0) return;
+
+        int vertexCount = mesh.vertexCount;
+        if (nodeDamages.Length != vertexCount)
+        {
+            Debug.LogWarning($"Node damages length ({nodeDamages.Length}) != vertex count ({vertexCount})");
+            return;
+        }
+
+        if (vertexColors == null || vertexColors.Length != vertexCount)
+            vertexColors = new Color[vertexCount];
+
+        for (int i = 0; i < vertexCount; i++)
+        {
+            float t = Mathf.Clamp01(nodeDamages[i]);
             vertexColors[i] = stressGradient.Evaluate(t);
         }
 
@@ -581,6 +618,10 @@ public class WingDigitalTwin : MonoBehaviour
             {
                 ToggleHelp();
             }
+            if (Input.GetKeyDown(KeyCode.M))
+            {
+                ToggleHeatmapMode();
+            }
         }
 
         // Update connection label
@@ -598,8 +639,30 @@ public class WingDigitalTwin : MonoBehaviour
             helpPanel.SetActive(!helpPanel.activeSelf);
     }
 
-    public void UI_Pause() => SendCommand("pause");
-    public void UI_Reset() => SendCommand("reset",
+    public void ToggleHeatmapMode()
+    {
+        showDamageHeatmap = !showDamageHeatmap;
+        if (heatmapModeToggle != null)
+            heatmapModeToggle.SetIsOnWithoutNotify(showDamageHeatmap);
+        UpdateHeatmapToggleLabel(showDamageHeatmap);
+        Debug.Log($"[HEATMAP] Mode: {(showDamageHeatmap ? "DAMAGE" : "STRESS")}");
+    }
+
+    void OnHeatmapModeChanged(bool isOn)
+    {
+        showDamageHeatmap = isOn;
+        UpdateHeatmapToggleLabel(isOn);
+        Debug.Log($"[HEATMAP] Mode: {(showDamageHeatmap ? "DAMAGE" : "STRESS")}");
+    }
+
+    void UpdateHeatmapToggleLabel(bool isDamageMode)
+    {
+        if (heatmapToggleLabel != null)
+            heatmapToggleLabel.text = isDamageMode ? "Damage" : "Stress";
+    }
+
+    public void UI_Pause()  => SendCommand("pause");
+    public void UI_Reset()  => SendCommand("reset",
         new Dictionary<string, object> { { "target", "damage" } });
     public void UI_Status() => SendCommand("status");
 
@@ -617,6 +680,8 @@ public class WingDigitalTwin : MonoBehaviour
         public List<float> stress_field;
         public List<float> deformation_field;
         public float damage;
+        public float avg_damage;
+        public List<float> node_damages;
         public float confidence;
         public int speed;
         public string led_state;
