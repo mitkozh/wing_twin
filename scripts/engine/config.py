@@ -21,8 +21,8 @@ class FatigueConfig:
     ema_alpha: float = 0.1
     confidence_threshold: float = 50.0
     confidence_frames_threshold: int = 10
-    damage_safe: float = 0.3
-    damage_warning: float = 0.8
+    damage_warning: float = 0.3
+    damage_critical: float = 0.8
 
 
 @dataclass

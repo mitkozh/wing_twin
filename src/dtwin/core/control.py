@@ -22,10 +22,10 @@ def decide_control(damage: float, confidence: float = 100.0, config: Optional[Fa
         config = FatigueConfig()
 
     base_speed = 100
-    if damage >= config.damage_warning:
+    if damage >= config.damage_critical:
         led = "red"
         base_speed = 0
-    elif damage >= config.damage_safe:
+    elif damage >= config.damage_warning:
         led = "yellow"
         base_speed = 50
     else:
@@ -56,8 +56,8 @@ def describe_state(damage: float, led: str, speed: int, config: Optional[Fatigue
     if config is None:
         config = FatigueConfig()
 
-    if damage >= config.damage_warning:
+    if damage >= config.damage_critical:
         return f"CRITICAL — D={damage:.4f} — LED={led} — Vmax={speed}%"
-    elif damage >= config.damage_safe:
+    elif damage >= config.damage_warning:
         return f"WARNING — D={damage:.4f} — LED={led} — Vmax={speed}%"
     return f"SAFE — D={damage:.4f} — LED={led} — Vmax={speed}%"
