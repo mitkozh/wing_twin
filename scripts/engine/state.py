@@ -43,6 +43,7 @@ class TwinState:
     stress_field: list = field(default_factory=list)
     deformation_field: list = field(default_factory=list)
     damage: float = 0.0
+    avg_damage: float = 0.0
     confidence: float = 100.0
     speed_pct: int = 100
     led_state: str = "green"
@@ -100,6 +101,7 @@ class TwinState:
             "stress_max": round(stress_max, 2),
             "deformation_field": surface_deform,
             "damage": round(self.damage, 4),
+            "avg_damage": round(self.avg_damage, 4),
             "node_damages": surface_damage,
             "confidence": round(self.confidence, 2),
             "speed": self.speed_pct,

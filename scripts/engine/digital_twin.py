@@ -111,7 +111,16 @@ class DigitalTwinEngine:
             config=self.config.fatigue
         )
         self._cycles.extend(new_cycles)
-        self.state.damage = self.fatigue_state.damage
+        
+        if self.fatigue_state.node_damages:
+            values = list(self.fatigue_state.node_damages.values())
+            self.state.damage = max(values)
+            sorted_vals = sorted(values, reverse=True)
+            top_10_pct = sorted_vals[:max(1, len(sorted_vals) // 10)]
+            self.state.avg_damage = sum(top_10_pct) / len(top_10_pct) if top_10_pct else 0.0
+        else:
+            self.state.damage = self.fatigue_state.damage
+            self.state.avg_damage = 0.0
         self.state.confidence = self.fatigue_state.confidence
 
         self.state.led_state, self.state.speed_pct = decide_control(
