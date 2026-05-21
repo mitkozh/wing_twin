@@ -93,6 +93,8 @@ class TwinState:
         stress_min = min(stress_abs) if stress_abs else 0.0
         stress_max = max(stress_abs) if stress_abs else 0.0
 
+        angle_of_attack = 25.0
+
         return {
             "strain": float(np.mean(self.strain_vector)) if self.strain_vector else 0.0,
             "forces": [round(f, 4) for f in self.forces],
@@ -107,7 +109,9 @@ class TwinState:
             "speed": self.speed_pct,
             "led_state": self.led_state,
             "maintenance_alert": self.maintenance_alert,
+            "new_angle_of_attack": angle_of_attack,
         }
+    # ANGLE OF ATTACK IS CONSTANT. DECISION MAKING SHOULD BE DONE.
 
     def for_esp32(self) -> dict:
         """Format state for ESP32 control."""

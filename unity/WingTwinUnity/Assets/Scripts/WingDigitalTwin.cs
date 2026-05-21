@@ -19,8 +19,8 @@ public class WingDigitalTwin : MonoBehaviour
     [Header("Connection")]
     [SerializeField] private string serverUrl = "ws://localhost:8765";
     [SerializeField] private float reconnectDelay = 2f;
-    [SerializeField] private float maxReconnectDelay = 30f;
-    [SerializeField] private float heartbeatInterval = 30f;
+    [SerializeField] private float maxReconnectDelay = 10f;
+    [SerializeField] private float heartbeatInterval = 10f;
 
     [Header("HUD")]
     [SerializeField] private Slider damageSlider;
@@ -42,16 +42,28 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] private Gradient stressGradient;
     [SerializeField] private bool usePerVertexHeatmap = true;
 
+    [Header("PlaneVisualization")]
+    [SerializeField] GameObject rotationalPivot;
+    [SerializeField] Slider planeAngleSlider;
+
     [Header("LED Colors")]
     [SerializeField] private Color greenColor = new Color(0.1f, 1.0f, 0.1f);
     [SerializeField] private Color yellowColor = new Color(1.0f, 0.9f, 0.1f);
     [SerializeField] private Color redColor = new Color(1.0f, 0.1f, 0.1f);
 
     [Header("Help Panel")]
-    [SerializeField] private GameObject helpPanel;
+    [SerializeField] GameObject helpPanel;
 
     [Header("Simulation Parameters")]
     [SerializeField] float scaling = 1f;
+
+    [Header("Canvas Elements")]
+    [SerializeField] List<GameObject> UIViewGroups = new List<GameObject>();
+    [SerializeField] List<GameObject> ViewCameras = new List<GameObject>();
+    public float angleAdjustmentTime; 
+    public float planeAngle;
+    private float elapsedTime = 0f;
+    private Image fillImage;
 
     private WebSocket ws;
     private bool connected = false;
@@ -60,6 +72,8 @@ public class WingDigitalTwin : MonoBehaviour
     private float lastMessageTime = 0f;
     private bool reconnectScheduled = false;
 
+    private float newAngleOfAttack = 0f;
+    private float previousAngleOfAttack = 0f;
     private float currentDamage = 0f;
     private float currentAvgDamage = 0f;
     private int currentSpeed = 100;
@@ -92,7 +106,9 @@ public class WingDigitalTwin : MonoBehaviour
         new System.Collections.Generic.Queue<Action>();
 
     async void Start()
-    {
+    {   
+        CreateStressBar();
+        BuildStressLegendLabels();
         string meshPath = System.IO.Path.Combine(
             Application.streamingAssetsPath, "FinalMesh_surface.json");
         LoadMeshFromJson(meshPath);
@@ -108,7 +124,63 @@ public class WingDigitalTwin : MonoBehaviour
         }
         UpdateHeatmapToggleLabel(false);
 
+        fillImage = planeAngleSlider.fillRect.GetComponent<Image>();
+
         await ConnectAsync();
+    }
+
+    private void UpdatePlaneAngle()
+    {
+        elapsedTime += Time.deltaTime;
+
+        float t = Mathf.Clamp01(elapsedTime / angleAdjustmentTime);
+        planeAngle = Mathf.Lerp(previousAngleOfAttack, newAngleOfAttack, t);
+
+        Vector3 current = rotationalPivot.transform.localEulerAngles;
+        rotationalPivot.transform.localRotation = Quaternion.Euler(planeAngle, current.y, current.z);
+
+        fillImage.fillClockwise = planeAngle < 0;
+
+        float sliderAngle = Mathf.Clamp01(Mathf.Abs(planeAngle) / 360f);
+        planeAngleSlider.value = sliderAngle;
+    }
+
+    public void SwitchViewButton(int camera)
+    {
+        if (camera > UIViewGroups.Count || camera > ViewCameras.Count)
+        {
+            return;
+        }
+
+        SwitchView(camera);
+    }
+
+    private void SwitchView(int camera)
+    {
+        int index = camera - 1;
+
+        for (int i = 0; i < UIViewGroups.Count; i++)
+        {
+            GameObject uiGroup = UIViewGroups[i];
+            GameObject viewCamera = ViewCameras[i];
+            if (uiGroup == null || viewCamera == null)
+            {
+                continue;
+            }
+
+            if (i != index)
+            {
+                uiGroup.SetActive(false);
+                viewCamera.SetActive(false);
+            }
+            else
+            {
+                uiGroup.SetActive(true);
+                viewCamera.SetActive(true);
+            }
+
+
+        }
     }
 
     void CreateStressBar()
@@ -302,6 +374,15 @@ public class WingDigitalTwin : MonoBehaviour
             maintenanceAlert = data.maintenance_alert;
             stressMin = data.stress_min;
             stressMax = data.stress_max;
+
+            float incomingAngle = data.new_angle_of_attack;
+
+            if (!Mathf.Approximately(incomingAngle, newAngleOfAttack))
+            {
+                previousAngleOfAttack = planeAngle;
+                newAngleOfAttack = incomingAngle;
+                elapsedTime = 0f;
+            }
 
             if (data.stress_field != null && data.stress_field.Count > 0)
                 stressField = data.stress_field.ToArray();
@@ -631,6 +712,8 @@ public class WingDigitalTwin : MonoBehaviour
             connectionLabel.text = connected ? $"CONNECTED" : "DISCONNECTED";
             connectionLabel.color = connected ? Color.green : Color.red;
         }
+
+        UpdatePlaneAngle();
     }
 
     public void ToggleHelp()
@@ -688,5 +771,6 @@ public class WingDigitalTwin : MonoBehaviour
         public bool maintenance_alert;
         public float stress_min;
         public float stress_max;
+        public float new_angle_of_attack;
     }
 }
