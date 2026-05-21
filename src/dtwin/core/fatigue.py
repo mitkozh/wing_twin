@@ -175,7 +175,7 @@ def update_confidence(
     state.filtered_residual = (
         config.ema_alpha * residual + (1 - config.ema_alpha) * state.filtered_residual
     )
-    state.confidence = np.clip(100.0 * (1.0 - state.filtered_residual), 0.0, 100.0)
+    state.confidence = np.clip(100.0 * (1.0 - abs(state.filtered_residual)), 0.0, 100.0)
 
     if state.confidence < config.confidence_threshold:
         state.low_confidence_frames += 1
