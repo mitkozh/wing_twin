@@ -94,6 +94,9 @@ class TwinState:
         stress_max = max(stress_abs) if stress_abs else 0.0
 
         angle_of_attack = 25.0
+        new_speed = 900 # In km/h
+        # TODO: ANGLE OF ATTACK IS CONSTANT. DECISION MAKING SHOULD BE DONE.
+        # TODO: SPEED IS CONSTANT. DECISION MAKING SHOULD BE DONE.
 
         return {
             "strain": float(np.mean(self.strain_vector)) if self.strain_vector else 0.0,
@@ -110,8 +113,8 @@ class TwinState:
             "led_state": self.led_state,
             "maintenance_alert": self.maintenance_alert,
             "new_angle_of_attack": angle_of_attack,
+            "new_speed": new_speed,
         }
-    # ANGLE OF ATTACK IS CONSTANT. DECISION MAKING SHOULD BE DONE.
 
     def for_esp32(self) -> dict:
         """Format state for ESP32 control."""

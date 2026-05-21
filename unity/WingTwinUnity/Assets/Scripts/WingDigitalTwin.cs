@@ -45,6 +45,16 @@ public class WingDigitalTwin : MonoBehaviour
     [Header("PlaneVisualization")]
     [SerializeField] GameObject rotationalPivot;
     [SerializeField] Slider planeAngleSlider;
+    [SerializeField] GameObject planeScene;
+    [SerializeField] TextMeshProUGUI planeCurrentSpeedLabel;
+    [SerializeField] TextMeshProUGUI planeTargetSpeedLabel;
+    [SerializeField] TextMeshProUGUI planeTargetAngleLabel;
+    [SerializeField] TextMeshProUGUI planeCurrentAngleLabel;
+    [SerializeField] List<ParticleSystem> windParticles = new List<ParticleSystem>();
+    [SerializeField] float commonPlaneSpeed = 850f; // in km/h
+    [SerializeField] float windExaggeration = 1f;
+    [SerializeField] float angleAdjustmentTime = 10;
+    [SerializeField] float speedAdjustmentTime = 10;
 
     [Header("LED Colors")]
     [SerializeField] private Color greenColor = new Color(0.1f, 1.0f, 0.1f);
@@ -58,11 +68,12 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] float scaling = 1f;
 
     [Header("Canvas Elements")]
-    [SerializeField] List<GameObject> UIViewGroups = new List<GameObject>();
-    [SerializeField] List<GameObject> ViewCameras = new List<GameObject>();
-    public float angleAdjustmentTime; 
-    public float planeAngle;
-    private float elapsedTime = 0f;
+    [SerializeField] List<ViewGroup> UIViewGroups = new List<ViewGroup>();
+
+    private float currentPlaneAngle = 0;
+    private float currentPlaneSpeed = 800f; 
+    private float angleElapsedTime = 0f;
+    private float speedElapsedTime = 0f;
     private Image fillImage;
 
     private WebSocket ws;
@@ -74,6 +85,8 @@ public class WingDigitalTwin : MonoBehaviour
 
     private float newAngleOfAttack = 0f;
     private float previousAngleOfAttack = 0f;
+    private float newPlaneSpeed = 0f;
+    private float previousPlaneSpeed = 800f;
     private float currentDamage = 0f;
     private float currentAvgDamage = 0f;
     private int currentSpeed = 100;
@@ -128,26 +141,48 @@ public class WingDigitalTwin : MonoBehaviour
 
         await ConnectAsync();
     }
+    
+    private void UpdatePlaneSpeed()
+    {
+        speedElapsedTime += Time.deltaTime;
 
+        float t = Mathf.Clamp01(speedElapsedTime / speedAdjustmentTime);
+        currentPlaneSpeed = Mathf.Lerp(previousPlaneSpeed, newPlaneSpeed, t);
+
+        planeCurrentSpeedLabel.text = $"Current Plane Speed: {currentPlaneSpeed}";
+        planeTargetSpeedLabel.text = $"Target Plane Speed: {newPlaneSpeed}";
+
+        foreach (ParticleSystem ps in windParticles)
+        {
+            float change = currentPlaneSpeed / commonPlaneSpeed;
+            ParticleSystem.MainModule main = ps.main;
+            float speed = change * windExaggeration;
+            main.startSpeed = speed;
+            main.startLifetime = 10f / speed;
+        }
+    }
     private void UpdatePlaneAngle()
     {
-        elapsedTime += Time.deltaTime;
+        angleElapsedTime += Time.deltaTime;
 
-        float t = Mathf.Clamp01(elapsedTime / angleAdjustmentTime);
-        planeAngle = Mathf.Lerp(previousAngleOfAttack, newAngleOfAttack, t);
+        float t = Mathf.Clamp01(angleElapsedTime / angleAdjustmentTime);
+        currentPlaneAngle = Mathf.Lerp(previousAngleOfAttack, newAngleOfAttack, t);
 
         Vector3 current = rotationalPivot.transform.localEulerAngles;
-        rotationalPivot.transform.localRotation = Quaternion.Euler(planeAngle, current.y, current.z);
+        rotationalPivot.transform.localRotation = Quaternion.Euler(currentPlaneAngle, current.y, current.z);
 
-        fillImage.fillClockwise = planeAngle < 0;
+        fillImage.fillClockwise = currentPlaneAngle < 0;
 
-        float sliderAngle = Mathf.Clamp01(Mathf.Abs(planeAngle) / 360f);
+        float sliderAngle = Mathf.Clamp01(Mathf.Abs(currentPlaneAngle) / 360f);
         planeAngleSlider.value = sliderAngle;
+
+        planeCurrentAngleLabel.text = $"Current Plane Angle: {currentPlaneAngle}";
+        planeTargetAngleLabel.text = $"Target Plane Angle: {newAngleOfAttack}";
     }
 
     public void SwitchViewButton(int camera)
     {
-        if (camera > UIViewGroups.Count || camera > ViewCameras.Count)
+        if (camera > UIViewGroups.Count)
         {
             return;
         }
@@ -158,29 +193,33 @@ public class WingDigitalTwin : MonoBehaviour
     private void SwitchView(int camera)
     {
         int index = camera - 1;
+         bool planeSceneNeeded = false;
 
         for (int i = 0; i < UIViewGroups.Count; i++)
         {
-            GameObject uiGroup = UIViewGroups[i];
-            GameObject viewCamera = ViewCameras[i];
-            if (uiGroup == null || viewCamera == null)
-            {
-                continue;
-            }
+            GameObject uiGroup = UIViewGroups[i].uiViewGroup;
+            GameObject viewCamera = UIViewGroups[i].viewCamera;
+            GameObject worldUIGroup = UIViewGroups[i].worldUIViewGroup;
+            
 
-            if (i != index)
-            {
-                uiGroup.SetActive(false);
-                viewCamera.SetActive(false);
-            }
-            else
-            {
-                uiGroup.SetActive(true);
-                viewCamera.SetActive(true);
-            }
+            bool active = i == index;
 
+            if (uiGroup != null)
+                uiGroup.SetActive(active);
 
+            if (worldUIGroup != null)
+                worldUIGroup.SetActive(active);
+
+            if (viewCamera != null)
+                viewCamera.SetActive(active);
+
+            if (active && UIViewGroups[i].needPlaneScene)
+            {
+                planeSceneNeeded = true;
+            }
         }
+
+        planeScene.SetActive(planeSceneNeeded);
     }
 
     void CreateStressBar()
@@ -375,13 +414,23 @@ public class WingDigitalTwin : MonoBehaviour
             stressMin = data.stress_min;
             stressMax = data.stress_max;
 
+
+            float incomingPlaneSpeed = data.new_speed;
+
+            if (!Mathf.Approximately(incomingPlaneSpeed, newPlaneSpeed))
+            {
+                previousPlaneSpeed = currentPlaneSpeed;
+                newPlaneSpeed = incomingPlaneSpeed;
+                speedElapsedTime = 0;
+            }
+
             float incomingAngle = data.new_angle_of_attack;
 
             if (!Mathf.Approximately(incomingAngle, newAngleOfAttack))
             {
-                previousAngleOfAttack = planeAngle;
+                previousAngleOfAttack = currentPlaneAngle;
                 newAngleOfAttack = incomingAngle;
-                elapsedTime = 0f;
+                angleElapsedTime = 0f;
             }
 
             if (data.stress_field != null && data.stress_field.Count > 0)
@@ -714,6 +763,7 @@ public class WingDigitalTwin : MonoBehaviour
         }
 
         UpdatePlaneAngle();
+        UpdatePlaneSpeed();
     }
 
     public void ToggleHelp()
@@ -772,5 +822,16 @@ public class WingDigitalTwin : MonoBehaviour
         public float stress_min;
         public float stress_max;
         public float new_angle_of_attack;
+        public float new_speed;
     }
+
+    [Serializable]
+    public class ViewGroup
+    {
+        public GameObject viewCamera;
+        public GameObject uiViewGroup;
+        public GameObject worldUIViewGroup;
+        public bool needPlaneScene;
+    }
+
 }
