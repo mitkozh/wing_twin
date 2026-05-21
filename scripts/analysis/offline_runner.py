@@ -108,9 +108,9 @@ class OfflineRunner:
                 cum_damage = fatigue_state.damage
 
                 led_state, speed_pct = decide_control(cum_damage, fatigue_state.confidence, config=fatigue_config)
-                if cum_damage >= fatigue_config.damage_warning:
+                if cum_damage >= fatigue_config.damage_critical:
                     state_str, speed_str = "CRITICAL", "0%"
-                elif cum_damage >= fatigue_config.damage_safe:
+                elif cum_damage >= fatigue_config.damage_warning:
                     state_str, speed_str = "WARNING", "50%"
                 else:
                     state_str, speed_str = "SAFE", "100%"
@@ -119,9 +119,9 @@ class OfflineRunner:
 
         final_damage = fatigue_state.damage
         logger.info("Final damage: %.4f (%.1f%%)", final_damage, final_damage*100)
-        if final_damage < fatigue_config.damage_safe:
+        if final_damage < fatigue_config.damage_warning:
             logger.info("VERDICT: Wing SAFE for continued operation")
-        elif final_damage < fatigue_config.damage_warning:
+        elif final_damage < fatigue_config.damage_critical:
             logger.info("VERDICT: Wing WARNING — reduce Vmax to 50%%")
         else:
             logger.info("VERDICT: Wing CRITICAL — block launch, request maintenance")

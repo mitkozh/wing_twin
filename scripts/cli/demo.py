@@ -169,7 +169,7 @@ def main():
     logger.info("=" * 60)
     fatigue_config = FatigueConfig()
     logger.info("  Sample rate:  %d Hz", SimulationConfig().sample_rate)
-    logger.info("  Thresholds:   SAFE<%s  WARN<%s  CRIT>=%s", fatigue_config.damage_safe, fatigue_config.damage_warning, fatigue_config.damage_warning)
+    logger.info("  Thresholds:   SAFE<%s  WARN<%s  CRIT>=%s", fatigue_config.damage_warning, fatigue_config.damage_critical, fatigue_config.damage_critical)
     logger.info("=" * 60)
 
     if args.figures_only:

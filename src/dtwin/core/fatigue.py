@@ -28,8 +28,8 @@ class FatigueConfig:
     ema_alpha: float = 0.1  # Smoothing factor for EMA
     confidence_threshold: float = 50.0  # Alert threshold (percentage)
     confidence_frames_threshold: int = 10  # Frames below threshold before alert
-    damage_safe: float = 0.3  # Below this: green LED, 100% speed
-    damage_warning: float = 0.8  # Below safe but above this: yellow LED, 50% speed
+    damage_warning: float = 0.3  # Below this: green LED, 100% speed
+    damage_critical: float = 0.8  # Below warning but above this: yellow LED, 50% speed
 
 
 @dataclass
@@ -175,7 +175,7 @@ def update_confidence(
     state.filtered_residual = (
         config.ema_alpha * residual + (1 - config.ema_alpha) * state.filtered_residual
     )
-    state.confidence = np.clip(100.0 * (1.0 - state.filtered_residual), 0.0, 100.0)
+    state.confidence = np.clip(100.0 * (1.0 - abs(state.filtered_residual)), 0.0, 100.0)
 
     if state.confidence < config.confidence_threshold:
         state.low_confidence_frames += 1
