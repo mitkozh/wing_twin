@@ -11,7 +11,7 @@ from typing import Optional
 
 import numpy as np
 
-from dtwin.core.fatigue import DAMAGE_SAFE, DAMAGE_WARNING
+from dtwin.core.fatigue import FatigueConfig
 
 from pathlib import Path
 
@@ -21,6 +21,9 @@ from ..viz import VisualizationGenerator
 from ..engine import DigitalTwinEngine, EngineConfig
 from ..sources import SimulatorSource
 from ..output import WebSocketBroadcaster, EngineCommandHandler
+from ..logger import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -45,16 +48,18 @@ async def run_demo_async(
     config = EngineConfig(seed=seed)
     engine = DigitalTwinEngine(config)
 
-    print("[MATRICES] Loading transfer matrices...")
+    logger.info("Loading transfer matrices...")
     try:
         engine.load_matrices()
-        print(f"[MATRICES] Loaded successfully ({engine.num_gauges} gauge channels)")
+        logger.info("Loaded successfully (%d gauge channels)", engine.num_gauges)
     except FileNotFoundError as e:
-        print(f"[MATRICES] {e}")
-        print("[MATRICES] Running without transfer matrices")
+        logger.warning("%s", e)
+        logger.warning("Running without transfer matrices")
 
     sim_config = SimulationConfig()
     simulator = SimulatorSource(sim_config)
+    if engine.matrices_loaded:
+        simulator.set_num_gauges(engine.num_gauges)
     engine.data_source = simulator
 
     history = HistoryState()
@@ -97,7 +102,7 @@ async def run_demo_async(
                 await broadcaster.broadcast()
                 broadcast_count += 1
                 if broadcast_count % 20 == 0:
-                    print(f"[WS] Sent {broadcast_count} broadcasts")
+                    logger.debug("Sent %d broadcasts", broadcast_count)
             
             await asyncio.sleep(1.0 / sim_config.sample_rate)
 
@@ -122,16 +127,16 @@ async def run_demo_async(
     await asyncio.sleep(0.5)
 
     if duration_s > 0:
-        print(f"\n[SIM] Recorded {len(history.strain_history)} samples over {duration_s}s")
+        logger.info("Recorded %d samples over %ds", len(history.strain_history), duration_s)
 
     return engine, history
 
 
 def _display_thread(engine, running_ref):
     """Thread that displays live dashboard."""
-    print("\n" + "=" * 60)
-    print("  Wing Digital Twin — Live Dashboard")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("  Wing Digital Twin — Live Dashboard")
+    logger.info("=" * 60)
     tick = 0
     while running_ref[0]:
         tick += 1
@@ -139,7 +144,7 @@ def _display_thread(engine, running_ref):
         filled = int(engine.state.damage * bar_len)
         bar = "#" * filled + "-" * (bar_len - filled)
         state_sym = {"green": "GREEN", "yellow": "YELLOW", "red": "RED"}.get(engine.state.led_state, "UNKNOWN")
-        print(f"[{tick:4d}s] |{bar}| {engine.state.damage*100:5.1f}%  {state_sym:7s}  Vmax={engine.state.speed_pct:3d}%")
+        logger.info("[%4ds] |%s| %5.1f%%  %7s  Vmax=%3d%%", tick, bar, engine.state.damage*100, state_sym, engine.state.speed_pct)
         time.sleep(1)
 
 
@@ -157,14 +162,15 @@ def main():
         args.duration = 0
 
     if args.seed is not None:
-        print(f"[SEED] Random seed set to {args.seed}")
+        logger.info("Random seed set to %d", args.seed)
 
-    print("=" * 60)
-    print("  Wing Digital Twin — Full Stack Demo")
-    print("=" * 60)
-    print(f"  Sample rate:  {SimulationConfig().sample_rate} Hz")
-    print(f"  Thresholds:   SAFE<{DAMAGE_SAFE}  WARN<{DAMAGE_WARNING}  CRIT>={DAMAGE_WARNING}")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("  Wing Digital Twin — Full Stack Demo")
+    logger.info("=" * 60)
+    fatigue_config = FatigueConfig()
+    logger.info("  Sample rate:  %d Hz", SimulationConfig().sample_rate)
+    logger.info("  Thresholds:   SAFE<%s  WARN<%s  CRIT>=%s", fatigue_config.damage_safe, fatigue_config.damage_warning, fatigue_config.damage_warning)
+    logger.info("=" * 60)
 
     if args.figures_only:
         loader = DataLoader(PROJECT_ROOT / "figures")

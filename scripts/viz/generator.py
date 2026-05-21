@@ -5,11 +5,14 @@ Visualization generator - orchestrates all plotters.
 from pathlib import Path
 from typing import Optional
 
+from ..logger import get_logger
 from .strain import StrainPlotter
 from .damage import DamagePlotter
 from .rainflow import RainflowPlotter
 from .sn_curve import SnCurvePlotter
 from .fields import StressFieldPlotter, DeformationFieldPlotter
+
+logger = get_logger(__name__)
 
 
 class VisualizationGenerator:
@@ -40,9 +43,9 @@ class VisualizationGenerator:
         deformation_field_history: Optional[list] = None,
     ) -> None:
         """Generate all plots from simulation data."""
-        print("\n" + "=" * 50)
-        print("  Generating Figures...")
-        print("=" * 50)
+        logger.info("\n" + "=" * 50)
+        logger.info("  Generating Figures...")
+        logger.info("=" * 50)
 
         self.plotters[0].plot((strain_history, times))
         self.plotters[1].plot((damage_history, times))
@@ -51,6 +54,6 @@ class VisualizationGenerator:
         self.plotters[4].plot(stress_field_history or [])
         self.plotters[5].plot(deformation_field_history or [])
 
-        print("=" * 50)
-        print(f"  Figures saved to: {self.output_dir}/")
-        print("=" * 50)
+        logger.info("=" * 50)
+        logger.info("  Figures saved to: %s/", self.output_dir)
+        logger.info("=" * 50)

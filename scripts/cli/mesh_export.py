@@ -8,6 +8,9 @@ from pathlib import Path
 
 from scripts.config import PROJECT_ROOT
 from scripts.mesh.exporter import MeshExporter
+from scripts.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def main():
@@ -35,19 +38,19 @@ def main():
     exporter = MeshExporter(mesh_dir=mesh_dir, output_dir=mesh_dir)
 
     if args.list_available:
-        print("Available mesh files in mesh/:")
+        logger.info("Available mesh files in mesh/:")
         for f in exporter.list_available():
-            print(f"  {f.name}")
+            logger.info("  %s", f.name)
         return
 
     if args.input is None:
         mesh_files = exporter.list_available()
         if not mesh_files:
-            print("No mesh files found in mesh/. Place .vtkhdf or .cgns files there.")
-            print("Use --list-available to check, or specify --input manually.")
+            logger.warning("No mesh files found in mesh/. Place .vtkhdf or .cgns files there.")
+            logger.info("Use --list-available to check, or specify --input manually.")
             return
         vtkhdf_path = mesh_files[0]
-        print(f"Using: {vtkhdf_path}")
+        logger.info("Using: %s", vtkhdf_path)
     else:
         from pathlib import Path
         vtkhdf_path = Path(args.input)

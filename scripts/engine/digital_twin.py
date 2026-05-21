@@ -16,7 +16,7 @@ from dtwin import (
     decide_control,
 )
 from dtwin.core import FatigueState
-from dtwin.core.fatigue import STRAIN_BUFFER_SIZE, set_random_seed, ALUMINUM_SN_CURVE, DEMO_SN_CURVE, accumulate_damage_at_nodes
+from dtwin.core.fatigue import set_random_seed, accumulate_damage_at_nodes, sn_curve_for_material
 from dtwin.core.matrices import TransferMatrices
 
 from .config import EngineConfig
@@ -35,7 +35,7 @@ class DigitalTwinEngine:
 
         self.state = TwinState()
         self.fatigue_state = FatigueState()
-        self._strain_buffer: deque = deque(maxlen=STRAIN_BUFFER_SIZE)
+        self._strain_buffer: deque = deque(maxlen=self.config.fatigue.strain_buffer_size)
         self._cycles: list = []
 
         if self.config.seed is not None:
@@ -76,18 +76,17 @@ class DigitalTwinEngine:
 
     def process_reading(self, reading: SensorReading) -> None:
         """Process a single sensor reading."""
+        self._strain_buffer.append(reading.strain)
+        
         if reading.strain_vector is not None:
             strain_vec = reading.strain_vector
         else:
-            strain_vec = np.array([reading.strain], dtype=np.float64)
+            strain_vec = np.array([reading.strain] * self._num_gauges, dtype=np.float64)
 
-        self._strain_buffer.append(strain_vec)
         self.state.strain_vector = strain_vec.tolist()
 
-        if self._matrices is not None and len(self._strain_buffer) >= self._num_gauges:
-            arr = np.array(list(self._strain_buffer)[-self._num_gauges:], dtype=np.float64).ravel()
-
-            F = solve_forces(self._matrices.H_inv, arr)
+        if self._matrices is not None:
+            F = solve_forces(self._matrices.H_inv, strain_vec)
             stress = compute_stress_field(self._matrices.S, F)
             deformation = compute_deformation_field(self._matrices.U, F)
 
@@ -96,21 +95,36 @@ class DigitalTwinEngine:
             self.state.deformation_field = deformation.tolist()
 
             stress_mpa = stress / 1e6
-            accumulate_damage_at_nodes(stress_mpa, self.fatigue_state, sn_curve=DEMO_SN_CURVE)
+            accumulate_damage_at_nodes(
+                stress_mpa, 
+                self.fatigue_state, 
+                sn_curve=sn_curve_for_material(self.config.fatigue.material),
+                config=self.config.fatigue
+            )
 
-            if hasattr(self.fatigue_state, 'node_damages'):
-                self.state.node_damages = dict(self.fatigue_state.node_damages)
+            self.state.node_damages = dict(self.fatigue_state.node_damages)
 
-        # S-N CURVE OPTIONS:
-        # DEMO_SN_CURVE: intercept=8.0, for visible damage in seconds (use this for demos)
-        # ALUMINUM_SN_CURVE: intercept=15.0, physically realistic (needs millions of cycles)
-        _, new_cycles = accumulate_damage(self._strain_buffer, self.fatigue_state, sn_curve=DEMO_SN_CURVE)  # Use DEMO for demo visibility
+        _, new_cycles = accumulate_damage(
+            self._strain_buffer, 
+            self.fatigue_state, 
+            sn_curve=sn_curve_for_material(self.config.fatigue.material),
+            config=self.config.fatigue
+        )
         self._cycles.extend(new_cycles)
-        self.state.damage = self.fatigue_state.damage
+        
+        if self.fatigue_state.node_damages:
+            values = list(self.fatigue_state.node_damages.values())
+            self.state.damage = max(values)
+            sorted_vals = sorted(values, reverse=True)
+            top_10_pct = sorted_vals[:max(1, len(sorted_vals) // 10)]
+            self.state.avg_damage = sum(top_10_pct) / len(top_10_pct) if top_10_pct else 0.0
+        else:
+            self.state.damage = self.fatigue_state.damage
+            self.state.avg_damage = 0.0
         self.state.confidence = self.fatigue_state.confidence
 
         self.state.led_state, self.state.speed_pct = decide_control(
-            self.state.damage, self.fatigue_state.confidence
+            self.state.damage, self.fatigue_state.confidence, config=self.config.fatigue
         )
 
     def step(self) -> bool:

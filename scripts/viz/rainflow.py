@@ -5,7 +5,10 @@ Rainflow cycle histogram plotter.
 from pathlib import Path
 import numpy as np
 
+from ..logger import get_logger
 from .base import BasePlotter
+
+logger = get_logger(__name__)
 
 
 class RainflowPlotter(BasePlotter):
@@ -40,7 +43,7 @@ class RainflowPlotter(BasePlotter):
         path = self.output_dir / filename
         fig.savefig(path, bbox_inches="tight")
         plt.close(fig)
-        print(f"  [FIG] Saved {path}")
+        logger.debug("Saved %s", path)
         return path
 
     def _parse_cycles(self, cycles):

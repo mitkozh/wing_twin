@@ -6,6 +6,9 @@ import argparse
 
 from scripts.analysis import OfflineRunner
 from dtwin.core.fatigue import set_random_seed
+from scripts.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def main():
@@ -17,7 +20,7 @@ def main():
 
     if args.seed is not None:
         set_random_seed(args.seed)
-        print(f"[SEED] Random seed set to {args.seed}")
+        logger.info("Random seed set to %d", args.seed)
 
     runner = OfflineRunner(sample_rate=args.sample_rate)
     runner.run(args.duration, seed=args.seed)

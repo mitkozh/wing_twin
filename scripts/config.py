@@ -28,11 +28,12 @@ class WebSocketConfig:
 @dataclass
 class SimulationConfig:
     sample_rate: int = 50
-    base_strain: float = 250.0
-    osc_amp: float = 40.0
+    base_strain: float = 350.0
+    osc_amp: float = 180.0
     osc_freq: float = 4.2
     noise_std: float = 5.0
     gauge_noise_std: float = 2.0
+    gauge_positions: list = field(default_factory=lambda: [1.0, 0.7, 0.4])
 
 
 @dataclass

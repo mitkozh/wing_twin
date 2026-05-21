@@ -10,6 +10,10 @@ import numpy as np
 import vtk
 from vtkmodules.util.numpy_support import vtk_to_numpy
 
+from ..logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class MeshExporter:
     """
@@ -51,8 +55,8 @@ class MeshExporter:
         if block1 is None:
             raise ValueError("No sub-blocks found")
 
-        print("block1 points:", block1.GetNumberOfPoints())
-        print("block1 cells:", block1.GetNumberOfCells())
+        logger.debug("block1 points: %d", block1.GetNumberOfPoints())
+        logger.debug("block1 cells: %d", block1.GetNumberOfCells())
         surface_filter = vtk.vtkDataSetSurfaceFilter()
         surface_filter.SetInputData(block1)
         surface_filter.PassThroughPointIdsOn()
@@ -60,10 +64,10 @@ class MeshExporter:
         surface_filter.Update()
         surface = surface_filter.GetOutput()
 
-        print("Available point data arrays:")
+        logger.debug("Available point data arrays:")
         pd = surface.GetPointData()
         for j in range(pd.GetNumberOfArrays()):
-            print(j, pd.GetArrayName(j))
+            logger.debug("%d %s", j, pd.GetArrayName(j))
 
         full_points = vtk_to_numpy(block1.GetPoints().GetData())
         surface_points = vtk_to_numpy(surface.GetPoints().GetData())
@@ -109,9 +113,9 @@ class MeshExporter:
         with open(out_json_path, "w") as f:
             json.dump(output_data, f)
 
-        print(f"Exported {len(vertices)} vertices, {len(triangles)} triangles")
-        print(f"Saved to: {out_json_path}")
-        print(f"Node ID mapping: {len(point_ids)} surface -> {max(point_ids) + 1 if point_ids else 0} original")
+        logger.info("Exported %d vertices, %d triangles", len(vertices), len(triangles))
+        logger.info("Saved to: %s", out_json_path)
+        logger.info("Node ID mapping: %d surface -> %d original", len(point_ids), max(point_ids) + 1 if point_ids else 0)
         return output_data
 
     def list_available(self) -> list:

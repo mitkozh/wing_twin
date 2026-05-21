@@ -18,7 +18,10 @@ from dtwin import (
     decide_control,
 )
 from dtwin.core import FatigueState
-from dtwin.core.fatigue import STRAIN_BUFFER_SIZE, DAMAGE_SAFE, DAMAGE_WARNING, set_random_seed
+from dtwin.core.fatigue import set_random_seed, FatigueConfig
+from scripts.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -57,40 +60,40 @@ class OfflineRunner:
 
         state = OfflineState()
 
-        print("=" * 60)
-        print("  Wing Digital Twin - Offline Fatigue Analysis")
-        print("=" * 60)
+        logger.info("=" * 60)
+        logger.info("  Wing Digital Twin - Offline Fatigue Analysis")
+        logger.info("=" * 60)
 
         try:
             state.matrices = load_transfer_matrices()
             state.num_gauges = state.matrices.H_inv.shape[1]
-            print(f"  Transfer matrices: loaded")
-            print(f"  H_inv: {state.matrices.H_inv.shape}")
-            print(f"  S:     {state.matrices.S.shape}")
-            print(f"  U:     {state.matrices.U.shape}")
+            logger.info("  Transfer matrices: loaded")
+            logger.info("  H_inv: %s", state.matrices.H_inv.shape)
+            logger.info("  S:     %s", state.matrices.S.shape)
+            logger.info("  U:     %s", state.matrices.U.shape)
         except FileNotFoundError as e:
-            print(f"  Transfer matrices: {e}")
-            print("  Running in scalar fallback mode")
+            logger.warning("  Transfer matrices: %s", e)
+            logger.warning("  Running in scalar fallback mode")
 
-        print(f"  Sample rate: {self.sample_rate} Hz, duration: {duration_s} s")
-        print("=" * 60)
+        logger.info("  Sample rate: %d Hz, duration: %d s", self.sample_rate, duration_s)
+        logger.info("=" * 60)
 
-        buffer = deque(maxlen=STRAIN_BUFFER_SIZE)
+        fatigue_config = FatigueConfig()
+        buffer = deque(maxlen=fatigue_config.strain_buffer_size)
         fatigue_state = FatigueState()
         t = 0.0
         dt = 1.0 / self.sample_rate
 
-        print(f"\n{'Time':<8} {'Damage':<12} {'F[0]':<12} {'sigma_max':<12} {'u_max':<14} {'State':<10} {'Speed':<8}")
-        print("-" * 82)
+        logger.info("%-8s %-12s %-12s %-12s %-14s %-10s %-8s", "Time", "Damage", "F[0]", "sigma_max", "u_max", "State", "Speed")
+        logger.info("-" * 82)
 
         for step in range(int(duration_s * self.sample_rate)):
             strain = make_strain_signal(t)
             buffer.append(strain)
             t += dt
 
-            if step % 6 == 0 and len(buffer) >= state.num_gauges:
-                arr = np.array(buffer, dtype=np.float64)
-                strain_vec = arr[-state.num_gauges:] if len(arr) >= state.num_gauges else arr
+            if step % 6 == 0:
+                strain_vec = np.array([strain] * state.num_gauges, dtype=np.float64)
 
                 if state.matrices is not None:
                     F = solve_forces(state.matrices.H_inv, strain_vec)
@@ -101,26 +104,26 @@ class OfflineRunner:
                     stress = np.array([0.0])
                     deformation = np.array([0.0])
 
-                accumulate_damage(buffer, fatigue_state)
+                accumulate_damage(buffer, fatigue_state, config=fatigue_config)
                 cum_damage = fatigue_state.damage
 
-                led_state, speed_pct = decide_control(cum_damage, fatigue_state.confidence)
-                if cum_damage >= DAMAGE_WARNING:
+                led_state, speed_pct = decide_control(cum_damage, fatigue_state.confidence, config=fatigue_config)
+                if cum_damage >= fatigue_config.damage_warning:
                     state_str, speed_str = "CRITICAL", "0%"
-                elif cum_damage >= DAMAGE_SAFE:
+                elif cum_damage >= fatigue_config.damage_safe:
                     state_str, speed_str = "WARNING", "50%"
                 else:
                     state_str, speed_str = "SAFE", "100%"
 
-                print(f"{t:<8.1f} {cum_damage:<12.4f} {F[0]:<12.4f} {np.max(np.abs(stress)):<12.2f} {np.max(np.abs(deformation)):<14.6f} {state_str:<10} {speed_str:<8}")
+                logger.info("%-8.1f %-12.4f %-12.4f %-12.2f %-14.6f %-10s %-8s", t, cum_damage, F[0], np.max(np.abs(stress)), np.max(np.abs(deformation)), state_str, speed_str)
 
         final_damage = fatigue_state.damage
-        print(f"\nFinal damage: {final_damage:.4f} ({final_damage*100:.1f}%)")
-        if final_damage < DAMAGE_SAFE:
-            print("VERDICT: Wing SAFE for continued operation")
-        elif final_damage < DAMAGE_WARNING:
-            print("VERDICT: Wing WARNING — reduce Vmax to 50%")
+        logger.info("Final damage: %.4f (%.1f%%)", final_damage, final_damage*100)
+        if final_damage < fatigue_config.damage_safe:
+            logger.info("VERDICT: Wing SAFE for continued operation")
+        elif final_damage < fatigue_config.damage_warning:
+            logger.info("VERDICT: Wing WARNING — reduce Vmax to 50%%")
         else:
-            print("VERDICT: Wing CRITICAL — block launch, request maintenance")
+            logger.info("VERDICT: Wing CRITICAL — block launch, request maintenance")
 
         return fatigue_state

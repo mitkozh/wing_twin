@@ -86,7 +86,17 @@ class SimulatorSource(DataSource):
 
         strain = steady + bending_1 + bending_2 + torsion + turbulence + gust + noise
 
-        gauge_positions = [1.0, 0.7, 0.4]
+        # Dynamically generate gauge positions based on num_gauges
+        num = self._state.num_gauges
+        if num == len(self.config.gauge_positions):
+            gauge_positions = self.config.gauge_positions
+        elif num == 1:
+            gauge_positions = [self.config.gauge_positions[0]] if self.config.gauge_positions else [1.0]
+        else:
+            start = self.config.gauge_positions[0] if self.config.gauge_positions else 1.0
+            end = self.config.gauge_positions[-1] if self.config.gauge_positions else 0.4
+            gauge_positions = np.linspace(start, end, num).tolist()
+
         strain_vector = np.array([
             strain * pos + np.random.normal(0, self.config.gauge_noise_std)
             for pos in gauge_positions

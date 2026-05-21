@@ -6,6 +6,7 @@ import json
 import time
 from typing import Optional, Callable, Any
 from ..sources.base import SensorReading
+import numpy as np
 
 
 class CommandHandler:
@@ -123,16 +124,7 @@ class EngineCommandHandler(CommandHandler):
         return {"cmd": "ack", "action": "set_param"}
 
     def _cmd_apply_force(self, cmd: dict) -> dict:
-        force = float(cmd.get("force", 0.0))
-        synthetic_strain = force * 1e-4
-        self._engine.process_reading(SensorReading(
-            strain=synthetic_strain,
-            strain_vector=None,
-            accel_z=0.0,
-            timestamp=0,
-            gauge_id="command"
-        ))
-        return {"cmd": "ack", "action": "apply_force", "force": force}
+        return {"cmd": "error", "message": "apply_force is not implemented yet"}
 
     def _cmd_status(self, cmd: dict) -> dict:
         return {

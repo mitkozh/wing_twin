@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Optional
 import numpy as np
 
+from ..logger import get_logger
 from .base import BasePlotter
+
+logger = get_logger(__name__)
 
 
 class StrainPlotter(BasePlotter):
@@ -51,7 +54,7 @@ class StrainPlotter(BasePlotter):
         path = self.output_dir / filename
         fig.savefig(path, bbox_inches="tight")
         plt.close(fig)
-        print(f"  [FIG] Saved {path}")
+        logger.debug("Saved %s", path)
         return path
 
     def _empty_plot(self, plt, filename: str, message: str) -> Path:
