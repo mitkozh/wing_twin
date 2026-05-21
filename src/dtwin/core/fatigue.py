@@ -25,12 +25,11 @@ class FatigueConfig:
     critical_node_percentile: float = 90.0
     max_critical_nodes: int = 100
     node_buffer_size: int = 500
-    overlap_size: int = 20  # Keep last N points for continuity
     ema_alpha: float = 0.1  # Smoothing factor for EMA
     confidence_threshold: float = 50.0  # Alert threshold (percentage)
     confidence_frames_threshold: int = 10  # Frames below threshold before alert
-    damage_safe: float = 0.3      # Below this: green LED, 100% speed
-    damage_warning: float = 0.8   # Below safe but above this: yellow LED, 50% speed
+    damage_safe: float = 0.3  # Below this: green LED, 100% speed
+    damage_warning: float = 0.8  # Below safe but above this: yellow LED, 50% speed
 
 
 @dataclass
@@ -45,15 +44,23 @@ class FatigueState:
         low_confidence_frames: Consecutive frames below confidence threshold
         alert_active: True if maintenance alert should be triggered
         cycles: List of (stress_range, cycle_count) tuples for histogram
+        res_sig: Residual turning points (half-cycles) carried over between chunks
+        node_buffers: Per-node stress buffers for rainflow counting
+        node_damages: Per-node accumulated damage
+        node_res_sigs: Per-node unmatched turning points carried over between chunks
     """
+
     damage: float = 0.0
     confidence: float = 100.0
     filtered_residual: float = 0.0
     low_confidence_frames: int = 0
     alert_active: bool = False
     cycles: Optional[List[Tuple[float, float]]] = field(default_factory=list)
+    res_sig: List[float] = field(default_factory=list)
     node_buffers: dict = field(default_factory=dict)
     node_damages: dict = field(default_factory=dict)
+    node_res_sigs: dict = field(default_factory=dict)
+
 
 def sn_curve_for_material(material: str = "aluminum") -> SNCurve:
     """
@@ -82,9 +89,6 @@ def accumulate_damage(
     """
     Accumulate fatigue damage using rainflow cycle counting and Miner's Rule.
 
-    This function only processes new samples since the last call to avoid
-    double-counting cycles. The internal state tracks buffer length between calls.
-
     Args:
         strain_buffer: Deque of strain values (microstrain)
         state: FatigueState instance to update
@@ -100,27 +104,33 @@ def accumulate_damage(
     if len(strain_buffer) < config.min_buffer_size:
         return 0.0, []
 
+    # Prepend any pending half-cycles from the previous chunk
+    pending = list(state.res_sig)
+    state.res_sig = []
+
     strain_arr = np.array(strain_buffer, dtype=np.float64)
-    
-    # Rather than completely clearing and losing continuity, we retain an overlap
-    # to catch cycles that span boundaries. We then pop the rest.
-    # Note: A true streaming rainflow is ideal, but retaining last N points helps.
-    overlap = min(len(strain_buffer) - 1, config.overlap_size)
-    # Convert Pa to MPa. The config factor translates microstrain to Pa. We divide by 1e6 to get MPa.
     stress_arr = strain_arr * config.strain_to_stress / 1e6
 
-    # Remove all but the overlap elements from the buffer
-    for _ in range(len(strain_buffer) - overlap):
-        strain_buffer.popleft()
+    # Combine pending half-cycles with new data
+    if pending:
+        combined = np.concatenate([np.array(pending), stress_arr])
+    else:
+        combined = stress_arr
+
+    strain_buffer.clear()
 
     if sn_curve is None:
         sn_curve = sn_curve_for_material("demo")
 
     cc = CycleCount.from_timeseries(
-        stress_arr,
+        combined,
         unit="MPa",
         range_bin_width=config.rainflow_range_bin_width,
     )
+
+    # Extract unmatched turning points for next chunk
+    result_dict = cc.as_dict()
+    state.res_sig = result_dict.get("res_sig", [])
 
     df = cc.to_df()
     cycles_for_hist = [
@@ -136,7 +146,9 @@ def accumulate_damage(
     return damage, cycles_for_hist
 
 
-def update_confidence(state: FatigueState, observed: float, expected: float, config: Optional[FatigueConfig] = None) -> float:
+def update_confidence(
+    state: FatigueState, observed: float, expected: float, config: Optional[FatigueConfig] = None
+) -> float:
     """
     Update confidence metric using EMA-filtered residuals.
 
@@ -160,7 +172,9 @@ def update_confidence(state: FatigueState, observed: float, expected: float, con
         return state.confidence
 
     residual = (observed - expected) / expected
-    state.filtered_residual = config.ema_alpha * residual + (1 - config.ema_alpha) * state.filtered_residual
+    state.filtered_residual = (
+        config.ema_alpha * residual + (1 - config.ema_alpha) * state.filtered_residual
+    )
     state.confidence = np.clip(100.0 * (1.0 - state.filtered_residual), 0.0, 100.0)
 
     if state.confidence < config.confidence_threshold:
@@ -234,7 +248,7 @@ def identify_critical_nodes(
         critical_indices = np.where(abs_stress >= p)[0]
 
     if len(critical_indices) > config.max_critical_nodes:
-        top_indices = np.argsort(abs_stress[critical_indices])[-config.max_critical_nodes:]
+        top_indices = np.argsort(abs_stress[critical_indices])[-config.max_critical_nodes :]
         critical_indices = critical_indices[top_indices]
 
     critical_stresses = abs_stress[critical_indices]
@@ -269,6 +283,7 @@ def accumulate_damage_at_nodes(
     if not hasattr(state, "node_buffers"):
         state.node_buffers = {}
         state.node_damages = {}
+        state.node_res_sigs = {}
 
     critical_indices, critical_stresses = identify_critical_nodes(stress_field, config)
 
@@ -284,22 +299,32 @@ def accumulate_damage_at_nodes(
         if node_idx not in state.node_buffers:
             state.node_buffers[node_idx] = deque(maxlen=config.node_buffer_size)
             state.node_damages[node_idx] = 0.0
+            state.node_res_sigs[node_idx] = []
 
         state.node_buffers[node_idx].append(stress_val)
 
         if len(state.node_buffers[node_idx]) >= config.min_buffer_size:
+            # Prepend any pending half-cycles from the previous chunk
+            pending = list(state.node_res_sigs[node_idx])
+            state.node_res_sigs[node_idx] = []
+
             stress_arr = np.array(state.node_buffers[node_idx], dtype=np.float64)
 
-            # Preserve cycle continuity with a small overlap (e.g. 1 point stitches exactly)
-            overlap = min(len(state.node_buffers[node_idx]) - 1, config.overlap_size)
-            for _ in range(len(state.node_buffers[node_idx]) - overlap):
-                state.node_buffers[node_idx].popleft()
+            if pending:
+                combined = np.concatenate([np.array(pending), stress_arr])
+            else:
+                combined = stress_arr
+
+            state.node_buffers[node_idx].clear()
 
             cc = CycleCount.from_timeseries(
-                stress_arr,
+                combined,
                 unit="MPa",
                 range_bin_width=config.rainflow_range_bin_width,
             )
+
+            result_dict = cc.as_dict()
+            state.node_res_sigs[node_idx] = result_dict.get("res_sig", [])
 
             damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
             node_damage = float(np.sum(damage_per_bin))

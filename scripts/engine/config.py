@@ -17,7 +17,6 @@ class FatigueConfig:
     buffer_size: int = 500
     max_critical_nodes: int = 100
     node_buffer_size: int = 500
-    overlap_size: int = 20
     material: str = "demo"  # "demo", "aluminum", "steel"
     ema_alpha: float = 0.1
     confidence_threshold: float = 50.0
@@ -29,6 +28,7 @@ class FatigueConfig:
 @dataclass
 class EngineConfig:
     """Configuration for the digital twin engine."""
+
     sample_rate: int = 10
     seed: Optional[int] = None
     matrix_dir: Optional[str] = None
