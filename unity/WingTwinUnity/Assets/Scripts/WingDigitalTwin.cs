@@ -83,7 +83,7 @@ public class WingDigitalTwin : MonoBehaviour
     private float[] meshStressValues;
     private System.Collections.Generic.Dictionary<string, System.Action<string>> pendingCommands =
         new System.Collections.Generic.Dictionary<string, System.Action<string>>();
-
+    public float correctionValue;
     private readonly System.Collections.Generic.Queue<Action> mainThreadQueue =
         new System.Collections.Generic.Queue<Action>();
 
@@ -138,7 +138,7 @@ public class WingDigitalTwin : MonoBehaviour
 
     void BuildStressLegendLabels()
     {
-        float h = stressBarRect.rect.height;
+        float h = stressBarRect.rect.height - correctionValue;
         float halfH = h * 0.5f;
 
         int labelCount = stressGradient.colorKeys.Length + 1;
@@ -360,7 +360,6 @@ public class WingDigitalTwin : MonoBehaviour
 
         UpdateStressLegendValues();
 
-
     }
 
     void UpdateWingVisualization(TwinState data)
@@ -470,7 +469,7 @@ public class WingDigitalTwin : MonoBehaviour
         mesh = new Mesh();
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 
-        originalVertices = data.vertices.Select(v => new Vector3(v[0], v[2], v[1])).ToArray();
+        originalVertices = data.vertices.Select(v => new Vector3(v[0], v[1], v[2])).ToArray();
         mesh.vertices = originalVertices;
 
         deformedVertices = new Vector3[originalVertices.Length];
@@ -581,6 +580,7 @@ public class WingDigitalTwin : MonoBehaviour
             {
                 ToggleHelp();
             }
+
         }
 
         // Update connection label

@@ -89,10 +89,10 @@ class MeshExporter:
         while i < len(cells):
             n = cells[i]
             i += 1
+
             if n == 3:
-                tri = cells[i:i+3].tolist()
-                tri[1], tri[2] = tri[2], tri[1]
-                triangles.append(tri)
+                triangles.append(cells[i:i+3].tolist())
+
             i += n
 
         output_data = {
