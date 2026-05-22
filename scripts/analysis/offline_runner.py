@@ -18,10 +18,15 @@ from dtwin import (
     decide_control,
 )
 from dtwin.core import FatigueState
-from dtwin.core.fatigue import set_random_seed, FatigueConfig
-from scripts.logger import get_logger
+from dtwin.core.fatigue import (
+    set_random_seed,
+    update_confidence,
+    accumulate_damage_at_nodes,
+    sn_curve_for_material,
+    FatigueConfig,
+)
 
-logger = get_logger(__name__)
+STRAIN_TO_RAW = 1e-6
 
 
 @dataclass
@@ -31,52 +36,38 @@ class OfflineState:
     num_gauges: int = 3
 
 
-def make_strain_signal(t: float, rates=(0.5, 1.0, 2.0), amps=(50, 30, 15), noise=5.0) -> float:
-    """Generate multi-frequency strain signal."""
-    strain = 100.0 + sum(
-        amp * math.sin(2 * math.pi * freq * t)
-        for freq, amp in zip(rates, amps)
-    ) + np.random.normal(0, noise)
-    return strain
+def _generate_force(t: float, load_factor: float = 1.0) -> float:
+    """Generate a force signal in Newtons."""
+    steady = 4000.0 * (load_factor ** 2)
+    bending_1 = 2000.0 * load_factor * math.sin(2 * math.pi * 4.2 * t)
+    bending_2 = 600.0 * load_factor * math.sin(2 * math.pi * 11.5 * t + 0.4)
+    torsion = 400.0 * load_factor * math.sin(2 * math.pi * 18.3 * t + 1.1)
+    return steady + bending_1 + bending_2 + torsion
+
+
+def _make_reading(matrices, t: float, load_factor: float = 1.0) -> tuple[np.ndarray, float]:
+    """Generate strain using forward model: epsilon = H @ F + noise."""
+    F = np.array([_generate_force(t, load_factor)], dtype=np.float64)
+    raw_strain = matrices.H @ F
+    strain_ue = raw_strain.flatten() / STRAIN_TO_RAW
+    noise = np.random.normal(0, 0.05, size=strain_ue.shape)
+    return strain_ue + noise, F[0]
 
 
 class OfflineRunner:
-    """
-    Runs offline fatigue analysis without MQTT.
-    """
+    """Runs offline fatigue analysis without MQTT."""
 
     def __init__(self, sample_rate: int = 10):
         self.sample_rate = sample_rate
 
     def run(self, duration_s: int, seed: Optional[int] = None) -> FatigueState:
-        """
-        Run offline analysis for specified duration.
-
-        Returns:
-            Final FatigueState after the run.
-        """
+        """Run offline analysis for specified duration."""
         if seed is not None:
             set_random_seed(seed)
 
         state = OfflineState()
-
-        logger.info("=" * 60)
-        logger.info("  Wing Digital Twin - Offline Fatigue Analysis")
-        logger.info("=" * 60)
-
-        try:
-            state.matrices = load_transfer_matrices()
-            state.num_gauges = state.matrices.H_inv.shape[1]
-            logger.info("  Transfer matrices: loaded")
-            logger.info("  H_inv: %s", state.matrices.H_inv.shape)
-            logger.info("  S:     %s", state.matrices.S.shape)
-            logger.info("  U:     %s", state.matrices.U.shape)
-        except FileNotFoundError as e:
-            logger.warning("  Transfer matrices: %s", e)
-            logger.warning("  Running in scalar fallback mode")
-
-        logger.info("  Sample rate: %d Hz, duration: %d s", self.sample_rate, duration_s)
-        logger.info("=" * 60)
+        state.matrices = load_transfer_matrices()
+        state.num_gauges = state.matrices.n_gauges
 
         fatigue_config = FatigueConfig()
         buffer = deque(maxlen=fatigue_config.strain_buffer_size)
@@ -84,25 +75,28 @@ class OfflineRunner:
         t = 0.0
         dt = 1.0 / self.sample_rate
 
-        logger.info("%-8s %-12s %-12s %-12s %-14s %-10s %-8s", "Time", "Damage", "F[0]", "sigma_max", "u_max", "State", "Speed")
-        logger.info("-" * 82)
-
         for step in range(int(duration_s * self.sample_rate)):
-            strain = make_strain_signal(t)
-            buffer.append(strain)
+            strain_vec, force = _make_reading(state.matrices, t)
+
+            buffer.append(float(strain_vec[0]))
             t += dt
 
             if step % 6 == 0:
-                strain_vec = np.array([strain] * state.num_gauges, dtype=np.float64)
+                F = solve_forces(state.matrices.H_inv, strain_vec)
+                stress = compute_stress_field(state.matrices.S, F)
+                deformation = compute_deformation_field(state.matrices.U, F)
 
-                if state.matrices is not None:
-                    F = solve_forces(state.matrices.H_inv, strain_vec)
-                    stress = compute_stress_field(state.matrices.S, F)
-                    deformation = compute_deformation_field(state.matrices.U, F)
-                else:
-                    F = np.array([0.0])
-                    stress = np.array([0.0])
-                    deformation = np.array([0.0])
+                expected_raw = state.matrices.H @ F
+                expected_ue = expected_raw / STRAIN_TO_RAW
+                update_confidence(fatigue_state, strain_vec, expected_ue, config=fatigue_config)
+
+                stress_mpa = stress / 1e6  # Pa -> MPa
+                accumulate_damage_at_nodes(
+                    stress_mpa,
+                    fatigue_state,
+                    sn_curve=sn_curve_for_material(fatigue_config.material),
+                    config=fatigue_config,
+                )
 
                 accumulate_damage(buffer, fatigue_state, config=fatigue_config)
                 cum_damage = fatigue_state.damage

@@ -3,70 +3,61 @@ Field computation module for digital twin.
 
 Computes stress and deformation fields from force vectors
 using pre-computed transfer matrices from FEA.
+
+For S matrix, stress per Newton (Pa/N). Multiply by F(N) to get stress (Pa).
+For U matrix, deformation per Newton (m/N). Multiply by F(N) to get deformation (m).
 """
 
 import numpy as np
 
-FORCE_SCALE = 1.0  # Forces in N, ANSYS used 1N unit force, S expects N input
-
 
 def compute_stress_field(S: np.ndarray, F: np.ndarray) -> np.ndarray:
     """
-    Compute stress field from force vector using transfer matrix.
+    Compute stress field from force vector.
 
-    Uses: sigma = S * F_kN
+    sigma = S @ F
 
     Args:
-        S: Stress field transfer matrix. Shape: (n_nodes, n_forces)
+        S: Stress transfer matrix. Shape: (n_nodes, n_forces). Units: Pa/N.
         F: Force vector in Newtons. Shape: (n_forces,)
 
     Returns:
-        Stress field values at each node. Shape: (n_nodes,)
+        Stress field in Pascals. Shape: (n_nodes,)
     """
     F = np.asarray(F, dtype=np.float64).ravel()
     S = np.asarray(S, dtype=np.float64)
-    F_scaled = F * FORCE_SCALE
     if S.ndim == 2:
-        return S @ F_scaled
-    return S * F_scaled
+        return S @ F
+    return S * F
 
 
 def compute_deformation_field(U: np.ndarray, F: np.ndarray) -> np.ndarray:
     """
-    Compute deformation field from force vector using transfer matrix.
+    Compute deformation field from force vector.
 
-    Uses: u = U · F_kN
+    u = U @ F
 
     Args:
-        U: Deformation field transfer matrix. Shape: (n_nodes, n_forces)
+        U: Deformation transfer matrix. Shape: (n_nodes, n_forces). Units: m/N.
         F: Force vector in Newtons. Shape: (n_forces,)
 
     Returns:
-        Deformation values at each node. Shape: (n_nodes,)
+        Deformation field in meters. Shape: (n_nodes,)
     """
     F = np.asarray(F, dtype=np.float64).ravel()
     U = np.asarray(U, dtype=np.float64)
-    F_scaled = F * FORCE_SCALE
     if U.ndim == 2:
-        return U @ F_scaled
-    return U * F_scaled
+        return U @ F
+    return U * F
 
 
 def field_summary(stress: np.ndarray, deformation: np.ndarray) -> dict:
-    """
-    Get summary statistics for stress and deformation fields.
-
-    Args:
-        stress: Stress field array
-        deformation: Deformation field array
-
-    Returns:
-        Dictionary with field statistics
-    """
+    """Get summary statistics for stress and deformation fields."""
     return {
         "num_nodes": stress.size,
-        "stress_max": float(np.abs(stress).max()),
-        "stress_mean": float(np.mean(stress)),
-        "deformation_max": float(np.abs(deformation).max()),
-        "deformation_mean": float(np.mean(deformation)),
+        "stress_max_pa": float(np.abs(stress).max()),
+        "stress_max_mpa": float(np.abs(stress).max() / 1e6),
+        "stress_mean_pa": float(np.mean(stress)),
+        "deformation_max_m": float(np.abs(deformation).max()),
+        "deformation_mean_m": float(np.mean(deformation)),
     }

@@ -3,6 +3,12 @@ Fatigue analysis module for digital twin.
 
 Provides rainflow cycle counting, Miner's Rule damage accumulation,
 and confidence monitoring via EMA-filtered residuals.
+
+Units:
+  - Strain input: microstrain (ue)
+  - Stress: MPa
+  - Damage: dimensionless (0.0 to 1.0)
+  - Confidence: percentage (0 to 100)
 """
 
 import numpy as np
@@ -21,34 +27,21 @@ class FatigueConfig:
     strain_buffer_size: int = 3000
     strain_to_stress: float = 70_000.0  # Pa/ue
     rainflow_range_bin_width: float = 2.0  # MPa
-    critical_stress_threshold: float = 50.0  # MPa instead of Pa
+    critical_stress_threshold: float = 50.0  # MPa
     critical_node_percentile: float = 90.0
     max_critical_nodes: int = 100
     node_buffer_size: int = 500
-    ema_alpha: float = 0.1  # Smoothing factor for EMA
-    confidence_threshold: float = 50.0  # Alert threshold (percentage)
-    confidence_frames_threshold: int = 10  # Frames below threshold before alert
-    damage_warning: float = 0.3  # Below this: green LED, 100% speed
-    damage_critical: float = 0.8  # Below warning but above this: yellow LED, 50% speed
+    ema_alpha: float = 0.1
+    confidence_threshold: float = 50.0  # percentage
+    confidence_frames_threshold: int = 10
+    damage_warning: float = 0.3  # D < 0.3: green
+    damage_critical: float = 0.8  # 0.3 <= D < 0.8: yellow, D >= 0.8: red
+    material: str = "demo"  # "demo", "aluminum", "steel"
 
 
 @dataclass
 class FatigueState:
-    """
-    State container for fatigue analysis.
-
-    Attributes:
-        damage: Accumulated fatigue damage (0.0 to 1.0)
-        confidence: Model confidence percentage (0 to 100)
-        filtered_residual: EMA-filtered residual value
-        low_confidence_frames: Consecutive frames below confidence threshold
-        alert_active: True if maintenance alert should be triggered
-        cycles: List of (stress_range, cycle_count) tuples for histogram
-        res_sig: Residual turning points (half-cycles) carried over between chunks
-        node_buffers: Per-node stress buffers for rainflow counting
-        node_damages: Per-node accumulated damage
-        node_res_sigs: Per-node unmatched turning points carried over between chunks
-    """
+    """State container for fatigue analysis."""
 
     damage: float = 0.0
     confidence: float = 100.0
@@ -63,19 +56,11 @@ class FatigueState:
 
 
 def sn_curve_for_material(material: str = "aluminum") -> SNCurve:
-    """
-    Get S-N curve parameters for common materials.
-
-    Args:
-        material: Material name ('aluminum', 'steel', or 'demo')
-
-    Returns:
-        Configured SNCurve instance
-    """
+    """Get S-N curve parameters for common materials."""
     curves = {
         "aluminum": SNCurve(slope=3.0, intercept=15.0, endurance=1e7),
         "steel": SNCurve(slope=5.0, intercept=17.0, endurance=1e7),
-        "demo": SNCurve(slope=3.0, intercept=12.0, endurance=1e6),
+        "demo": SNCurve(slope=3.0, intercept=10.0, endurance=1e6),
     }
     return curves.get(material.lower(), curves["aluminum"])
 
@@ -90,10 +75,10 @@ def accumulate_damage(
     Accumulate fatigue damage using rainflow cycle counting and Miner's Rule.
 
     Args:
-        strain_buffer: Deque of strain values (microstrain)
+        strain_buffer: Deque of strain values in microstrain (ue)
         state: FatigueState instance to update
-        sn_curve: S-N curve for damage calculation (defaults to DEMO_SN_CURVE)
-        config: Configuration containing buffer sizes and parameters
+        sn_curve: S-N curve for damage calculation
+        config: Configuration parameters
 
     Returns:
         Tuple of (incremental_damage, cycles_extracted)
@@ -104,14 +89,12 @@ def accumulate_damage(
     if len(strain_buffer) < config.min_buffer_size:
         return 0.0, []
 
-    # Prepend any pending half-cycles from the previous chunk
     pending = list(state.res_sig)
     state.res_sig = []
 
     strain_arr = np.array(strain_buffer, dtype=np.float64)
-    stress_arr = strain_arr * config.strain_to_stress / 1e6
+    stress_arr = strain_arr * config.strain_to_stress / 1e6  # ue -> MPa
 
-    # Combine pending half-cycles with new data
     if pending:
         combined = np.concatenate([np.array(pending), stress_arr])
     else:
@@ -128,7 +111,6 @@ def accumulate_damage(
         range_bin_width=config.rainflow_range_bin_width,
     )
 
-    # Extract unmatched turning points for next chunk
     result_dict = cc.as_dict()
     state.res_sig = result_dict.get("res_sig", [])
 
@@ -147,20 +129,22 @@ def accumulate_damage(
 
 
 def update_confidence(
-    state: FatigueState, observed: float, expected: float, config: Optional[FatigueConfig] = None
+    state: FatigueState,
+    observed_strain: np.ndarray,
+    expected_strain: np.ndarray,
+    config: Optional[FatigueConfig] = None,
 ) -> float:
     """
     Update confidence metric using EMA-filtered residuals.
 
-    Compares observed strain against expected (reconstructed) strain to
-    assess model accuracy. Low confidence indicates potential structural
-    degradation or model mismatch.
+    Uses norm-based relative error to avoid division-by-near-zero issues
+    with individual gauges that may have low sensitivity.
 
     Args:
         state: FatigueState instance to update
-        observed: Actual measured strain
-        expected: Reconstructed/predicted strain
-        config: Configuration containing confidence thresholds
+        observed_strain: Measured strain vector in microstrain (ue)
+        expected_strain: Reconstructed strain vector in microstrain (ue)
+        config: Configuration parameters
 
     Returns:
         Updated confidence percentage
@@ -168,10 +152,13 @@ def update_confidence(
     if config is None:
         config = FatigueConfig()
 
-    if expected == 0 or np.isnan(expected):
+    expected_norm = float(np.linalg.norm(expected_strain))
+    if expected_norm < 1e-10:
         return state.confidence
 
-    residual = (observed - expected) / expected
+    residual_norm = float(np.linalg.norm(observed_strain - expected_strain))
+    residual = residual_norm / expected_norm
+
     state.filtered_residual = (
         config.ema_alpha * residual + (1 - config.ema_alpha) * state.filtered_residual
     )
@@ -188,26 +175,12 @@ def update_confidence(
 
 
 def check_maintenance_needed(state: FatigueState) -> bool:
-    """
-    Check if maintenance alert should be triggered.
-
-    Args:
-        state: FatigueState instance
-
-    Returns:
-        True if maintenance is needed
-    """
+    """Check if maintenance alert should be triggered."""
     return state.alert_active
 
 
 def set_random_seed(seed: Optional[int] = None) -> None:
-    """
-    Set random seed for reproducible simulation results.
-
-    Args:
-        seed: Integer seed for random number generator.
-              If None, seed is not changed.
-    """
+    """Set random seed for reproducible simulation results."""
     if seed is not None:
         np.random.seed(seed)
 
@@ -218,10 +191,6 @@ def identify_critical_nodes(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Identify critical (high-stress) nodes from stress field.
-
-    Nodes are selected based on:
-    1. Absolute stress above threshold
-    2. Within top percentile of all nodes
 
     Args:
         stress_field: Stress values at each node (MPa)
@@ -263,13 +232,13 @@ def accumulate_damage_at_nodes(
     config: Optional[FatigueConfig] = None,
 ) -> Tuple[float, int]:
     """
-    Accumulate fatigue damage only at critical nodes (per-node rainfall).
+    Accumulate fatigue damage at critical nodes using per-node rainflow counting.
 
     Args:
         stress_field: Stress values at each node (MPa)
         state: FatigueState with buffers for each critical node
         sn_curve: S-N curve for damage calculation
-        config: Configuration containing buffer sizes and parameters
+        config: Configuration parameters
 
     Returns:
         Tuple of (incremental_damage, num_critical_nodes)
@@ -279,11 +248,6 @@ def accumulate_damage_at_nodes(
 
     if stress_field.size == 0:
         return 0.0, 0
-
-    if not hasattr(state, "node_buffers"):
-        state.node_buffers = {}
-        state.node_damages = {}
-        state.node_res_sigs = {}
 
     critical_indices, critical_stresses = identify_critical_nodes(stress_field, config)
 
@@ -304,7 +268,6 @@ def accumulate_damage_at_nodes(
         state.node_buffers[node_idx].append(stress_val)
 
         if len(state.node_buffers[node_idx]) >= config.min_buffer_size:
-            # Prepend any pending half-cycles from the previous chunk
             pending = list(state.node_res_sigs[node_idx])
             state.node_res_sigs[node_idx] = []
 

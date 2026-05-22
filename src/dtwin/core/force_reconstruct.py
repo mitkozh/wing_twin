@@ -1,52 +1,43 @@
 """
 Force reconstruction module for digital twin.
 
-Implements the core force reconstruction algorithm using the
-Moore-Penrose pseudoinverse of the strain sensitivity matrix.
+Implements force reconstruction using the Moore-Penrose pseudoinverse
+of the strain sensitivity matrix: F = H^+ * epsilon
 
-Note: Strain is dimensionless (ratio, no units). Input values in
- micro-strain (1e-6) are converted to dimensionless by multiplying by 1e-6.
+Units:
+  - Input strain: microstrain (ue)
+  - H_inv matrix: raw strain -> force (N)
+  - Conversion: raw_strain = microstrain * 1e-6
+  - Output force: Newtons (N)
 """
 
 import numpy as np
 
-STRAIN_SCALE_FACTOR = 1e-6  # Convert micro-strain to dimensionless (m/m)
+STRAIN_TO_RAW = 1e-6  # Convert microstrain (ue) to dimensionless raw strain
 
 
 def solve_forces(H_inv: np.ndarray, strain_vector: np.ndarray) -> np.ndarray:
     """
     Reconstruct force vector from strain measurements.
 
-    Uses the pseudoinverse relationship: F = H^+ * epsilon
+    F = H_inv @ (strain_ue * 1e-6)
 
     Args:
-        H_inv: Moore-Penrose pseudoinverse of strain sensitivity matrix.
-               Shape: (n_forces, n_gauges)
-        strain_vector: Measured strain vector from sensors (in micro-strain).
+        H_inv: Pseudoinverse of strain sensitivity matrix.
+               Shape: (n_forces, n_gauges). Expects raw strain input.
+        strain_vector: Measured strain in microstrain (ue).
                        Shape: (n_gauges,) or (n_gauges, 1)
 
     Returns:
-        Reconstructed force vector. Shape: (n_forces,)
-
-    Note:
-        Input strain is converted from micro-strain to dimensionless (m/m)
-        by multiplying by STRAIN_SCALE_FACTOR.
+        Reconstructed force vector in Newtons. Shape: (n_forces,)
     """
     strain_vector = np.asarray(strain_vector, dtype=np.float64).ravel()
-    strain_dimensionless = strain_vector * STRAIN_SCALE_FACTOR
-    return H_inv @ strain_dimensionless
+    strain_raw = strain_vector * STRAIN_TO_RAW
+    return H_inv @ strain_raw
 
 
 def force_vector_info(F: np.ndarray) -> dict:
-    """
-    Get information about a force vector.
-
-    Args:
-        F: Force vector
-
-    Returns:
-        Dictionary with force vector statistics
-    """
+    """Get information about a force vector."""
     return {
         "num_forces": F.size,
         "magnitudes": F.ravel().tolist(),

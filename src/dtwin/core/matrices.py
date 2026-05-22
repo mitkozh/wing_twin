@@ -1,10 +1,17 @@
 """
 Transfer matrix loading and management for force reconstruction.
 
-Transfer matrices are pre-computed from Ansys FEA:
-- H_inv: Strain sensitivity matrix pseudoinverse (force reconstruction)
-- S: Stress field transfer matrix
-- U: Deformation field transfer matrix
+Transfer matrices are pre-computed from Ansys FEA with unit force (1 N):
+- H: Strain sensitivity matrix (n_gauges x n_forces). Maps force -> raw strain (dimensionless).
+- H_inv: Pseudoinverse of H (n_forces x n_gauges). Maps raw strain -> force (N).
+- S: Stress field transfer matrix (n_nodes x n_forces). Maps force -> stress (Pa).
+- U: Deformation field transfer matrix (n_nodes x n_forces). Maps force -> deformation (m).
+
+All matrices are loaded raw from .npy files.
+  - Strain: microstrain (ue) = raw_strain * 1e6
+  - Force: Newtons (N)
+  - Stress: Pascal (Pa) from S @ F; convert to MPa via /1e6 for fatigue
+  - Deformation: meters (m)
 """
 
 import numpy as np
@@ -13,10 +20,26 @@ from typing import NamedTuple, Optional
 
 
 class TransferMatrices(NamedTuple):
-    """Container for transfer matrices from FEA."""
-    H_inv: np.ndarray  # Shape: (n_forces, n_gauges)
-    S: np.ndarray      # Shape: (n_nodes, n_forces)
-    U: np.ndarray      # Shape: (n_nodes, n_forces)
+    """Container for transfer matrices from FEA.
+
+    All matrices are stored raw (no scaling). See module docstring for units.
+    """
+    H: np.ndarray      # (n_gauges, n_forces), force -> raw strain (dimensionless)
+    H_inv: np.ndarray  # (n_forces, n_gauges), raw strain -> force (N)
+    S: np.ndarray      # (n_nodes, n_forces), force -> stress (Pa)
+    U: np.ndarray      # (n_nodes, n_forces), force -> deformation (m)
+
+    @property
+    def n_forces(self) -> int:
+        return self.H.shape[1]
+
+    @property
+    def n_gauges(self) -> int:
+        return self.H.shape[0]
+
+    @property
+    def n_nodes(self) -> int:
+        return self.S.shape[0]
 
 
 def _find_project_root() -> Path:
@@ -44,7 +67,7 @@ def load_transfer_matrices(
         validate: If True, validate matrix shapes and dimensions
 
     Returns:
-        TransferMatrices namedtuple
+        TransferMatrices namedtuple (raw, unscaled matrices)
 
     Raises:
         FileNotFoundError: If required matrix files are missing
@@ -56,6 +79,7 @@ def load_transfer_matrices(
     matrix_dir = Path(matrix_dir)
 
     required_files = {
+        "H": "H.npy",
         "Inverse_H": "Inverse_H.npy",
         "EquivalentStress": "EquivalentStress.npy",
         "TotalDeformation": "TotalDeformation.npy",
@@ -73,71 +97,52 @@ def load_transfer_matrices(
             f"Ensure matrix files exist in {matrix_dir}"
         )
 
+    H = np.load(matrix_dir / "H.npy")
     H_inv = np.load(matrix_dir / "Inverse_H.npy")
     S = np.load(matrix_dir / "EquivalentStress.npy")
     U = np.load(matrix_dir / "TotalDeformation.npy")
 
     if validate:
-        _validate_matrices(H_inv, S, U)
+        _validate_matrices(H, H_inv, S, U)
 
-    return TransferMatrices(H_inv=H_inv, S=S, U=U)
+    return TransferMatrices(H=H, H_inv=H_inv, S=S, U=U)
 
 
-def _validate_matrices(H_inv: np.ndarray, S: np.ndarray, U: np.ndarray) -> None:
-    """
-    Validate that matrix dimensions are compatible.
-
-    Args:
-        H_inv: Strain sensitivity matrix pseudoinverse
-        S: Stress field matrix
-        U: Deformation field matrix
-
-    Raises:
-        ValueError: If matrices have incompatible dimensions
-    """
-    n_forces = H_inv.shape[0]
-    n_gauges = H_inv.shape[1]
-    n_nodes_s = S.shape[0]
-    n_nodes_u = U.shape[0]
-    n_forces_s = S.shape[1]
-    n_forces_u = U.shape[1]
+def _validate_matrices(
+    H: np.ndarray, H_inv: np.ndarray, S: np.ndarray, U: np.ndarray
+) -> None:
+    """Validate that matrix dimensions are consistent."""
+    n_gauges_h, n_forces_h = H.shape
+    n_forces_hi, n_gauges_hi = H_inv.shape
+    n_nodes_s, n_forces_s = S.shape
+    n_nodes_u, n_forces_u = U.shape
 
     errors = []
 
-    if n_forces_s != n_forces:
-        errors.append(f"S matrix force dimension ({n_forces_s}) != H_inv ({n_forces})")
-
-    if n_forces_u != n_forces:
-        errors.append(f"U matrix force dimension ({n_forces_u}) != H_inv ({n_forces})")
-
+    if n_forces_h != n_forces_hi:
+        errors.append(f"H forces ({n_forces_h}) != H_inv forces ({n_forces_hi})")
+    if n_gauges_h != n_gauges_hi:
+        errors.append(f"H gauges ({n_gauges_h}) != H_inv gauges ({n_gauges_hi})")
+    if n_forces_s != n_forces_h:
+        errors.append(f"S forces ({n_forces_s}) != H forces ({n_forces_h})")
+    if n_forces_u != n_forces_h:
+        errors.append(f"U forces ({n_forces_u}) != H forces ({n_forces_h})")
     if n_nodes_s != n_nodes_u:
-        errors.append(f"S and U have different node counts: {n_nodes_s} vs {n_nodes_u}")
+        errors.append(f"S nodes ({n_nodes_s}) != U nodes ({n_nodes_u})")
 
-    if H_inv.ndim != 2:
-        errors.append(f"H_inv should be 2D, got {H_inv.ndim}D")
-
-    if S.ndim != 2:
-        errors.append(f"S should be 2D, got {S.ndim}D")
-
-    if U.ndim != 2:
-        errors.append(f"U should be 2D, got {U.ndim}D")
+    for m, name in [(H, "H"), (H_inv, "H_inv"), (S, "S"), (U, "U")]:
+        if m.ndim != 2:
+            errors.append(f"{name} should be 2D, got {m.ndim}D")
 
     if errors:
         raise ValueError(f"Matrix validation failed: {'; '.join(errors)}")
 
 
 def matrix_info(matrices: TransferMatrices) -> dict:
-    """
-    Get human-readable information about transfer matrices.
-
-    Args:
-        matrices: TransferMatrices instance
-
-    Returns:
-        Dictionary with matrix shapes and descriptions
-    """
+    """Get human-readable information about transfer matrices."""
     return {
-        "H_inv": f"{matrices.H_inv.shape} (strain->force)",
-        "S": f"{matrices.S.shape} (force->stress field)",
-        "U": f"{matrices.U.shape} (force->deformation field)",
+        "H": f"{matrices.H.shape} (force -> raw strain)",
+        "H_inv": f"{matrices.H_inv.shape} (raw strain -> force)",
+        "S": f"{matrices.S.shape} (force -> stress Pa)",
+        "U": f"{matrices.U.shape} (force -> deformation m)",
     }

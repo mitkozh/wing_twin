@@ -49,17 +49,12 @@ async def run_demo_async(
     engine = DigitalTwinEngine(config)
 
     logger.info("Loading transfer matrices...")
-    try:
-        engine.load_matrices()
-        logger.info("Loaded successfully (%d gauge channels)", engine.num_gauges)
-    except FileNotFoundError as e:
-        logger.warning("%s", e)
-        logger.warning("Running without transfer matrices")
+    engine.load_matrices()
+    logger.info("Loaded successfully (%d gauge channels)", engine.num_gauges)
 
     sim_config = SimulationConfig()
     simulator = SimulatorSource(sim_config)
-    if engine.matrices_loaded:
-        simulator.set_num_gauges(engine.num_gauges)
+    simulator.set_matrices(engine.matrices)
     engine.data_source = simulator
 
     history = HistoryState()
