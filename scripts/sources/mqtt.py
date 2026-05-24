@@ -51,7 +51,7 @@ class MqttSource(DataSource):
             return None
 
         if isinstance(buffer[0], list):
-            strain_vector = np.array(buffer[-1], dtype=np.float64)
+            strain_vector = np.array(buffer.popleft(), dtype=np.float64)
             return SensorReading(
                 strain=float(strain_vector[0]) if len(strain_vector) > 0 else 0.0,
                 strain_vector=strain_vector,
@@ -60,7 +60,7 @@ class MqttSource(DataSource):
                 gauge_id="vector"
             )
         else:
-            strain = float(buffer[-1])
+            strain = float(buffer.popleft())
             return SensorReading(
                 strain=strain,
                 strain_vector=None,
