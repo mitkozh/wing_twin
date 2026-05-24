@@ -57,7 +57,7 @@ def describe_state(damage: float, led: str, speed: int, config: Optional[Fatigue
         config = FatigueConfig()
 
     if damage >= config.damage_critical:
-        return f"CRITICAL — D={damage:.4f} — LED={led} — Vmax={speed}%"
+        return f"CRITICAL D={damage:.4f} LED={led} Vmax={speed}%"
     elif damage >= config.damage_warning:
-        return f"WARNING — D={damage:.4f} — LED={led} — Vmax={speed}%"
-    return f"SAFE — D={damage:.4f} — LED={led} — Vmax={speed}%"
+        return f"WARNING D={damage:.4f} LED={led} Vmax={speed}%"
+    return f"SAFE D={damage:.4f} LED={led} Vmax={speed}%"

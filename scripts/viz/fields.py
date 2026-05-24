@@ -28,7 +28,7 @@ class StressFieldPlotter(BasePlotter):
         ax.fill_between(np.arange(len(latest)), latest, alpha=0.3, color="#ff6666")
         ax.set_xlabel("Node index")
         ax.set_ylabel("Stress (MPa)")
-        ax.set_title(f"Equivalent Stress Field — {len(latest)} nodes")
+        ax.set_title(f"Equivalent Stress Field ({len(latest)} nodes)")
         ax.grid(True, alpha=0.3)
         ax.text(0.02, 0.95, f"max={latest.max():.2f} MPa  mean={latest.mean():.2f} MPa",
                 transform=ax.transAxes, fontsize=8, va="top", color="#aaaaaa",
@@ -70,7 +70,7 @@ class DeformationFieldPlotter(BasePlotter):
         ax.fill_between(np.arange(len(abs_latest)), abs_latest, alpha=0.3, color="#66ffaa")
         ax.set_xlabel("Node index")
         ax.set_ylabel("Deformation magnitude (m)")
-        ax.set_title(f"Total Deformation Field — {len(latest)} nodes")
+        ax.set_title(f"Total Deformation Field ({len(latest)} nodes)")
         ax.grid(True, alpha=0.3)
         ax.text(0.02, 0.95, f"max={abs_latest.max():.2e} m  mean={abs_latest.mean():.2e} m",
                 transform=ax.transAxes, fontsize=8, va="top", color="#aaaaaa",

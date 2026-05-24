@@ -48,7 +48,7 @@ class DamagePlotter(BasePlotter):
 
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Damage D")
-        ax.set_title("Fatigue Damage Accumulation — Miner's Rule")
+        ax.set_title("Fatigue Damage (Miner's Rule)")
         ax.legend(loc="upper left")
         ax.grid(True, alpha=0.3)
         ax.set_xlim(times[0], times[-1])

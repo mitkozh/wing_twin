@@ -116,8 +116,8 @@ class OfflineRunner:
         if final_damage < fatigue_config.damage_warning:
             logger.info("VERDICT: Wing SAFE for continued operation")
         elif final_damage < fatigue_config.damage_critical:
-            logger.info("VERDICT: Wing WARNING — reduce Vmax to 50%%")
+            logger.info("VERDICT: WARNING - reduce Vmax to 50%")
         else:
-            logger.info("VERDICT: Wing CRITICAL — block launch, request maintenance")
+            logger.info("VERDICT: CRITICAL - block launch, request maintenance")
 
         return fatigue_state

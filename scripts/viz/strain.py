@@ -40,7 +40,7 @@ class StrainPlotter(BasePlotter):
 
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Strain (microstrain)")
-        ax.set_title("Wing Root Strain — Time Series")
+        ax.set_title("Wing Root Strain Time Series")
         ax.legend(loc="upper right")
         ax.grid(True, alpha=0.3)
         ax.set_xlim(times[0], times[-1])

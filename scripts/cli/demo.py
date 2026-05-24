@@ -130,7 +130,7 @@ async def run_demo_async(
 def _display_thread(engine, running_ref):
     """Thread that displays live dashboard."""
     logger.info("\n" + "=" * 60)
-    logger.info("  Wing Digital Twin — Live Dashboard")
+    logger.info("  Wing Digital Twin Live Dashboard")
     logger.info("=" * 60)
     tick = 0
     while running_ref[0]:
@@ -160,7 +160,7 @@ def main():
         logger.info("Random seed set to %d", args.seed)
 
     logger.info("=" * 60)
-    logger.info("  Wing Digital Twin — Full Stack Demo")
+    logger.info("  Wing Digital Twin Full Stack Demo")
     logger.info("=" * 60)
     fatigue_config = FatigueConfig()
     logger.info("  Sample rate:  %d Hz", SimulationConfig().sample_rate)
