@@ -6,6 +6,7 @@ import json
 import time
 from typing import Optional, Callable, Any
 from ..sources.base import SensorReading
+from dtwin.core.stepper_calibration import stepper_steps_from_angle, angle_from_stepper_steps
 import numpy as np
 
 
@@ -24,7 +25,8 @@ class CommandHandler:
             "pause": self._handle_pause,
             "reset": self._handle_reset,
             "set_param": self._handle_set_param,
-            "apply_force": self._handle_apply_force,
+            "set_steps": self._handle_set_steps,
+            "set_flight_state": self._handle_set_flight_state,
             "status": self._handle_status,
         }
 
@@ -69,20 +71,26 @@ class CommandHandler:
             return {"cmd": "ack", "action": "set_param", "key": key, "value": value}
         return {"cmd": "error", "message": "Missing 'key' or 'value'"}
 
-    def _handle_apply_force(self, cmd: dict) -> dict:
-        force_target = cmd.get("force")
-        if force_target is None:
-            return {"cmd": "error", "message": "Missing 'force' value"}
-
-        try:
-            force_target = float(force_target)
-        except (TypeError, ValueError):
-            return {"cmd": "error", "message": "Force must be a number"}
-
+    def _handle_set_steps(self, cmd: dict) -> dict:
+        steps = cmd.get("steps")
+        if steps is None:
+            return {"cmd": "error", "message": "Missing 'steps'"}
         return {
             "cmd": "ack",
-            "action": "apply_force",
-            "force": force_target,
+            "action": "set_steps",
+            "steps": steps,
+        }
+
+    def _handle_set_flight_state(self, cmd: dict) -> dict:
+        angle = cmd.get("angle")
+        speed = cmd.get("speed")
+        if angle is None and speed is None:
+            return {"cmd": "error", "message": "Missing 'angle' and/or 'speed'"}
+        return {
+            "cmd": "ack",
+            "action": "set_flight_state",
+            "angle": angle,
+            "speed": speed,
         }
 
     def _handle_status(self, cmd: dict) -> dict:
@@ -105,9 +113,21 @@ class EngineCommandHandler(CommandHandler):
             "pause": self._cmd_pause,
             "reset": self._cmd_reset,
             "set_param": self._cmd_set_param,
-            "apply_force": self._cmd_apply_force,
+            "set_steps": self._cmd_set_steps,
+            "set_flight_state": self._cmd_set_flight_state,
             "status": self._cmd_status,
         })
+
+    def _apply_stepper_state(self, steps: int, angle: float, speed: float) -> None:
+        self._engine.state.stepper_position = steps
+        self._engine.state.angle_of_attack = angle
+        self._engine.state.airspeed = speed
+
+    def _spd(self) -> float:
+        return self._engine.config.steps_per_degree
+
+    def _ref_speed(self) -> float:
+        return self._engine.config.reference_speed
 
     def _cmd_play(self, cmd: dict) -> dict:
         return {"cmd": "ack", "action": "play"}
@@ -123,8 +143,39 @@ class EngineCommandHandler(CommandHandler):
     def _cmd_set_param(self, cmd: dict) -> dict:
         return {"cmd": "ack", "action": "set_param"}
 
-    def _cmd_apply_force(self, cmd: dict) -> dict:
-        return {"cmd": "error", "message": "apply_force is not implemented yet"}
+    def _cmd_set_steps(self, cmd: dict) -> dict:
+        steps = cmd.get("steps")
+        if steps is None:
+            return {"cmd": "error", "message": "Missing 'steps'"}
+        steps = int(steps)
+        speed = cmd.get("speed", float(self._engine.state.airspeed))
+        angle = angle_from_stepper_steps(steps, speed, self._spd(), self._ref_speed())
+        self._apply_stepper_state(steps, angle, speed)
+        return {
+            "cmd": "ack",
+            "action": "set_steps",
+            "steps": steps,
+            "angle": angle,
+            "speed": speed,
+        }
+
+    def _cmd_set_flight_state(self, cmd: dict) -> dict:
+        angle = cmd.get("angle")
+        speed = cmd.get("speed")
+        if angle is None and speed is None:
+            return {"cmd": "error", "message": "Missing 'angle' and/or 'speed'"}
+        current = self._engine.state
+        angle = float(angle) if angle is not None else current.angle_of_attack
+        speed = float(speed) if speed is not None else current.airspeed
+        steps = stepper_steps_from_angle(angle, speed, self._spd(), self._ref_speed())
+        self._apply_stepper_state(steps, angle, speed)
+        return {
+            "cmd": "ack",
+            "action": "set_flight_state",
+            "angle": angle,
+            "speed": speed,
+            "steps": steps,
+        }
 
     def _cmd_status(self, cmd: dict) -> dict:
         return {

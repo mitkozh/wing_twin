@@ -7,7 +7,7 @@ from .force_reconstruct import solve_forces
 from .field_compute import compute_stress_field, compute_deformation_field
 from .fatigue import accumulate_damage, FatigueState, update_confidence, check_maintenance_needed
 from .control import decide_control
-from .actuator import apply_force_target, ActuatorModel
+from .stepper_calibration import stepper_steps_from_angle, angle_from_stepper_steps
 
 __all__ = [
     "load_transfer_matrices",
@@ -20,6 +20,6 @@ __all__ = [
     "update_confidence",
     "check_maintenance_needed",
     "decide_control",
-    "apply_force_target",
-    "ActuatorModel",
+    "stepper_steps_from_angle",
+    "angle_from_stepper_steps",
 ]

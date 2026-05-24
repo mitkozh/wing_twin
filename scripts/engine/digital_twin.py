@@ -39,7 +39,7 @@ class DigitalTwinEngine:
     ):
         self.config = config or EngineConfig()
         self._matrices: Optional[TransferMatrices] = None
-        self._num_gauges: int = 3
+        self._num_gauges: Optional[int] = None
         self._data_source: Optional[DataSource] = None
 
         self.state = TwinState()
@@ -63,7 +63,8 @@ class DigitalTwinEngine:
     def data_source(self, source: DataSource) -> None:
         self._data_source = source
         self._data_source.connect()
-        self._num_gauges = self._matrices.n_gauges
+        if self._matrices is not None:
+            self._num_gauges = self._matrices.n_gauges
 
     @property
     def matrices(self) -> Optional[TransferMatrices]:
@@ -91,6 +92,8 @@ class DigitalTwinEngine:
 
     def process_reading(self, reading: SensorReading) -> None:
         """Process a single sensor reading."""
+        if self._matrices is None:
+            raise RuntimeError("Call load_matrices() before process_reading()")
         self._strain_buffer.append(reading.strain)
 
         if reading.strain_vector is not None:
@@ -111,7 +114,7 @@ class DigitalTwinEngine:
         self.state.deformation_field = deformation.tolist()
 
         expected_raw = self._matrices.H @ F
-        expected_ue = expected_raw / 1e-6  # raw strain -> microstrain
+        expected_ue = expected_raw * 1e6  # raw strain (dimensionless) -> microstrain
         update_confidence(
             self.fatigue_state,
             strain_vec,
@@ -162,6 +165,11 @@ class DigitalTwinEngine:
         """Process one step from the data source. Returns True if new data processed."""
         if self._data_source is None:
             return False
+
+        if hasattr(self._data_source, 'set_airspeed'):
+            self._data_source.set_airspeed(self.state.airspeed)
+        if hasattr(self._data_source, 'set_angle_of_attack'):
+            self._data_source.set_angle_of_attack(self.state.angle_of_attack)
 
         reading = self._data_source.read()
         if reading is not None:

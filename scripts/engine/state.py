@@ -49,6 +49,9 @@ class TwinState:
     led_state: str = "green"
     maintenance_alert: bool = False
     node_damages: dict = field(default_factory=dict)
+    angle_of_attack: float = 0.0
+    airspeed: float = 0.0
+    stepper_position: int = 0
 
     def for_unity(self) -> dict:
         """Format state for Unity WebSocket."""
@@ -93,11 +96,6 @@ class TwinState:
         stress_min = min(stress_abs) if stress_abs else 0.0
         stress_max = max(stress_abs) if stress_abs else 0.0
 
-        angle_of_attack = 25.0
-        new_speed = 900 # In km/h
-        # TODO: ANGLE OF ATTACK IS CONSTANT. DECISION MAKING SHOULD BE DONE.
-        # TODO: SPEED IS CONSTANT. DECISION MAKING SHOULD BE DONE.
-
         return {
             "strain": float(np.mean(self.strain_vector)) if self.strain_vector else 0.0,
             "forces": [round(f, 4) for f in self.forces],
@@ -112,13 +110,14 @@ class TwinState:
             "speed": self.speed_pct,
             "led_state": self.led_state,
             "maintenance_alert": self.maintenance_alert,
-            "new_angle_of_attack": angle_of_attack,
-            "new_speed": new_speed,
+            "new_angle_of_attack": self.angle_of_attack,
+            "new_speed": self.airspeed,
+            "stepper_position": self.stepper_position,
         }
 
     def for_esp32(self) -> dict:
         """Format state for ESP32 control."""
         return {
-            "servo": self.speed_pct,
+            "position": self.stepper_position,
             "led": self.led_state,
         }

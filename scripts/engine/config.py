@@ -16,3 +16,6 @@ class EngineConfig:
     seed: Optional[int] = None
     matrix_dir: Optional[str] = None
     fatigue: FatigueConfig = field(default_factory=FatigueConfig)
+    steps_per_degree: float = 10.0
+    max_angle_degrees: float = 30.0
+    reference_speed: float = 500.0
