@@ -85,3 +85,7 @@ crashlytics-build.properties
 
 # Will update later
 docs/
+
+# ESP32 firmware credentials
+esp32/secrets.h
+
