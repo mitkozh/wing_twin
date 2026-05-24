@@ -86,10 +86,9 @@ class SimulatorSource(DataSource):
 
     def _generate_force(self, t: float, airspeed: float, angle_deg: float) -> float:
         """Generate a force signal in Newtons based on airspeed and angle of attack."""
-        ref_speed = self.config.reference_speed
 
         # Steady aerodynamic force
-        steady = compute_aero_force(angle_deg, airspeed, ref_speed)
+        steady = compute_aero_force(angle_deg, airspeed)
 
         # Dynamic excitations as fractions of the steady force
         bending = 0.25 * steady * math.sin(2 * math.pi * 4.2 * t)
