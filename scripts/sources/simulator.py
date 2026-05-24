@@ -14,21 +14,9 @@ import numpy as np
 from .base import DataSource, SensorReading
 from ..config import SimulationConfig
 from dtwin.core.matrices import TransferMatrices
+from dtwin.core.stepper_physics import compute_aero_force
 
 STRAIN_TO_RAW = 1e-6
-
-
-def _lift_force(angle_deg: float) -> float:
-    """Sinusoidal lift profile, asymmetric for positive/negative AoA."""
-    angle_rad = math.radians(angle_deg)
-    if angle_deg >= 0:
-        return 6000.0 * math.sin(angle_rad)
-    return 3000.0 * math.sin(angle_rad)
-
-
-def _drag_force(speed_ratio: float) -> float:
-    """Parasitic drag grows with speed squared."""
-    return 1500.0 * speed_ratio
 
 
 @dataclass
@@ -102,9 +90,8 @@ class SimulatorSource(DataSource):
         speed_ratio = airspeed / ref_speed if airspeed > 0 else 0.0
         q = speed_ratio * speed_ratio  # dynamic pressure ratio
 
-        # Aerodynamic forces at this flight condition
-        lift = _lift_force(angle_deg) * q
-        drag = _drag_force(speed_ratio) * q
+        # Steady aerodynamic force
+        steady = compute_aero_force(angle_deg, airspeed, ref_speed)
 
         # Dynamic excitations scale with dynamic pressure
         bending = 2000.0 * q * math.sin(2 * math.pi * 4.2 * t)
@@ -123,7 +110,7 @@ class SimulatorSource(DataSource):
             self._gust_remaining -= 1
 
         noise = np.random.normal(0, 0.5)
-        return lift + drag + bending + torsion + turbulence + gust + noise
+        return steady + bending + torsion + turbulence + gust + noise
 
     def _read(self, t: float, airspeed: float, angle_deg: float) -> tuple[np.ndarray, float]:
         """Generate strain using forward model epsilon = H @ F + noise."""

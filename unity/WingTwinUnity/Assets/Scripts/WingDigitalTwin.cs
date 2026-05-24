@@ -64,6 +64,7 @@ public class WingDigitalTwin : MonoBehaviour
     const float STEPS_PER_DEGREE = 10f;
     const float MAX_ANGLE_DEGREES = 30f;
     const float MAX_SPEED_KMH = 900f;
+    const float MAX_STEPPER_STEPS = 10000f;
 
     [Header("LED Colors")]
     [SerializeField] private Color greenColor = new Color(0.1f, 1.0f, 0.1f);
@@ -107,7 +108,6 @@ public class WingDigitalTwin : MonoBehaviour
     private float[] nodeDamages = Array.Empty<float>();
     private bool showDamageHeatmap = false;
     private bool suppressSliderCallback = false;
-    private int lastVmax = -1;
 
     public RectTransform stressBarRect;
     public TMP_Text labelPrefab;
@@ -150,8 +150,6 @@ public class WingDigitalTwin : MonoBehaviour
 
         fillImage = planeAngleSlider.fillRect.GetComponent<Image>();
         planeAngleSlider.onValueChanged.AddListener(OnAngleSliderChanged);
-        if (stepsSlider != null)
-            stepsSlider.onValueChanged.AddListener(OnStepsSliderChanged);
         if (speedSlider != null)
             speedSlider.onValueChanged.AddListener(OnSpeedSliderChanged);
 
@@ -159,8 +157,8 @@ public class WingDigitalTwin : MonoBehaviour
         planeAngleSlider.maxValue = MAX_ANGLE_DEGREES;
         if (stepsSlider != null)
         {
-            stepsSlider.minValue = -MAX_ANGLE_DEGREES * STEPS_PER_DEGREE;
-            stepsSlider.maxValue = MAX_ANGLE_DEGREES * STEPS_PER_DEGREE;
+            stepsSlider.minValue = 0f;
+            stepsSlider.maxValue = MAX_STEPPER_STEPS;
         }
         if (speedSlider != null)
         {
@@ -462,7 +460,11 @@ public class WingDigitalTwin : MonoBehaviour
             suppressSliderCallback = true;
             planeAngleSlider.value = newAngleOfAttack;
             if (stepsSlider != null)
+            {
                 stepsSlider.value = data.stepper_position;
+                if (stepsSliderLabel != null)
+                    stepsSliderLabel.text = $"Steps: {data.stepper_position}";
+            }
             if (speedSlider != null)
                 speedSlider.value = newPlaneSpeed;
             suppressSliderCallback = false;
@@ -513,11 +515,8 @@ public class WingDigitalTwin : MonoBehaviour
             if (maintenanceAlert) alertLabel.text = "MAINTENANCE REQUIRED";
         }
 
-        if (currentSpeed != lastVmax)
-        {
-            ApplyVmax(currentSpeed);
-            lastVmax = currentSpeed;
-        }
+        if (stepsSliderLabel != null && stepsSlider != null)
+            stepsSliderLabel.text = $"Steps: {(int)stepsSlider.value}";
     }
 
     void UpdateDamageSlider(Slider slider, TextMeshProUGUI label, float value, string title)
@@ -780,11 +779,6 @@ public class WingDigitalTwin : MonoBehaviour
             {
                 SendFlightState(planeAngleSlider.value, speedSlider != null ? speedSlider.value : currentPlaneSpeed);
             }
-            if (Input.GetKeyDown(KeyCode.G))
-            {
-                float steps = stepsSlider != null ? stepsSlider.value : 50f;
-                SendStepperSteps((int)steps, speedSlider != null ? speedSlider.value : currentPlaneSpeed);
-            }
             if (Input.GetKeyDown(KeyCode.H))
             {
                 ToggleHelp();
@@ -858,24 +852,6 @@ public class WingDigitalTwin : MonoBehaviour
         SendFlightState(angle, speed);
     }
 
-    void OnStepsSliderChanged(float steps)
-    {
-        if (suppressSliderCallback) return;
-        suppressSliderCallback = true;
-
-        if (planeAngleSlider != null)
-            planeAngleSlider.value = steps / STEPS_PER_DEGREE;
-
-        UpdateSliderLabel(stepsSliderLabel, $"Steps: {(int)steps}");
-        if (angleSliderLabel != null && planeAngleSlider != null)
-            angleSliderLabel.text = $"Angle: {planeAngleSlider.value:F1}°";
-
-        suppressSliderCallback = false;
-
-        float speed = speedSlider != null ? speedSlider.value : currentPlaneSpeed;
-        SendStepperSteps((int)steps, speed);
-    }
-
     void OnSpeedSliderChanged(float speed)
     {
         if (suppressSliderCallback) return;
@@ -894,33 +870,6 @@ public class WingDigitalTwin : MonoBehaviour
     public void SendFlightState(float angle, float speed)
     {
         SendCommand("set_flight_state", new Dictionary<string, object> { { "angle", angle }, { "speed", speed } });
-    }
-
-    public void SendStepperSteps(int steps, float speed)
-    {
-        SendCommand("set_steps", new Dictionary<string, object> { { "steps", steps }, { "speed", speed } });
-    }
-
-    void ApplyVmax(int vmax)
-    {
-        if (vmax == 0)
-        {
-            previousAngleOfAttack = currentPlaneAngle;
-            newAngleOfAttack = 0f;
-            angleElapsedTime = 0f;
-            previousPlaneSpeed = currentPlaneSpeed;
-            newPlaneSpeed = 0f;
-            speedElapsedTime = 0f;
-
-            SendFlightState(0f, 0f);
-        }
-        else
-        {
-            float ratio = vmax / 100f;
-            float balanceAngle = planeAngleSlider.value * ratio;
-            float balanceSpeed = speedSlider.value * ratio;
-            SendFlightState(balanceAngle, balanceSpeed);
-        }
     }
 
     [Serializable]

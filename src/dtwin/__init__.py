@@ -9,6 +9,9 @@ from .core import (
     compute_deformation_field,
     accumulate_damage,
     decide_control,
+    compute_aero_force,
+    compute_pitch_damping_force,
+    force_to_steps,
 )
 
 __version__ = "1.0.0"
@@ -19,4 +22,7 @@ __all__ = [
     "compute_deformation_field",
     "accumulate_damage",
     "decide_control",
+    "compute_aero_force",
+    "compute_pitch_damping_force",
+    "force_to_steps",
 ]

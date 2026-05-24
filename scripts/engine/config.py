@@ -19,3 +19,7 @@ class EngineConfig:
     steps_per_degree: float = 10.0
     max_angle_degrees: float = 30.0
     reference_speed: float = 500.0
+    steps_per_newton: float = 0.1
+    chord: float = 0.3
+    Cmq: float = -1.5
+    air_density: float = 1.225

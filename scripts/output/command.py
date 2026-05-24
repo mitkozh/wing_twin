@@ -6,7 +6,7 @@ import json
 import time
 from typing import Optional, Callable, Any
 from ..sources.base import SensorReading
-from dtwin.core.stepper_calibration import stepper_steps_from_angle, angle_from_stepper_steps
+from dtwin.core.stepper_physics import compute_aero_force, force_to_steps
 import numpy as np
 
 
@@ -123,11 +123,11 @@ class EngineCommandHandler(CommandHandler):
         self._engine.state.angle_of_attack = angle
         self._engine.state.airspeed = speed
 
-    def _spd(self) -> float:
-        return self._engine.config.steps_per_degree
-
     def _ref_speed(self) -> float:
         return self._engine.config.reference_speed
+
+    def _steps_per_newton(self) -> float:
+        return self._engine.config.steps_per_newton
 
     def _cmd_play(self, cmd: dict) -> dict:
         return {"cmd": "ack", "action": "play"}
@@ -149,13 +149,12 @@ class EngineCommandHandler(CommandHandler):
             return {"cmd": "error", "message": "Missing 'steps'"}
         steps = int(steps)
         speed = cmd.get("speed", float(self._engine.state.airspeed))
-        angle = angle_from_stepper_steps(steps, speed, self._spd(), self._ref_speed())
-        self._apply_stepper_state(steps, angle, speed)
+        self._engine.state.stepper_position = steps
+        self._engine.state.airspeed = speed
         return {
             "cmd": "ack",
             "action": "set_steps",
             "steps": steps,
-            "angle": angle,
             "speed": speed,
         }
 
@@ -167,7 +166,8 @@ class EngineCommandHandler(CommandHandler):
         current = self._engine.state
         angle = float(angle) if angle is not None else current.angle_of_attack
         speed = float(speed) if speed is not None else current.airspeed
-        steps = stepper_steps_from_angle(angle, speed, self._spd(), self._ref_speed())
+        F = compute_aero_force(angle, speed, self._ref_speed())
+        steps = force_to_steps(F, self._steps_per_newton())
         self._apply_stepper_state(steps, angle, speed)
         return {
             "cmd": "ack",

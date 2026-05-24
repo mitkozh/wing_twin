@@ -14,6 +14,9 @@ from dtwin import (
     compute_deformation_field,
     accumulate_damage,
     decide_control,
+    compute_aero_force,
+    compute_pitch_damping_force,
+    force_to_steps,
 )
 from dtwin.core import FatigueState
 from dtwin.core.fatigue import (
@@ -48,6 +51,7 @@ class DigitalTwinEngine:
             maxlen=self.config.fatigue.strain_buffer_size
         )
         self._cycles: list = []
+        self._prev_angle_of_attack: float = 0.0
 
         if self.config.seed is not None:
             set_random_seed(self.config.seed)
@@ -165,6 +169,29 @@ class DigitalTwinEngine:
         """Process one step from the data source. Returns True if new data processed."""
         if self._data_source is None:
             return False
+
+        F_aero = compute_aero_force(
+            self.state.angle_of_attack,
+            self.state.airspeed,
+            self.config.reference_speed,
+        )
+
+        d_alpha_dt = (
+            self.state.angle_of_attack - self._prev_angle_of_attack
+        ) * self.config.sample_rate
+        F_damping = compute_pitch_damping_force(
+            self.state.angle_of_attack,
+            self.state.airspeed,
+            d_alpha_dt,
+            chord=self.config.chord,
+            Cmq=self.config.Cmq,
+        )
+
+        F_target = F_aero + F_damping
+        self.state.stepper_position = force_to_steps(
+            F_target, self.config.steps_per_newton
+        )
+        self._prev_angle_of_attack = self.state.angle_of_attack
 
         if hasattr(self._data_source, 'set_airspeed'):
             self._data_source.set_airspeed(self.state.airspeed)

@@ -7,7 +7,12 @@ from .force_reconstruct import solve_forces
 from .field_compute import compute_stress_field, compute_deformation_field
 from .fatigue import accumulate_damage, FatigueState, update_confidence, check_maintenance_needed
 from .control import decide_control
-from .stepper_calibration import stepper_steps_from_angle, angle_from_stepper_steps
+from .stepper_physics import (
+    compute_aero_force,
+    compute_pitch_damping_force,
+    force_to_steps,
+    steps_to_force,
+)
 
 __all__ = [
     "load_transfer_matrices",
@@ -20,6 +25,8 @@ __all__ = [
     "update_confidence",
     "check_maintenance_needed",
     "decide_control",
-    "stepper_steps_from_angle",
-    "angle_from_stepper_steps",
+    "compute_aero_force",
+    "compute_pitch_damping_force",
+    "force_to_steps",
+    "steps_to_force",
 ]

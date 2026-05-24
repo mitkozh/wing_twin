@@ -165,11 +165,11 @@ void update_stepper() {
     int dir = (stepperTarget > stepperPosition) ? HIGH : LOW;
     digitalWrite(STEPPER_DIR, dir);
 
-    int steps = abs(stepperTarget - stepperPosition);
-    int stepDelay = 2000;
-    if (steps > 500) stepDelay = 800;
+    int stepsRemaining = abs(stepperTarget - stepperPosition);
+    int stepDelay = max(500, 2000 - stepsRemaining * 3);
 
-    for (int i = 0; i < min(steps, 50); i++) {
+    int stepsThisIter = min(stepsRemaining, 50);
+    for (int i = 0; i < stepsThisIter; i++) {
         digitalWrite(STEPPER_STEP, HIGH);
         delayMicroseconds(stepDelay);
         digitalWrite(STEPPER_STEP, LOW);
@@ -207,17 +207,6 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     Serial.println(message);
 
     int idx;
-
-    idx = message.indexOf("\"steps\"");
-    if (idx >= 0) {
-        int colon = message.indexOf(':', idx + 7);
-        int comma = message.indexOf(',', colon + 1);
-        String val = message.substring(colon + 1);
-        if (comma >= 0) val = message.substring(colon + 1, comma);
-        val.trim();
-        stepperTarget += val.toInt();
-        return;
-    }
 
     idx = message.indexOf("\"position\"");
     if (idx >= 0) {
