@@ -28,7 +28,7 @@ class WebSocketConfig:
 @dataclass
 class SimulationConfig:
     sample_rate: int = 50
-    reference_speed: float = 500.0
+    reference_speed: float = 120.0
 
 
 @dataclass

@@ -16,10 +16,20 @@ class EngineConfig:
     seed: Optional[int] = None
     matrix_dir: Optional[str] = None
     fatigue: FatigueConfig = field(default_factory=FatigueConfig)
-    steps_per_degree: float = 10.0
-    max_angle_degrees: float = 30.0
-    reference_speed: float = 500.0
-    steps_per_newton: float = 0.1
-    chord: float = 0.3
-    Cmq: float = -1.5
+
+    # Prototype wing geometry
+    wing_area: float = 0.012375   # m^2
+    chord: float     = 0.0491     # m
+    span: float      = 0.300      # m
+    aspect_ratio: float = 7.27
+
+    # todo: adjust based on actual steps and max newtons
+    # 2720 steps / 13.3 N ≈ 204 steps/N
+    steps_per_newton: float = 204.0
+    F_max_newtons: float    = 13.3
+
+    # Flight envelope
+    reference_speed: float = 120.0   # km/h max
+    max_aoa: float         = 15.0    # °
+    Cmq: float = -1.5                # pitch damping coefficient
     air_density: float = 1.225

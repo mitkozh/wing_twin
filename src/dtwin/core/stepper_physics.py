@@ -7,78 +7,72 @@ import numpy as np
 
 AIR_DENSITY = 1.225  # kg/m^3 at sea level
 
+PROTO_WING_AREA  = 0.012375  # m^2   (0.5 * (0.0725 + 0.010) * 0.300)
+PROTO_CHORD      = 0.0491    # m    (mean aerodynamic chord)
+PROTO_SPAN       = 0.300     # m
+PROTO_AR         = 7.27      # aspect ratio b^2/S
+PROTO_CL_ALPHA   = 2 * math.pi / (1 + 2 / PROTO_AR)  # finite-wing correction
+CD0              = 0.015     # zero-lift drag coefficient
+OSWALD_E         = 0.85      # Oswald efficiency factor
 
-def _speed_ratio(airspeed: float, reference_speed: float) -> float:
-    if airspeed <= 0 or reference_speed <= 0:
-        return 0.0
-    return airspeed / reference_speed
-
-
-def _dynamic_pressure_ratio(airspeed: float, reference_speed: float) -> float:
-    sr = _speed_ratio(airspeed, reference_speed)
-    return sr * sr
-
-
-def _lift_force(angle_deg: float) -> float:
-    """Sinusoidal lift profile, asymmetric for positive/negative AoA."""
-    angle_rad = math.radians(angle_deg)
-    if angle_deg >= 0:
-        return 6000.0 * math.sin(angle_rad)
-    return 3000.0 * math.sin(angle_rad)
-
-
-def _drag_force(speed_ratio: float) -> float:
-    """Parasitic drag grows with speed."""
-    return 1500.0 * speed_ratio
+F_MAX_NEWTONS     = 13.3 # to be adjusted
+MAX_STEPPER_STEPS = 2720 # 85 % of 3200
 
 
 def compute_aero_force(
     angle_deg: float,
-    airspeed: float,
-    reference_speed: float = 500.0,
+    airspeed_kmh: float,
 ) -> float:
     """
-    Compute the steady aerodynamic force (N) at a given flight condition.
-
-    Returns the total force magnitude combining lift and drag, scaled by
-    dynamic pressure ratio (q/q_ref).  This is the mean force that the
-    stepper must emulate; dynamic excitation (gust, turbulence, etc.) is
-    handled by the simulator separately.
+    Compute resultant aerodynamic force (N) on the prototype wing
+    for the given simulated flight condition using thin-airfoil theory.
     """
-    q = _dynamic_pressure_ratio(airspeed, reference_speed)
-    sr = _speed_ratio(airspeed, reference_speed)
-    lift = _lift_force(angle_deg) * q
-    drag = _drag_force(sr) * q
-    return lift + drag
+    V = airspeed_kmh / 3.6          # km/h → m/s
+    q = 0.5 * AIR_DENSITY * V ** 2  # dynamic pressure (Pa)
+    alpha = math.radians(angle_deg)
+
+    CL = PROTO_CL_ALPHA * alpha
+    CD = CD0 + CL ** 2 / (math.pi * OSWALD_E * PROTO_AR)
+
+    L = q * PROTO_WING_AREA * CL
+    D = q * PROTO_WING_AREA * CD
+    return math.sqrt(L ** 2 + D ** 2)
 
 
 def compute_pitch_damping_force(
     angle_deg: float,
-    airspeed: float,
-    d_alpha_dt: float,
-    chord: float = 0.3,
-    Cmq: float = -0.5,
+    airspeed_kmh: float,
+    d_alpha_dt: float, # °/s
+    chord: float = PROTO_CHORD,
+    Cmq: float = -1.5,
 ) -> float:
     """
-    Pitch-damping moment converted to an equivalent force correction.
+    Pitch-rate damping moment converted to an equivalent force correction.
 
-    d_alpha_dt = rate of change of angle of attack (rad/s or deg/s).
+    d_alpha_dt = rate of change of angle of attack (deg/s).
     Internally converted to rad/s for the physical model.
     """
-    v = airspeed / 3.6  # km/h -> m/s
-    q_dyn = 0.5 * AIR_DENSITY * v * v
-    alpha_dot = math.radians(abs(d_alpha_dt))
+    V = airspeed_kmh / 3.6
+    q = 0.5 * AIR_DENSITY * V ** 2
+    alpha_dot_rad = math.radians(abs(d_alpha_dt))
     sign = 1.0 if d_alpha_dt >= 0 else -1.0
-    return sign * q_dyn * chord * Cmq * alpha_dot
+    M_damp = q * PROTO_WING_AREA * chord * Cmq * alpha_dot_rad
+    return sign * M_damp / chord
 
 
-def force_to_steps(F_newtons: float, steps_per_newton: float = 50.0) -> int:
-    """Convert aerodynamic force (N) to an absolute stepper position."""
-    return int(round(F_newtons * steps_per_newton))
+def force_to_steps(
+    F_newtons: float,
+    steps_per_newton: float = 204.0,
+) -> int:
+    """
+    Convert aerodynamic force (N) to a stepper absolute position.
+    """
+    raw = int(round(abs(F_newtons) * steps_per_newton))
+    return min(raw, MAX_STEPPER_STEPS)
 
 
-def steps_to_force(steps: int, steps_per_newton: float = 50.0) -> float:
-    """Convert stepper position back to force (N)."""
+def steps_to_force(steps: int, steps_per_newton: float = 204.0) -> float:
+    """Convert stepper position back to equivalent force (N)."""
     if steps_per_newton <= 0:
         return 0.0
     return steps / steps_per_newton

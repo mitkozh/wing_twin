@@ -166,7 +166,7 @@ class EngineCommandHandler(CommandHandler):
         current = self._engine.state
         angle = float(angle) if angle is not None else current.angle_of_attack
         speed = float(speed) if speed is not None else current.airspeed
-        F = compute_aero_force(angle, speed, self._ref_speed())
+        F = compute_aero_force(angle, speed)
         steps = force_to_steps(F, self._steps_per_newton())
         self._apply_stepper_state(steps, angle, speed)
         return {

@@ -87,16 +87,14 @@ class SimulatorSource(DataSource):
     def _generate_force(self, t: float, airspeed: float, angle_deg: float) -> float:
         """Generate a force signal in Newtons based on airspeed and angle of attack."""
         ref_speed = self.config.reference_speed
-        speed_ratio = airspeed / ref_speed if airspeed > 0 else 0.0
-        q = speed_ratio * speed_ratio  # dynamic pressure ratio
 
         # Steady aerodynamic force
         steady = compute_aero_force(angle_deg, airspeed, ref_speed)
 
-        # Dynamic excitations scale with dynamic pressure
-        bending = 2000.0 * q * math.sin(2 * math.pi * 4.2 * t)
-        torsion = 400.0 * q * math.sin(2 * math.pi * 18.3 * t + 1.1)
-        turbulence = 200.0 * q * np.random.normal(0, 1) * (
+        # Dynamic excitations as fractions of the steady force
+        bending = 0.25 * steady * math.sin(2 * math.pi * 4.2 * t)
+        torsion = 0.05 * steady * math.sin(2 * math.pi * 18.3 * t + 1.1)
+        turbulence = 0.03 * steady * np.random.normal(0, 1) * (
             1.0 + 0.5 * math.sin(2 * math.pi * 0.3 * t)
         )
 
@@ -104,7 +102,7 @@ class SimulatorSource(DataSource):
         if np.random.random() < 1 / (60 * self.config.sample_rate):
             self._gust_remaining = int(0.5 * self.config.sample_rate)
         if getattr(self, "_gust_remaining", 0) > 0:
-            gust = 300.0 * q * math.sin(
+            gust = 0.04 * steady * math.sin(
                 math.pi * (1 - self._gust_remaining / (0.5 * self.config.sample_rate))
             )
             self._gust_remaining -= 1

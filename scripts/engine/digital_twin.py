@@ -173,7 +173,6 @@ class DigitalTwinEngine:
         F_aero = compute_aero_force(
             self.state.angle_of_attack,
             self.state.airspeed,
-            self.config.reference_speed,
         )
 
         d_alpha_dt = (

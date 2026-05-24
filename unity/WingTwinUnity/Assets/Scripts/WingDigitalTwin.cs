@@ -56,15 +56,14 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] TextMeshProUGUI planeTargetAngleLabel;
     [SerializeField] TextMeshProUGUI planeCurrentAngleLabel;
     [SerializeField] List<ParticleSystem> windParticles = new List<ParticleSystem>();
-    [SerializeField] float commonPlaneSpeed = 850f;
+    [SerializeField] float commonPlaneSpeed = 120f;
     [SerializeField] float windExaggeration = 1f;
     [SerializeField] float angleAdjustmentTime = 10;
     [SerializeField] float speedAdjustmentTime = 10;
 
-    const float STEPS_PER_DEGREE = 10f;
-    const float MAX_ANGLE_DEGREES = 30f;
-    const float MAX_SPEED_KMH = 900f;
-    const float MAX_STEPPER_STEPS = 10000f;
+    const float MAX_ANGLE_DEGREES = 15f;
+    const float MAX_SPEED_KMH = 120f;
+    const float MAX_STEPPER_STEPS = 2720f;
 
     [Header("LED Colors")]
     [SerializeField] private Color greenColor = new Color(0.1f, 1.0f, 0.1f);
@@ -81,7 +80,7 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] List<ViewGroup> UIViewGroups = new List<ViewGroup>();
 
     private float currentPlaneAngle = 0;
-    private float currentPlaneSpeed = 800f; 
+    private float currentPlaneSpeed = 80f; 
     private float angleElapsedTime = 0f;
     private float speedElapsedTime = 0f;
     private Image fillImage;
@@ -96,7 +95,7 @@ public class WingDigitalTwin : MonoBehaviour
     private float newAngleOfAttack = 0f;
     private float previousAngleOfAttack = 0f;
     private float newPlaneSpeed = 0f;
-    private float previousPlaneSpeed = 800f;
+    private float previousPlaneSpeed = 80f;
     private float currentDamage = 0f;
     private float currentAvgDamage = 0f;
     private int currentSpeed = 100;
@@ -619,7 +618,7 @@ public class WingDigitalTwin : MonoBehaviour
             vertexColors = new Color[vertexCount];
 
         float minS = 0f;
-        float maxS = 270000000f;
+        float maxS = 500000f;
 
         for (int i = 0; i < vertexCount; i++)
         {
@@ -839,12 +838,7 @@ public class WingDigitalTwin : MonoBehaviour
         if (suppressSliderCallback) return;
         suppressSliderCallback = true;
 
-        if (stepsSlider != null)
-            stepsSlider.value = angle * STEPS_PER_DEGREE;
-
         UpdateSliderLabel(angleSliderLabel, $"Angle: {angle:F1}°");
-        if (stepsSliderLabel != null && stepsSlider != null)
-            stepsSliderLabel.text = $"Steps: {(int)(stepsSlider.value)}";
 
         suppressSliderCallback = false;
 
