@@ -39,32 +39,29 @@ class MqttSource(DataSource):
 
     def read(self) -> Optional[SensorReading]:
         """Get latest reading from MQTT buffer."""
-        if not self._handler.strain_buffers:
-            return None
-
-        buffers = list(self._handler.strain_buffers.values())
+        buffers = self._handler.strain_buffers
         if not buffers:
             return None
 
-        buffer = buffers[0]
-        if not buffer:
-            return None
-
-        if isinstance(buffer[0], list):
-            strain_vector = np.array(buffer.popleft(), dtype=np.float64)
+        if "vector" in buffers and buffers["vector"]:
+            raw, ts = buffers["vector"].popleft()
+            strain_vector = np.array(raw, dtype=np.float64)
             return SensorReading(
                 strain=float(strain_vector[0]) if len(strain_vector) > 0 else 0.0,
                 strain_vector=strain_vector,
                 accel_z=0.0,
-                timestamp=0,
+                timestamp=ts,
                 gauge_id="vector"
             )
-        else:
-            strain = float(buffer.popleft())
+
+        if "primary" in buffers and buffers["primary"]:
+            strain, ts = buffers["primary"].popleft()
             return SensorReading(
                 strain=strain,
                 strain_vector=None,
                 accel_z=0.0,
-                timestamp=0,
+                timestamp=ts,
                 gauge_id="primary"
             )
+
+        return None

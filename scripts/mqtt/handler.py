@@ -46,6 +46,8 @@ class MqttHandler(MqttClientBase):
         try:
             payload = json.loads(msg.payload.decode())
 
+            timestamp = payload.get("timestamp", 0)
+
             if "strain_vector" in payload:
                 strain_vals = np.array(payload["strain_vector"], dtype=np.float64)
                 self._num_gauges = len(strain_vals)
@@ -53,14 +55,14 @@ class MqttHandler(MqttClientBase):
                 if key not in self._strain_buffers:
                     self._strain_buffers[key] = deque(maxlen=1)
                 self._strain_buffers[key].clear()
-                self._strain_buffers[key].append(strain_vals.tolist())
+                self._strain_buffers[key].append((strain_vals.tolist(), timestamp))
 
             elif "strain" in payload:
                 strain_val = float(payload["strain"])
                 key = "primary"
                 if key not in self._strain_buffers:
                     self._strain_buffers[key] = deque(maxlen=max(100, self._num_gauges))
-                self._strain_buffers[key].append(strain_val)
+                self._strain_buffers[key].append((strain_val, timestamp))
 
         except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
             logger.error("Parse error: %s", e)
