@@ -51,6 +51,8 @@ class TwinState:
     node_damages: dict = field(default_factory=dict)
     angle_of_attack: float = 0.0
     airspeed: float = 0.0
+    target_angle_of_attack: float = 0.0
+    target_airspeed: float = 0.0
     stepper_position: int = 0
     heatmap_mode: str = "damage"
 
@@ -112,7 +114,9 @@ class TwinState:
             "led_state": self.led_state,
             "maintenance_alert": self.maintenance_alert,
             "new_angle_of_attack": self.angle_of_attack,
+            "target_angle_of_attack": self.target_angle_of_attack,
             "new_speed": self.airspeed,
+            "target_speed": self.target_airspeed,
             "stepper_position": self.stepper_position,
             "heatmap_mode": self.heatmap_mode,
         }

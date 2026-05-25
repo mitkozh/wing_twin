@@ -6,8 +6,6 @@ import json
 import time
 from typing import Optional, Callable, Any
 
-from dtwin.core.stepper_physics import compute_aero_force, force_to_steps
-
 
 class EngineCommandHandler:
     """Parses JSON commands from Unity and acts on the digital twin engine."""
@@ -46,14 +44,6 @@ class EngineCommandHandler:
             return handler(cmd)
         return {"cmd": "error", "message": f"Unknown command: {command}"}
 
-    def _apply_stepper_state(self, steps: int, angle: float, speed: float) -> None:
-        self._engine.state.stepper_position = steps
-        self._engine.state.angle_of_attack = angle
-        self._engine.state.airspeed = speed
-
-    def _steps_per_newton(self) -> float:
-        return self._engine.config.steps_per_newton
-
     def _cmd_ping(self, cmd: dict) -> dict:
         return {"cmd": "pong", "time": time.time()}
 
@@ -76,9 +66,9 @@ class EngineCommandHandler:
         if steps is None:
             return {"cmd": "error", "message": "Missing 'steps'"}
         steps = int(steps)
-        speed = cmd.get("speed", float(self._engine.state.airspeed))
+        speed = cmd.get("speed", float(self._engine.state.target_airspeed))
         self._engine.state.stepper_position = steps
-        self._engine.state.airspeed = speed
+        self._engine.state.target_airspeed = speed
         return {
             "cmd": "ack",
             "action": "set_steps",
@@ -91,18 +81,16 @@ class EngineCommandHandler:
         speed = cmd.get("speed")
         if angle is None and speed is None:
             return {"cmd": "error", "message": "Missing 'angle' and/or 'speed'"}
-        current = self._engine.state
-        angle = float(angle) if angle is not None else current.angle_of_attack
-        speed = float(speed) if speed is not None else current.airspeed
-        F = compute_aero_force(angle, speed)
-        steps = force_to_steps(F, self._steps_per_newton())
-        self._apply_stepper_state(steps, angle, speed)
+        state = self._engine.state
+        if angle is not None:
+            state.target_angle_of_attack = float(angle)
+        if speed is not None:
+            state.target_airspeed = float(speed)
         return {
             "cmd": "ack",
             "action": "set_flight_state",
-            "angle": angle,
-            "speed": speed,
-            "steps": steps,
+            "target_angle": state.target_angle_of_attack,
+            "target_speed": state.target_airspeed,
         }
 
     def _cmd_set_heatmap_mode(self, cmd: dict) -> dict:

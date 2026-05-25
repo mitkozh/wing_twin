@@ -23,8 +23,6 @@ class EngineConfig:
     span: float      = 0.300      # m
     aspect_ratio: float = 7.27
 
-    # todo: adjust based on actual steps and max newtons
-    # 2720 steps / 13.3 N ≈ 204 steps/N
     steps_per_newton: float = 204.0
     F_max_newtons: float    = 13.3
 
@@ -32,4 +30,8 @@ class EngineConfig:
     reference_speed: float = 120.0   # km/h max
     max_aoa: float         = 15.0    # °
     Cmq: float = -1.5                # pitch damping coefficient
-    air_density: float = 1.225
+    air_density: float = 1.225       # kg/m^3
+
+    # Second-order dynamics for flight state tracking
+    angle_accel: float = 15.0   # deg/s^2
+    speed_accel: float = 60.0   # km/h/s^2

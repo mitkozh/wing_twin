@@ -2,6 +2,7 @@
 Core digital twin processing engine.
 """
 
+import math
 from collections import deque
 from typing import Optional
 
@@ -53,6 +54,8 @@ class DigitalTwinEngine:
         )
         self._cycles: list = []
         self._prev_angle_of_attack: float = 0.0
+        self._angle_velocity: float = 0.0
+        self._speed_velocity: float = 0.0
 
         if self.config.seed is not None:
             set_random_seed(self.config.seed)
@@ -172,10 +175,54 @@ class DigitalTwinEngine:
                 config=self.config.fatigue,
             )
 
+    def _accel_towards(
+        self, pos: float, vel: float, target: float, accel: float, dt: float
+    ) -> tuple[float, float]:
+        """Move `pos` towards `target` with acceleration-limited velocity.
+        Returns (new_pos, new_vel).
+        """
+        error = target - pos
+        if abs(error) < 1e-6 and abs(vel) < 1e-6:
+            return target, 0.0
+
+        braking_dist = (vel * vel) / (2 * accel) if abs(vel) > 0.0 else 0.0
+
+        if abs(error) <= braking_dist:
+            vel -= math.copysign(accel * dt, vel)
+        else:
+            vel += math.copysign(accel * dt, error)
+
+        if vel * error < 0:
+            vel = 0.0
+
+        pos += vel * dt
+
+        if (pos - target) * error > 0.0:
+            pos = target
+            vel = 0.0
+
+        return pos, vel
+
     def step(self) -> bool:
         """Process one step from the data source. Returns True if new data processed."""
         if self._data_source is None:
             return False
+
+        dt = 1.0 / self.config.sample_rate
+        self.state.angle_of_attack, self._angle_velocity = self._accel_towards(
+            self.state.angle_of_attack,
+            self._angle_velocity,
+            self.state.target_angle_of_attack,
+            self.config.angle_accel,
+            dt,
+        )
+        self.state.airspeed, self._speed_velocity = self._accel_towards(
+            self.state.airspeed,
+            self._speed_velocity,
+            self.state.target_airspeed,
+            self.config.speed_accel,
+            dt,
+        )
 
         F_aero = compute_aero_force(
             self.state.angle_of_attack,

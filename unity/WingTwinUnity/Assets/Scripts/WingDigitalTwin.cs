@@ -58,8 +58,6 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] List<ParticleSystem> windParticles = new List<ParticleSystem>();
     [SerializeField] float commonPlaneSpeed = 120f;
     [SerializeField] float windExaggeration = 1f;
-    [SerializeField] float angleAdjustmentTime = 10;
-    [SerializeField] float speedAdjustmentTime = 10;
 
     const float MAX_ANGLE_DEGREES = 15f;
     const float MAX_SPEED_KMH = 200f;
@@ -80,10 +78,7 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] List<ViewGroup> UIViewGroups = new List<ViewGroup>();
 
     private float currentPlaneAngle = 0;
-    private float currentPlaneSpeed = 80f; 
-    private float angleElapsedTime = 0f;
-    private float speedElapsedTime = 0f;
-    private Image fillImage;
+    private float currentPlaneSpeed = 80f;
 
     private WebSocket ws;
     private bool connected = false;
@@ -92,10 +87,8 @@ public class WingDigitalTwin : MonoBehaviour
     private float lastMessageTime = 0f;
     private bool reconnectScheduled = false;
 
-    private float newAngleOfAttack = 0f;
-    private float previousAngleOfAttack = 0f;
-    private float newPlaneSpeed = 0f;
-    private float previousPlaneSpeed = 80f;
+    private float targetAngleOfAttack = 0f;
+    private float targetPlaneSpeed = 0f;
     private float currentDamage = 0f;
     private float currentAvgDamage = 0f;
     private int currentSpeed = 100;
@@ -147,7 +140,6 @@ public class WingDigitalTwin : MonoBehaviour
         }
         UpdateHeatmapToggleLabel(false);
 
-        fillImage = planeAngleSlider.fillRect.GetComponent<Image>();
         planeAngleSlider.onValueChanged.AddListener(OnAngleSliderChanged);
         if (speedSlider != null)
             speedSlider.onValueChanged.AddListener(OnSpeedSliderChanged);
@@ -170,13 +162,8 @@ public class WingDigitalTwin : MonoBehaviour
     
     private void UpdatePlaneSpeed()
     {
-        speedElapsedTime += Time.deltaTime;
-
-        float t = Mathf.Clamp01(speedElapsedTime / speedAdjustmentTime);
-        currentPlaneSpeed = Mathf.Lerp(previousPlaneSpeed, newPlaneSpeed, t);
-
-        planeCurrentSpeedLabel.text = $"Current Plane Speed: {currentPlaneSpeed}";
-        planeTargetSpeedLabel.text = $"Target Plane Speed: {newPlaneSpeed}";
+        planeCurrentSpeedLabel.text = $"Current Plane Speed: {currentPlaneSpeed:F1}";
+        planeTargetSpeedLabel.text = $"Target Plane Speed: {targetPlaneSpeed:F1}";
 
         foreach (ParticleSystem ps in windParticles)
         {
@@ -189,19 +176,10 @@ public class WingDigitalTwin : MonoBehaviour
     }
     private void UpdatePlaneAngle()
     {
-        angleElapsedTime += Time.deltaTime;
+        rotationalPivot.transform.localRotation = Quaternion.Euler(currentPlaneAngle, 0, 0);
 
-        float t = Mathf.Clamp01(angleElapsedTime / angleAdjustmentTime);
-        currentPlaneAngle = Mathf.Lerp(previousAngleOfAttack, newAngleOfAttack, t);
-
-        Vector3 current = rotationalPivot.transform.localEulerAngles;
-        rotationalPivot.transform.localRotation = Quaternion.Euler(currentPlaneAngle, current.y, current.z);
-
-        float normalised = Mathf.InverseLerp(planeAngleSlider.minValue, planeAngleSlider.maxValue, currentPlaneAngle);
-        fillImage.fillAmount = normalised;
-
-        planeCurrentAngleLabel.text = $"Current Plane Angle: {currentPlaneAngle}";
-        planeTargetAngleLabel.text = $"Target Plane Angle: {newAngleOfAttack}";
+        planeCurrentAngleLabel.text = $"Current Plane Angle: {currentPlaneAngle:F1}";
+        planeTargetAngleLabel.text = $"Target Plane Angle: {targetAngleOfAttack:F1}";
     }
 
     public void SwitchViewButton(int camera)
@@ -439,25 +417,13 @@ public class WingDigitalTwin : MonoBehaviour
             stressMax = data.stress_max;
 
 
-            float incomingPlaneSpeed = data.new_speed;
-            float incomingAngle = data.new_angle_of_attack;
-
-            if (!Mathf.Approximately(incomingPlaneSpeed, newPlaneSpeed))
-            {
-                previousPlaneSpeed = currentPlaneSpeed;
-                newPlaneSpeed = incomingPlaneSpeed;
-                speedElapsedTime = 0;
-            }
-
-            if (!Mathf.Approximately(incomingAngle, newAngleOfAttack))
-            {
-                previousAngleOfAttack = currentPlaneAngle;
-                newAngleOfAttack = incomingAngle;
-                angleElapsedTime = 0f;
-            }
+            currentPlaneAngle = data.new_angle_of_attack;
+            currentPlaneSpeed = data.new_speed;
+            targetAngleOfAttack = data.target_angle_of_attack;
+            targetPlaneSpeed = data.target_speed;
 
             suppressSliderCallback = true;
-            planeAngleSlider.value = newAngleOfAttack;
+            planeAngleSlider.value = targetAngleOfAttack;
             if (stepsSlider != null)
             {
                 stepsSlider.value = data.stepper_position;
@@ -465,7 +431,7 @@ public class WingDigitalTwin : MonoBehaviour
                     stepsSliderLabel.text = $"Steps: {data.stepper_position}";
             }
             if (speedSlider != null)
-                speedSlider.value = newPlaneSpeed;
+                speedSlider.value = targetPlaneSpeed;
             suppressSliderCallback = false;
 
             if (data.stress_field != null && data.stress_field.Count > 0)
@@ -885,7 +851,9 @@ public class WingDigitalTwin : MonoBehaviour
         public float stress_min;
         public float stress_max;
         public float new_angle_of_attack;
+        public float target_angle_of_attack;
         public float new_speed;
+        public float target_speed;
         public int stepper_position;
     }
 
