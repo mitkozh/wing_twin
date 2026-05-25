@@ -346,7 +346,7 @@ ParticleSystem:
   ringBufferLoopRange: {x: 0, y: 1}
   emitterVelocityMode: 1
   looping: 1
-  prewarm: 0
+  prewarm: 1
   playOnAwake: 1
   useUnscaledTime: 0
   autoRandomSeed: 1
@@ -6117,7 +6117,7 @@ ParticleSystem:
   ringBufferLoopRange: {x: 0, y: 1}
   emitterVelocityMode: 1
   looping: 1
-  prewarm: 0
+  prewarm: 1
   playOnAwake: 1
   useUnscaledTime: 0
   autoRandomSeed: 1
@@ -13160,7 +13160,7 @@ ParticleSystem:
   ringBufferLoopRange: {x: 0, y: 1}
   emitterVelocityMode: 1
   looping: 1
-  prewarm: 0
+  prewarm: 1
   playOnAwake: 1
   useUnscaledTime: 0
   autoRandomSeed: 1
@@ -18027,7 +18027,7 @@ ParticleSystem:
   ringBufferLoopRange: {x: 0, y: 1}
   emitterVelocityMode: 1
   looping: 1
-  prewarm: 0
+  prewarm: 1
   playOnAwake: 1
   useUnscaledTime: 0
   autoRandomSeed: 1
@@ -26549,8 +26549,6 @@ MonoBehaviour:
   - {fileID: 987960269}
   commonPlaneSpeed: 850
   windExaggeration: 10
-  angleAdjustmentTime: 10
-  speedAdjustmentTime: 10
   greenColor: {r: 0.1, g: 1, b: 0.1, a: 1}
   yellowColor: {r: 1, g: 0.9965496, b: 0, a: 1}
   redColor: {r: 1, g: 0.1, b: 0.1, a: 1}

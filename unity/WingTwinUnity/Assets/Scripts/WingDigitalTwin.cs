@@ -583,13 +583,13 @@ public class WingDigitalTwin : MonoBehaviour
         if (vertexColors == null || vertexColors.Length != vertexCount)
             vertexColors = new Color[vertexCount];
 
-        float minS = 0f;
-        float maxS = 1000000f;
+        // float minS = 0f;
+        //float maxS = 1000000f;
 
         for (int i = 0; i < vertexCount; i++)
         {
             float absStress = Mathf.Abs(stressField[i]);
-            float t = Mathf.Clamp01(absStress / maxS);
+            float t = Mathf.Clamp01(absStress / stressMax);
             vertexColors[i] = stressGradient.Evaluate(t);
         }
 

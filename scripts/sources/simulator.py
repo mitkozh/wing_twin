@@ -89,11 +89,14 @@ class SimulatorSource(DataSource):
         steady = compute_aero_force(angle_deg, airspeed)
 
         # Dynamic excitations as fractions of the steady force
-        bending = 0.25 * steady * math.sin(2 * math.pi * 4.2 * t)
-        torsion = 0.05 * steady * math.sin(2 * math.pi * 18.3 * t + 1.1)
-        turbulence = 0.03 * steady * np.random.normal(0, 1) * (
+        bending = 0.02 * steady * math.sin(2 * math.pi * 4.2 * t)
+        bending = 0.0
+        #torsion = 0.05 * steady * math.sin(2 * math.pi * 18.3 * t + 1.1)
+        torsion = 0.0
+        turbulence = 0.003 * steady * np.random.normal(0, 1) * (
             1.0 + 0.5 * math.sin(2 * math.pi * 0.3 * t)
         )
+        turbulence = 0.0
 
         gust = 0.0
         if np.random.random() < 1 / (60 * self.config.sample_rate):
@@ -104,7 +107,7 @@ class SimulatorSource(DataSource):
             )
             self._gust_remaining -= 1
 
-        noise = np.random.normal(0, 0.5)
+        noise = np.random.normal(0, 0.05)
         return steady + bending + torsion + turbulence + gust + noise
 
     def _read(self, t: float, airspeed: float, angle_deg: float) -> tuple[np.ndarray, float]:
