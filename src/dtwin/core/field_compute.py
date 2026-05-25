@@ -51,13 +51,4 @@ def compute_deformation_field(U: np.ndarray, F: np.ndarray) -> np.ndarray:
     return U * F
 
 
-def field_summary(stress: np.ndarray, deformation: np.ndarray) -> dict:
-    """Get summary statistics for stress and deformation fields."""
-    return {
-        "num_nodes": stress.size,
-        "stress_max_pa": float(np.abs(stress).max()),
-        "stress_max_mpa": float(np.abs(stress).max() / 1e6),
-        "stress_mean_pa": float(np.mean(stress)),
-        "deformation_max_m": float(np.abs(deformation).max()),
-        "deformation_mean_m": float(np.mean(deformation)),
-    }
+

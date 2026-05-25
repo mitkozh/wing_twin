@@ -73,11 +73,3 @@ class DamagePlotter(BasePlotter):
         logger.debug("Saved %s", path)
         return path
 
-    def _empty_plot(self, plt, filename: str, message: str) -> Path:
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.text(0.5, 0.5, message, transform=ax.transAxes, ha="center")
-        fig.tight_layout()
-        path = self.output_dir / filename
-        fig.savefig(path, bbox_inches="tight")
-        plt.close(fig)
-        return path

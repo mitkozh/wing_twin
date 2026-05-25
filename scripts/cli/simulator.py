@@ -8,7 +8,7 @@ import time
 
 import paho.mqtt.client as mqtt
 
-from scripts.config import SimulationConfig
+from scripts.settings import SimulationConfig
 from scripts.sources import SimulatorSource
 from scripts.logger import get_logger
 
@@ -48,16 +48,20 @@ def main():
     def on_control(client, userdata, msg):
         try:
             payload = json.loads(msg.payload.decode())
-            simulator.set_speed(int(payload.get("servo", 100)))
+            if "position" in payload:
+                steps = int(payload["position"])
+                simulator.state.airspeed = float(payload.get("speed", simulator.state.airspeed))
+            elif "servo" in payload:
+                simulator.set_speed(int(payload["servo"]))
         except Exception:
             pass
 
     mqtt_client.on_connect = on_connect
     mqtt_client.on_message = on_control
-    mqtt_client.subscribe(mqtt_subscribe)
 
     try:
         mqtt_client.connect(args.broker, args.port, 60)
+        mqtt_client.subscribe(mqtt_subscribe)
     except Exception as e:
         logger.error("Cannot connect to MQTT: %s", e)
         return

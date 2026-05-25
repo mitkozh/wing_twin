@@ -2,7 +2,7 @@
 Data source abstractions.
 """
 
-from .base import DataSource, SensorReading
+from ..types import DataSource, SensorReading
 from .simulator import SimulatorSource
 from .mqtt import MqttSource
 

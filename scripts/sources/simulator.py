@@ -11,12 +11,10 @@ from typing import Optional
 
 import numpy as np
 
-from .base import DataSource, SensorReading
-from ..config import SimulationConfig
+from ..types import DataSource, SensorReading
+from ..settings import SimulationConfig
 from dtwin.core.matrices import TransferMatrices
 from dtwin.core.stepper_physics import compute_aero_force
-
-STRAIN_TO_RAW = 1e-6
 
 
 @dataclass
@@ -86,17 +84,14 @@ class SimulatorSource(DataSource):
 
     def _generate_force(self, t: float, airspeed: float, angle_deg: float) -> float:
         """Generate a force signal in Newtons based on airspeed and angle of attack."""
-        ref_speed = self.config.reference_speed
-        speed_ratio = airspeed / ref_speed if airspeed > 0 else 0.0
-        q = speed_ratio * speed_ratio  # dynamic pressure ratio
 
         # Steady aerodynamic force
-        steady = compute_aero_force(angle_deg, airspeed, ref_speed)
+        steady = compute_aero_force(angle_deg, airspeed)
 
-        # Dynamic excitations scale with dynamic pressure
-        bending = 2000.0 * q * math.sin(2 * math.pi * 4.2 * t)
-        torsion = 400.0 * q * math.sin(2 * math.pi * 18.3 * t + 1.1)
-        turbulence = 200.0 * q * np.random.normal(0, 1) * (
+        # Dynamic excitations as fractions of the steady force
+        bending = 0.25 * steady * math.sin(2 * math.pi * 4.2 * t)
+        torsion = 0.05 * steady * math.sin(2 * math.pi * 18.3 * t + 1.1)
+        turbulence = 0.03 * steady * np.random.normal(0, 1) * (
             1.0 + 0.5 * math.sin(2 * math.pi * 0.3 * t)
         )
 
@@ -104,7 +99,7 @@ class SimulatorSource(DataSource):
         if np.random.random() < 1 / (60 * self.config.sample_rate):
             self._gust_remaining = int(0.5 * self.config.sample_rate)
         if getattr(self, "_gust_remaining", 0) > 0:
-            gust = 300.0 * q * math.sin(
+            gust = 0.04 * steady * math.sin(
                 math.pi * (1 - self._gust_remaining / (0.5 * self.config.sample_rate))
             )
             self._gust_remaining -= 1
@@ -116,11 +111,10 @@ class SimulatorSource(DataSource):
         """Generate strain using forward model epsilon = H @ F + noise."""
         base_force = self._generate_force(t, airspeed, angle_deg)
         F = np.full(self._matrices.n_forces, base_force, dtype=np.float64)
-        expected_raw = self._matrices.H @ F  # raw strain (dimensionless)
-        expected_ue = expected_raw.flatten() / STRAIN_TO_RAW  # convert to microstrain
-        noise = np.random.normal(0, 0.05, size=expected_ue.shape)
-        strain_vector = expected_ue + noise
-        accel_z = -expected_ue[0] * 0.01 + np.random.normal(0, 0.5)
+        strain_raw = (self._matrices.H @ F).flatten()  # dimensionless
+        noise = np.random.normal(0, 5e-8, size=strain_raw.shape)
+        strain_vector = strain_raw + noise
+        accel_z = -strain_raw[0] * 10000 + np.random.normal(0, 0.5)
         return strain_vector, accel_z
 
     def read(self) -> Optional[SensorReading]:

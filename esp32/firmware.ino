@@ -303,11 +303,11 @@ void setup() {
     init_hx711();
     delay(100);
     tare();
-    // NOTE: strainScale is currently 1.0 (raw ADC counts, not microstrain).
+    // NOTE: strainScale is currently 1.0 (raw ADC counts).
     // Before use, calibrate by applying a known load, computing expected
-    // microstrain from beam theory (epsilon = F*L / (E*I * distance)),
-    // then set: strainScale = expected_microstrain / measured_raw_count
-    // The Python pipeline expects microstrain (ue) input.
+    // strain from beam theory (epsilon = F*L / (E*I * distance)),
+    // then set: strainScale = expected_strain / measured_raw_count
+    // The Python pipeline expects raw (dimensionless) strain input.
     Serial.println("HX711 array initialized and tared");
 
     // Stepper

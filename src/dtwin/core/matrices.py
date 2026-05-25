@@ -8,7 +8,7 @@ Transfer matrices are pre-computed from Ansys FEA with unit force (1 N):
 - U: Deformation field transfer matrix (n_nodes x n_forces). Maps force -> deformation (m).
 
 All matrices are loaded raw from .npy files.
-  - Strain: microstrain (ue) = raw_strain * 1e6
+  - Strain: raw (dimensionless)
   - Force: Newtons (N)
   - Stress: Pascal (Pa) from S @ F; convert to MPa via /1e6 for fatigue
   - Deformation: meters (m)
@@ -138,11 +138,4 @@ def _validate_matrices(
         raise ValueError(f"Matrix validation failed: {'; '.join(errors)}")
 
 
-def matrix_info(matrices: TransferMatrices) -> dict:
-    """Get human-readable information about transfer matrices."""
-    return {
-        "H": f"{matrices.H.shape} (force -> raw strain)",
-        "H_inv": f"{matrices.H_inv.shape} (raw strain -> force)",
-        "S": f"{matrices.S.shape} (force -> stress Pa)",
-        "U": f"{matrices.U.shape} (force -> deformation m)",
-    }
+
