@@ -42,9 +42,10 @@ async def run_demo_async(
     duration_s: int,
     seed: Optional[int] = None,
     record: bool = True,
-    record_figures: bool = False
+    record_figures: bool = False,
+    headless: bool = False,
 ) -> tuple[DigitalTwinEngine, HistoryState]:
-    """Run demo with WebSocket broadcasting."""
+    """Run demo with optional WebSocket broadcasting."""
     config = EngineConfig(seed=seed)
     engine = DigitalTwinEngine(config)
 
@@ -58,22 +59,24 @@ async def run_demo_async(
     engine.data_source = simulator
 
     history = HistoryState()
-    running = [True]  # Use list for mutability across threads
+    running = [True]
     start_time = time.time()
 
-    broadcaster = WebSocketBroadcaster()
-    command_handler = EngineCommandHandler(engine)
+    if not headless:
+        broadcaster = WebSocketBroadcaster()
+        command_handler = EngineCommandHandler(engine)
 
-    def state_provider():
-        return engine.state.for_unity()
+        def state_provider():
+            return engine.state.for_unity()
 
-    broadcaster.set_state_provider(state_provider)
-    broadcaster.set_command_handler(command_handler)
+        broadcaster.set_state_provider(state_provider)
+        broadcaster.set_command_handler(command_handler)
 
-    display_task = asyncio.create_task(broadcaster.start())
+        display_task = asyncio.create_task(broadcaster.start())
+    else:
+        broadcaster = None
 
     async def process_loop():
-        broadcast_count = 0
         record_interval = 10
         frame_count = 0
         while running[0]:
@@ -91,19 +94,17 @@ async def run_demo_async(
                         history.stress_field_history.append(list(engine.state.stress_field))
                         history.deformation_field_history.append(list(engine.state.deformation_field))
                     engine.clear_cycles()
-            
-            clients = len(broadcaster._clients)
-            if clients > 0:
+
+            if not headless and broadcaster is not None and broadcaster._clients:
                 await broadcaster.broadcast()
-                broadcast_count += 1
-                if broadcast_count % 20 == 0:
-                    logger.debug("Sent %d broadcasts", broadcast_count)
-            
+
             await asyncio.sleep(1.0 / sim_config.sample_rate)
 
     process_task = asyncio.create_task(process_loop())
-    display_thread = threading.Thread(target=_display_thread, args=(engine, running), daemon=True)
-    display_thread.start()
+
+    if not headless:
+        display_thread = threading.Thread(target=_display_thread, args=(engine, running), daemon=True)
+        display_thread.start()
 
     if duration_s > 0:
         try:
@@ -111,7 +112,6 @@ async def run_demo_async(
         except KeyboardInterrupt:
             pass
     else:
-        # Run indefinitely until keyboard interrupt
         try:
             while running[0]:
                 await asyncio.sleep(1)
@@ -147,38 +147,48 @@ def main():
     parser = argparse.ArgumentParser(description="Wing Digital Twin Demo")
     parser.add_argument("--duration", type=int, default=30, help="Simulation duration in seconds (use 0 for infinite)")
     parser.add_argument("--run", action="store_true", help="Run indefinitely until Ctrl+C")
+    parser.add_argument("--headless", action="store_true", help="Run without WebSocket or dashboard")
     parser.add_argument("--figures", action="store_true", help="Generate PNG figures after simulation")
-    parser.add_argument("--figures-only", action="store_true", help="Regenerate figures from last saved data")
+    parser.add_argument("--figures-only", action="store_true", help="Regenerate figures from saved data")
+    parser.add_argument("--data-dir", type=str, default=None, help="Data directory for --figures-only (default: figures/)")
+    parser.add_argument("--output-dir", type=str, default=None, help="Output directory for figures (default: figures/)")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible results")
     args = parser.parse_args()
 
-    # Override duration for --run flag
     if args.run:
         args.duration = 0
 
     if args.seed is not None:
         logger.info("Random seed set to %d", args.seed)
 
+    data_dir = Path(args.data_dir) if args.data_dir else PROJECT_ROOT / "figures"
+    output_dir = Path(args.output_dir) if args.output_dir else data_dir
+
+    if args.figures_only:
+        loader = DataLoader(data_dir)
+        strain, times, damage, forces, stress_fields, deformations, cycles = loader.load_tuple()
+        if strain:
+            generator = VisualizationGenerator(output_dir)
+            generator.generate(strain, times, damage, cycles or [], stress_fields, deformations)
+        else:
+            logger.warning("No saved data found in %s", data_dir)
+        return
+
+    mode = "Headless" if args.headless else "Full Stack"
     logger.info("=" * 60)
-    logger.info("  Wing Digital Twin Full Stack Demo")
+    logger.info("  Wing Digital Twin Demo (%s)", mode)
     logger.info("=" * 60)
     fatigue_config = FatigueConfig()
     logger.info("  Sample rate:  %d Hz", SimulationConfig().sample_rate)
     logger.info("  Thresholds:   SAFE<%s  WARN<%s  CRIT>=%s", fatigue_config.damage_warning, fatigue_config.damage_critical, fatigue_config.damage_critical)
     logger.info("=" * 60)
 
-    if args.figures_only:
-        loader = DataLoader(PROJECT_ROOT / "figures")
-        strain, times, damage, forces, stress_fields, deformations, cycles = loader.load_tuple()
-        if strain:
-            generator = VisualizationGenerator(PROJECT_ROOT / "figures")
-            generator.generate(strain, times, damage, cycles or [], stress_fields, deformations)
-        return
-
-    engine, history = asyncio.run(run_demo_async(args.duration, args.seed, record=True, record_figures=args.figures))
+    engine, history = asyncio.run(
+        run_demo_async(args.duration, args.seed, record=True, record_figures=args.figures, headless=args.headless)
+    )
 
     if args.figures and history.strain_history:
-        exporter = DataExporter(PROJECT_ROOT / "figures")
+        exporter = DataExporter(data_dir)
         exporter.save(
             history.strain_history,
             history.times_history,
@@ -188,7 +198,7 @@ def main():
             history.stress_field_history,
             history.deformation_field_history,
         )
-        generator = VisualizationGenerator(PROJECT_ROOT / "figures")
+        generator = VisualizationGenerator(output_dir)
         generator.generate(
             history.strain_history,
             history.times_history,

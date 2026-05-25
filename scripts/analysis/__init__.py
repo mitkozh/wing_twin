@@ -1,8 +1,7 @@
 """
-Analysis module - offline testing and data utilities.
+Analysis module - data export and loading utilities.
 """
 
-from .offline_runner import OfflineRunner
 from .data_export import DataExporter, DataLoader
 
-__all__ = ["OfflineRunner", "DataExporter", "DataLoader"]
+__all__ = ["DataExporter", "DataLoader"]

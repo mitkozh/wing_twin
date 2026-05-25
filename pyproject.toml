@@ -42,8 +42,6 @@ dev = [
 wing-orchestrator = "scripts.cli.run:main"
 wing-demo = "scripts.cli.demo:main"
 wing-simulator = "scripts.cli.simulator:main"
-wing-test = "scripts.cli.offline:main"
-wing-viz = "scripts.cli.visualizer:main"
 wing-mesh-export = "scripts.cli.mesh_export:main"
 
 [tool.setuptools]
