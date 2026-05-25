@@ -1,5 +1,5 @@
 """
-Data source abstractions.
+Shared type definitions for the digital twin system.
 """
 
 from abc import ABC, abstractmethod

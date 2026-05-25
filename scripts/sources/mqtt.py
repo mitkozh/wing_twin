@@ -6,9 +6,9 @@ from typing import Optional
 
 import numpy as np
 
-from .base import DataSource, SensorReading
-from ..config import MqttConfig
-from ..output.mqtt_handler import MqttHandler
+from ..types import DataSource, SensorReading
+from ..settings import MqttConfig
+from ..mqtt.handler import MqttHandler
 
 
 class MqttSource(DataSource):

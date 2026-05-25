@@ -52,6 +52,7 @@ class TwinState:
     angle_of_attack: float = 0.0
     airspeed: float = 0.0
     stepper_position: int = 0
+    heatmap_mode: str = "damage"
 
     def for_unity(self) -> dict:
         """Format state for Unity WebSocket."""
@@ -113,6 +114,7 @@ class TwinState:
             "new_angle_of_attack": self.angle_of_attack,
             "new_speed": self.airspeed,
             "stepper_position": self.stepper_position,
+            "heatmap_mode": self.heatmap_mode,
         }
 
     def for_esp32(self) -> dict:

@@ -7,10 +7,10 @@ Uses real sensors via MQTT - connects to the physical wing system.
 import argparse
 import asyncio
 
-from scripts.config import Config
+from scripts.settings import Config
 from scripts.engine import DigitalTwinEngine, EngineConfig
 from scripts.sources import MqttSource
-from scripts.output import WebSocketBroadcaster, EngineCommandHandler
+from scripts.output import MqttPublisher, WebSocketBroadcaster, EngineCommandHandler
 from scripts.logger import get_logger
 
 logger = get_logger(__name__)
@@ -33,6 +33,9 @@ async def run_production(config: Config):
     mqtt_source = MqttSource(config.mqtt)
     engine.data_source = mqtt_source
 
+    mqtt_publisher = MqttPublisher(config.mqtt)
+    mqtt_publisher.connect()
+
     broadcaster = WebSocketBroadcaster(port=config.websocket.port)
     command_handler = EngineCommandHandler(engine)
     broadcaster.set_state_provider(engine.state.for_unity)
@@ -41,12 +44,14 @@ async def run_production(config: Config):
     logger.info("  Wing Digital Twin - Production Mode")
     logger.info("=" * 60)
     logger.info("  MQTT:   %s:%d", config.mqtt.broker, config.mqtt.port)
-    logger.info("  Topics: %s", config.mqtt.sensors_topic)
+    logger.info("  Sensors topic: %s", config.mqtt.sensors_topic)
+    logger.info("  Control topic: %s", config.mqtt.control_topic)
     logger.info("=" * 60)
 
     async def process_loop():
         while True:
             engine.step()
+            mqtt_publisher.publish(config.mqtt.control_topic, engine.state.for_esp32())
             await asyncio.sleep(0.05)
             await broadcaster.broadcast()
 

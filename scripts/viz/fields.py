@@ -19,7 +19,7 @@ class StressFieldPlotter(BasePlotter):
         plt = self._get_plt()
 
         if not stress_field_history:
-            return self._empty_plot(plt, filename, "No stress field data available")
+            return self._empty_plot(plt, filename, "No stress field data available", "Stress Field")
 
         latest = np.array(stress_field_history[-1])
         fig, ax = plt.subplots(figsize=(10, 4))
@@ -41,15 +41,7 @@ class StressFieldPlotter(BasePlotter):
         logger.debug("Saved %s", path)
         return path
 
-    def _empty_plot(self, plt, filename: str, message: str) -> Path:
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.text(0.5, 0.5, message, transform=ax.transAxes, ha="center")
-        ax.set_title("Stress Field")
-        fig.tight_layout()
-        path = self.output_dir / filename
-        fig.savefig(path, bbox_inches="tight")
-        plt.close(fig)
-        return path
+
 
 
 class DeformationFieldPlotter(BasePlotter):
@@ -60,7 +52,7 @@ class DeformationFieldPlotter(BasePlotter):
         plt = self._get_plt()
 
         if not deformation_field_history:
-            return self._empty_plot(plt, filename, "No deformation field data available")
+            return self._empty_plot(plt, filename, "No deformation field data available", "Deformation Field")
 
         latest = np.array(deformation_field_history[-1])
         abs_latest = np.abs(latest)
@@ -83,12 +75,3 @@ class DeformationFieldPlotter(BasePlotter):
         logger.debug("Saved %s", path)
         return path
 
-    def _empty_plot(self, plt, filename: str, message: str) -> Path:
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.text(0.5, 0.5, message, transform=ax.transAxes, ha="center")
-        ax.set_title("Deformation Field")
-        fig.tight_layout()
-        path = self.output_dir / filename
-        fig.savefig(path, bbox_inches="tight")
-        plt.close(fig)
-        return path

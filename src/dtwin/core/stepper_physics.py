@@ -15,7 +15,7 @@ PROTO_CL_ALPHA   = 2 * math.pi / (1 + 2 / PROTO_AR)  # finite-wing correction
 CD0              = 0.015     # zero-lift drag coefficient
 OSWALD_E         = 0.85      # Oswald efficiency factor
 
-F_MAX_NEWTONS     = 13.3 # to be adjusted
+F_MAX_NEWTONS     = 40.0
 MAX_STEPPER_STEPS = 2720 # 85 % of 3200
 
 
@@ -62,7 +62,7 @@ def compute_pitch_damping_force(
 
 def force_to_steps(
     F_newtons: float,
-    steps_per_newton: float = 204.0,
+    steps_per_newton: float = 68.0,
 ) -> int:
     """
     Convert aerodynamic force (N) to a stepper absolute position.
@@ -71,7 +71,7 @@ def force_to_steps(
     return min(raw, MAX_STEPPER_STEPS)
 
 
-def steps_to_force(steps: int, steps_per_newton: float = 204.0) -> float:
+def steps_to_force(steps: int, steps_per_newton: float = 68.0) -> float:
     """Convert stepper position back to equivalent force (N)."""
     if steps_per_newton <= 0:
         return 0.0

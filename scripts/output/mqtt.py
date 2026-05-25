@@ -7,7 +7,7 @@ from typing import Optional
 
 import paho.mqtt.client as mqtt
 
-from ..config import MqttConfig
+from ..settings import MqttConfig
 from ..logger import get_logger
 
 logger = get_logger(__name__)

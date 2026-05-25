@@ -138,11 +138,4 @@ def _validate_matrices(
         raise ValueError(f"Matrix validation failed: {'; '.join(errors)}")
 
 
-def matrix_info(matrices: TransferMatrices) -> dict:
-    """Get human-readable information about transfer matrices."""
-    return {
-        "H": f"{matrices.H.shape} (force -> raw strain)",
-        "H_inv": f"{matrices.H_inv.shape} (raw strain -> force)",
-        "S": f"{matrices.S.shape} (force -> stress Pa)",
-        "U": f"{matrices.U.shape} (force -> deformation m)",
-    }
+

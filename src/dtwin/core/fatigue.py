@@ -174,11 +174,6 @@ def update_confidence(
     return state.confidence
 
 
-def check_maintenance_needed(state: FatigueState) -> bool:
-    """Check if maintenance alert should be triggered."""
-    return state.alert_active
-
-
 def set_random_seed(seed: Optional[int] = None) -> None:
     """Set random seed for reproducible simulation results."""
     if seed is not None:

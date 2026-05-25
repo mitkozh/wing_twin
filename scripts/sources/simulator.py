@@ -11,8 +11,8 @@ from typing import Optional
 
 import numpy as np
 
-from .base import DataSource, SensorReading
-from ..config import SimulationConfig
+from ..types import DataSource, SensorReading
+from ..settings import SimulationConfig
 from dtwin.core.matrices import TransferMatrices
 from dtwin.core.stepper_physics import compute_aero_force
 

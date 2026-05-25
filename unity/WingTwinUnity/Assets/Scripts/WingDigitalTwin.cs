@@ -62,7 +62,7 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] float speedAdjustmentTime = 10;
 
     const float MAX_ANGLE_DEGREES = 15f;
-    const float MAX_SPEED_KMH = 120f;
+    const float MAX_SPEED_KMH = 200f;
     const float MAX_STEPPER_STEPS = 2720f;
 
     [Header("LED Colors")]
@@ -618,7 +618,7 @@ public class WingDigitalTwin : MonoBehaviour
             vertexColors = new Color[vertexCount];
 
         float minS = 0f;
-        float maxS = 500000f;
+        float maxS = 1000000f;
 
         for (int i = 0; i < vertexCount; i++)
         {
@@ -812,6 +812,7 @@ public class WingDigitalTwin : MonoBehaviour
         if (heatmapModeToggle != null)
             heatmapModeToggle.SetIsOnWithoutNotify(showDamageHeatmap);
         UpdateHeatmapToggleLabel(showDamageHeatmap);
+        SendCommand("set_heatmap_mode", new Dictionary<string, object> { { "mode", showDamageHeatmap ? "damage" : "stress" } });
         Debug.Log($"[HEATMAP] Mode: {(showDamageHeatmap ? "DAMAGE" : "STRESS")}");
     }
 
@@ -819,6 +820,7 @@ public class WingDigitalTwin : MonoBehaviour
     {
         showDamageHeatmap = isOn;
         UpdateHeatmapToggleLabel(isOn);
+        SendCommand("set_heatmap_mode", new Dictionary<string, object> { { "mode", isOn ? "damage" : "stress" } });
         Debug.Log($"[HEATMAP] Mode: {(showDamageHeatmap ? "DAMAGE" : "STRESS")}");
     }
 

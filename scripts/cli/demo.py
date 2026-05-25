@@ -15,7 +15,7 @@ from dtwin.core.fatigue import FatigueConfig
 
 from pathlib import Path
 
-from ..config import PROJECT_ROOT, SimulationConfig
+from ..settings import PROJECT_ROOT, SimulationConfig
 from ..analysis import DataExporter, DataLoader
 from ..viz import VisualizationGenerator
 from ..engine import DigitalTwinEngine, EngineConfig

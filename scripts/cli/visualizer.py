@@ -6,7 +6,7 @@ import argparse
 
 from pathlib import Path
 
-from scripts.config import PROJECT_ROOT
+from scripts.settings import PROJECT_ROOT
 from scripts.viz import VisualizationGenerator
 from scripts.analysis import DataLoader
 from scripts.logger import get_logger

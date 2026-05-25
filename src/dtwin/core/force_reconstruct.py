@@ -36,10 +36,4 @@ def solve_forces(H_inv: np.ndarray, strain_vector: np.ndarray) -> np.ndarray:
     return H_inv @ strain_raw
 
 
-def force_vector_info(F: np.ndarray) -> dict:
-    """Get information about a force vector."""
-    return {
-        "num_forces": F.size,
-        "magnitudes": F.ravel().tolist(),
-        "max_abs": float(np.abs(F).max()),
-    }
+

@@ -40,7 +40,27 @@ def decide_control(damage: float, confidence: float = 100.0, config: Optional[Fa
     return led, speed
 
 
-def describe_state(damage: float, led: str, speed: int, config: Optional[FatigueConfig] = None) -> str:
+def decide_control_stress(stress_max_pa: float, speed_pct: int = 100) -> tuple[str, int]:
+    """
+    Determine LED state based on stress level (for stress heatmap mode).
+    Uses same threshold convention as damage: green < 0.3MPa, yellow < 0.8MPa, red >= 0.8MPa.
+
+    Args:
+        stress_max_pa: Maximum stress in Pascals
+        speed_pct: Current speed percentage
+
+    Returns:
+        Tuple of (led_state: str, speed_pct: int)
+    """
+    stress_mpa = stress_max_pa / 1e6
+    if stress_mpa >= 0.8:
+        return "red", max(0, speed_pct)
+    elif stress_mpa >= 0.3:
+        return "yellow", speed_pct
+    return "green", speed_pct
+
+
+def _describe_state(damage: float, led: str, speed: int, config: Optional[FatigueConfig] = None) -> str:
     """
     Generate a human-readable description of the current wing state.
 

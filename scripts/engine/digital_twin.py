@@ -14,6 +14,7 @@ from dtwin import (
     compute_deformation_field,
     accumulate_damage,
     decide_control,
+    decide_control_stress,
     compute_aero_force,
     compute_pitch_damping_force,
     force_to_steps,
@@ -29,7 +30,7 @@ from dtwin.core.matrices import TransferMatrices
 
 from .config import EngineConfig
 from .state import TwinState
-from ..sources.base import DataSource, SensorReading
+from ..types import DataSource, SensorReading
 
 
 class DigitalTwinEngine:
@@ -159,11 +160,18 @@ class DigitalTwinEngine:
         self.state.confidence = self.fatigue_state.confidence
         self.state.maintenance_alert = self.fatigue_state.alert_active
 
-        self.state.led_state, self.state.speed_pct = decide_control(
-            self.state.damage,
-            self.fatigue_state.confidence,
-            config=self.config.fatigue,
-        )
+        if self.state.heatmap_mode == "stress" and self.state.stress_field:
+            max_stress_pa = max(abs(s) for s in self.state.stress_field)
+            self.state.led_state, self.state.speed_pct = decide_control_stress(
+                max_stress_pa,
+                speed_pct=self.state.speed_pct,
+            )
+        else:
+            self.state.led_state, self.state.speed_pct = decide_control(
+                self.state.damage,
+                self.fatigue_state.confidence,
+                config=self.config.fatigue,
+            )
 
     def step(self) -> bool:
         """Process one step from the data source. Returns True if new data processed."""

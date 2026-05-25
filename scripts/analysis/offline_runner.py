@@ -9,6 +9,10 @@ from typing import Optional
 
 import numpy as np
 
+from ..logger import get_logger
+
+logger = get_logger(__name__)
+
 from dtwin import (
     load_transfer_matrices,
     solve_forces,

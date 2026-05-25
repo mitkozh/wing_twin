@@ -10,7 +10,7 @@ from collections import deque
 import numpy as np
 import paho.mqtt.client as mqtt
 
-from ..config import MqttConfig
+from ..settings import MqttConfig
 from ..logger import get_logger
 
 logger = get_logger(__name__)
@@ -27,7 +27,6 @@ class MqttHandler:
         self._connected = False
         self._strain_buffers: dict[str, deque] = {}
         self._num_gauges = 3
-        self._message_callback: Optional[Callable] = None
 
     @property
     def strain_buffers(self) -> dict[str, deque]:
@@ -36,14 +35,6 @@ class MqttHandler:
     @property
     def num_gauges(self) -> int:
         return self._num_gauges
-
-    @num_gauges.setter
-    def num_gauges(self, value: int):
-        self._num_gauges = value
-
-    def set_message_callback(self, callback: Callable) -> None:
-        """Set callback for processed sensor data."""
-        self._message_callback = callback
 
     def connect(self) -> bool:
         """Connect to MQTT broker."""
@@ -69,11 +60,6 @@ class MqttHandler:
         if self._client:
             self._client.disconnect()
 
-    def publish(self, topic: str, payload: dict) -> None:
-        """Publish a message to a topic."""
-        if self._client and self._connected:
-            self._client.publish(topic, json.dumps(payload))
-
     def is_connected(self) -> bool:
         return self._connected
 
@@ -82,7 +68,6 @@ class MqttHandler:
             self._connected = True
             logger.info("Connected to %s", self.config.broker)
             client.subscribe(self.config.sensors_topic)
-            client.subscribe(self.config.control_topic)
         else:
             logger.error("Connection failed: %s", rc)
 
@@ -91,14 +76,7 @@ class MqttHandler:
         try:
             payload = json.loads(msg.payload.decode())
 
-            if "strain" in payload:
-                strain_val = float(payload["strain"])
-                key = "primary"
-                if key not in self._strain_buffers:
-                    self._strain_buffers[key] = deque(maxlen=max(100, self._num_gauges))
-                self._strain_buffers[key].append(strain_val)
-
-            elif "strain_vector" in payload:
+            if "strain_vector" in payload:
                 strain_vals = np.array(payload["strain_vector"], dtype=np.float64)
                 self._num_gauges = len(strain_vals)
                 key = "vector"
@@ -107,8 +85,12 @@ class MqttHandler:
                 self._strain_buffers[key].clear()
                 self._strain_buffers[key].append(strain_vals.tolist())
 
-            if self._message_callback:
-                self._message_callback()
+            elif "strain" in payload:
+                strain_val = float(payload["strain"])
+                key = "primary"
+                if key not in self._strain_buffers:
+                    self._strain_buffers[key] = deque(maxlen=max(100, self._num_gauges))
+                self._strain_buffers[key].append(strain_val)
 
         except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
             logger.error("Parse error: %s", e)
