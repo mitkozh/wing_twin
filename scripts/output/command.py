@@ -51,9 +51,6 @@ class EngineCommandHandler:
         self._engine.state.angle_of_attack = angle
         self._engine.state.airspeed = speed
 
-    def _ref_speed(self) -> float:
-        return self._engine.config.reference_speed
-
     def _steps_per_newton(self) -> float:
         return self._engine.config.steps_per_newton
 

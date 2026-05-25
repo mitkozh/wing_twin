@@ -5,7 +5,7 @@ Provides rainflow cycle counting, Miner's Rule damage accumulation,
 and confidence monitoring via EMA-filtered residuals.
 
 Units:
-  - Strain input: microstrain (ue)
+  - Strain input: raw (dimensionless)
   - Stress: MPa
   - Damage: dimensionless (0.0 to 1.0)
   - Confidence: percentage (0 to 100)
@@ -25,7 +25,7 @@ from py_fatigue.damage.stress_life import calc_pm
 class FatigueConfig:
     min_buffer_size: int = 50
     strain_buffer_size: int = 3000
-    strain_to_stress: float = 70_000.0  # Pa/ue
+    strain_to_stress: float = 70_000.0  # MPa per dimensionless strain
     rainflow_range_bin_width: float = 2.0  # MPa
     critical_stress_threshold: float = 50.0  # MPa
     critical_node_percentile: float = 90.0
@@ -75,7 +75,7 @@ def accumulate_damage(
     Accumulate fatigue damage using rainflow cycle counting and Miner's Rule.
 
     Args:
-        strain_buffer: Deque of strain values in microstrain (ue)
+        strain_buffer: Deque of strain values (dimensionless)
         state: FatigueState instance to update
         sn_curve: S-N curve for damage calculation
         config: Configuration parameters
@@ -93,7 +93,7 @@ def accumulate_damage(
     state.res_sig = []
 
     strain_arr = np.array(strain_buffer, dtype=np.float64)
-    stress_arr = strain_arr * config.strain_to_stress / 1e6  # ue -> MPa
+    stress_arr = strain_arr * config.strain_to_stress  # dimensionless -> MPa
 
     if pending:
         combined = np.concatenate([np.array(pending), stress_arr])
@@ -142,8 +142,8 @@ def update_confidence(
 
     Args:
         state: FatigueState instance to update
-        observed_strain: Measured strain vector in microstrain (ue)
-        expected_strain: Reconstructed strain vector in microstrain (ue)
+        observed_strain: Measured strain (dimensionless)
+        expected_strain: Reconstructed strain (dimensionless)
         config: Configuration parameters
 
     Returns:

@@ -71,8 +71,3 @@ def force_to_steps(
     return min(raw, MAX_STEPPER_STEPS)
 
 
-def steps_to_force(steps: int, steps_per_newton: float = 68.0) -> float:
-    """Convert stepper position back to equivalent force (N)."""
-    if steps_per_newton <= 0:
-        return 0.0
-    return steps / steps_per_newton

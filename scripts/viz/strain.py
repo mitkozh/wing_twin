@@ -39,13 +39,13 @@ class StrainPlotter(BasePlotter):
         ax.plot(times, envelope, color="#ff9966", linewidth=0.8, alpha=0.5, label="Peak envelope")
 
         ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Strain (microstrain)")
+        ax.set_ylabel("Strain")
         ax.set_title("Wing Root Strain Time Series")
         ax.legend(loc="upper right")
         ax.grid(True, alpha=0.3)
         ax.set_xlim(times[0], times[-1])
 
-        textstr = f"mean={np.mean(strain):.1f} με  max={np.max(strain):.1f} με  std={np.std(strain):.1f} με"
+        textstr = f"mean={np.mean(strain):.1e}  max={np.max(strain):.1e}  std={np.std(strain):.1e}"
         ax.text(0.02, 0.95, textstr, transform=ax.transAxes, fontsize=8,
                 verticalalignment="top", color="#aaaaaa",
                 bbox=dict(boxstyle="round", facecolor="#222233", alpha=0.8))
@@ -57,11 +57,3 @@ class StrainPlotter(BasePlotter):
         logger.debug("Saved %s", path)
         return path
 
-    def _empty_plot(self, plt, filename: str, message: str) -> Path:
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.text(0.5, 0.5, message, transform=ax.transAxes, ha="center")
-        fig.tight_layout()
-        path = self.output_dir / filename
-        fig.savefig(path, bbox_inches="tight")
-        plt.close(fig)
-        return path

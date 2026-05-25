@@ -16,8 +16,6 @@ from ..settings import SimulationConfig
 from dtwin.core.matrices import TransferMatrices
 from dtwin.core.stepper_physics import compute_aero_force
 
-STRAIN_TO_RAW = 1e-6
-
 
 @dataclass
 class SimulatorState:
@@ -113,11 +111,10 @@ class SimulatorSource(DataSource):
         """Generate strain using forward model epsilon = H @ F + noise."""
         base_force = self._generate_force(t, airspeed, angle_deg)
         F = np.full(self._matrices.n_forces, base_force, dtype=np.float64)
-        expected_raw = self._matrices.H @ F  # raw strain (dimensionless)
-        expected_ue = expected_raw.flatten() / STRAIN_TO_RAW  # convert to microstrain
-        noise = np.random.normal(0, 0.05, size=expected_ue.shape)
-        strain_vector = expected_ue + noise
-        accel_z = -expected_ue[0] * 0.01 + np.random.normal(0, 0.5)
+        strain_raw = (self._matrices.H @ F).flatten()  # dimensionless
+        noise = np.random.normal(0, 5e-8, size=strain_raw.shape)
+        strain_vector = strain_raw + noise
+        accel_z = -strain_raw[0] * 10000 + np.random.normal(0, 0.5)
         return strain_vector, accel_z
 
     def read(self) -> Optional[SensorReading]:

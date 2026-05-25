@@ -12,7 +12,7 @@ from dtwin.core.fatigue import FatigueConfig
 class EngineConfig:
     """Configuration for the digital twin engine."""
 
-    sample_rate: int = 10
+    sample_rate: int = 50
     seed: Optional[int] = None
     matrix_dir: Optional[str] = None
     fatigue: FatigueConfig = field(default_factory=FatigueConfig)

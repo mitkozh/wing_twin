@@ -64,5 +64,3 @@ class Config:
         config.mqtt.port = int(os.environ.get("WING_MQTT_PORT", config.mqtt.port))
         return config
 
-
-DEFAULT_CONFIG = Config()

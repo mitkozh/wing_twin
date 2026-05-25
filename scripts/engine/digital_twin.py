@@ -119,11 +119,10 @@ class DigitalTwinEngine:
         self.state.deformation_field = deformation.tolist()
 
         expected_raw = self._matrices.H @ F
-        expected_ue = expected_raw * 1e6  # raw strain (dimensionless) -> microstrain
         update_confidence(
             self.fatigue_state,
             strain_vec,
-            expected_ue,
+            expected_raw,
             config=self.config.fatigue,
         )
 

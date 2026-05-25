@@ -9,8 +9,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-import numpy as np
-
 from dtwin.core.fatigue import FatigueConfig
 
 from pathlib import Path
