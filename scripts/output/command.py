@@ -79,18 +79,23 @@ class EngineCommandHandler:
     def _cmd_set_flight_state(self, cmd: dict) -> dict:
         angle = cmd.get("angle")
         speed = cmd.get("speed")
+
         if angle is None and speed is None:
             return {"cmd": "error", "message": "Missing 'angle' and/or 'speed'"}
+
         state = self._engine.state
+
         if angle is not None:
-            state.target_angle_of_attack = float(angle)
+            state.desired_angle_of_attack = float(angle)
+
         if speed is not None:
-            state.target_airspeed = float(speed)
+            state.desired_airspeed = float(speed)
+
         return {
             "cmd": "ack",
             "action": "set_flight_state",
-            "target_angle": state.target_angle_of_attack,
-            "target_speed": state.target_airspeed,
+            "desired_angle": state.desired_angle_of_attack,
+            "desired_speed": state.desired_airspeed,
         }
 
     def _cmd_set_heatmap_mode(self, cmd: dict) -> dict:

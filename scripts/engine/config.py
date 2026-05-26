@@ -28,9 +28,14 @@ class EngineConfig:
 
     # Flight envelope
     reference_speed: float = 120.0   # km/h max
-    max_aoa: float         = 15.0    # °
     Cmq: float = -1.5                # pitch damping coefficient
     air_density: float = 1.225       # kg/m^3
+
+    # Flight safety limits
+    min_airspeed: float = 40.0
+    stress_limit: float = 100_000_000.0  # artificial test limit # It's too big to test the angle or speed adjustment
+    max_stepper_steps: int = 2720
+    max_aoa: float         = 15.0    # °
 
     # Second-order dynamics for flight state tracking
     angle_accel: float = 15.0   # deg/s^2

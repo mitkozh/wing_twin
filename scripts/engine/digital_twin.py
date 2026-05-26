@@ -57,6 +57,11 @@ class DigitalTwinEngine:
         self._angle_velocity: float = 0.0
         self._speed_velocity: float = 0.0
 
+        self.state.yield_point_pa = self.config.stress_limit
+        self.state.max_angle_deg = self.config.max_aoa
+        self.state.max_speed_kmh = self.config.reference_speed
+        self.state.max_stepper_steps = self.config.max_stepper_steps
+
         if self.config.seed is not None:
             set_random_seed(self.config.seed)
 
@@ -209,6 +214,9 @@ class DigitalTwinEngine:
             return False
 
         dt = 1.0 / self.config.sample_rate
+
+        self._update_safe_targets()
+
         self.state.angle_of_attack, self._angle_velocity = self._accel_towards(
             self.state.angle_of_attack,
             self._angle_velocity,
@@ -256,6 +264,40 @@ class DigitalTwinEngine:
             self.process_reading(reading)
             return True
         return False
+    
+    def _update_safe_targets(self) -> None:
+        """Convert desired angle of attack and speed into safe ones."""
+        desired_angle = float(self.state.desired_angle_of_attack)
+        desired_speed = float(self.state.desired_airspeed)
+
+        max_aoa = self.config.max_aoa
+        min_speed = self.config.min_airspeed
+        max_speed = self.config.reference_speed
+        stress_limit = self.config.stress_limit
+
+        # 1. Avoid desired angle being too high or too low (to prevent stalling)
+        target_angle = max(-max_aoa, min(max_aoa, desired_angle))
+
+        # 2. Also clamp the speed in allowable range
+        target_speed = max(min_speed, min(max_speed, desired_speed))
+
+        # 3. If current stress is too high, reduce speed first.
+        if self.state.stress_field:
+            max_stress = max(abs(s) for s in self.state.stress_field)
+
+            if max_stress > stress_limit and max_stress > 0.0:
+                speed_scale = (stress_limit / max_stress) ** 0.5
+                target_speed = max(min_speed, target_speed * speed_scale)
+
+                # 4. If speed cannot reduce enough, then reduce AoA.
+                if target_speed == min_speed:
+                    angle_scale = stress_limit / max_stress
+                    target_angle *= angle_scale
+
+        # It's purely conceptual and no physics is done as it is quite difficult to model
+        # without extra data which is usually kept secret. We focus on the fatigue after all.
+        self.state.target_angle_of_attack = target_angle
+        self.state.target_airspeed = target_speed
 
     @property
     def cycles(self) -> list:

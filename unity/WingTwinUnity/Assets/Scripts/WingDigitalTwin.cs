@@ -56,7 +56,7 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] TextMeshProUGUI planeTargetAngleLabel;
     [SerializeField] TextMeshProUGUI planeCurrentAngleLabel;
     [SerializeField] List<ParticleSystem> windParticles = new List<ParticleSystem>();
-    [SerializeField] float commonPlaneSpeed = 120f;
+    [SerializeField] float commonPlaneSpeed = 40f;
     [SerializeField] float windExaggeration = 1f;
 
     float maxAngleDeg = 12f;
@@ -166,6 +166,8 @@ public class WingDigitalTwin : MonoBehaviour
         planeCurrentSpeedLabel.text = $"Current Plane Speed: {currentPlaneSpeed:F1}";
         planeTargetSpeedLabel.text = $"Target Plane Speed: {targetPlaneSpeed:F1}";
 
+        Debug.Log($"Max Stress: {stressMax}");
+        // Debug.Log($"currentPlaneSpeed={currentPlaneSpeed}, common={commonPlaneSpeed}, exaggeration={windExaggeration}");
         foreach (ParticleSystem ps in windParticles)
         {
             float change = currentPlaneSpeed / commonPlaneSpeed;
@@ -177,7 +179,7 @@ public class WingDigitalTwin : MonoBehaviour
     }
     private void UpdatePlaneAngle()
     {
-        rotationalPivot.transform.localRotation = Quaternion.Euler(currentPlaneAngle, 0, 0);
+        rotationalPivot.transform.localRotation = Quaternion.Euler(0, currentPlaneAngle, 0);
 
         planeCurrentAngleLabel.text = $"Current Plane Angle: {currentPlaneAngle:F1}";
         planeTargetAngleLabel.text = $"Target Plane Angle: {targetAngleOfAttack:F1}";
@@ -436,17 +438,8 @@ public class WingDigitalTwin : MonoBehaviour
             targetAngleOfAttack = data.target_angle_of_attack;
             targetPlaneSpeed = data.target_speed;
 
-            suppressSliderCallback = true;
-            planeAngleSlider.value = targetAngleOfAttack;
-            if (stepsSlider != null)
-            {
-                stepsSlider.value = data.stepper_position;
-                if (stepsSliderLabel != null)
-                    stepsSliderLabel.text = $"Steps: {data.stepper_position}";
-            }
-            if (speedSlider != null)
-                speedSlider.value = targetPlaneSpeed;
-            suppressSliderCallback = false;
+            if (stepsSliderLabel != null)
+                stepsSliderLabel.text = $"Steps: {data.stepper_position}";
 
             if (data.stress_field != null && data.stress_field.Count > 0)
                 stressField = data.stress_field.ToArray();

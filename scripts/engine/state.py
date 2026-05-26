@@ -49,10 +49,24 @@ class TwinState:
     led_state: str = "green"
     maintenance_alert: bool = False
     node_damages: dict = field(default_factory=dict)
-    angle_of_attack: float = 0.0
-    airspeed: float = 0.0
-    target_angle_of_attack: float = 0.0
+
+    desired_angle_of_attack: float = 0.0 # Thats the requested angle of attack (from Unity)
+    desired_airspeed: float = 0.0
+
+    target_angle_of_attack: float = 0.0 # Thats the target, the one Python code approves
     target_airspeed: float = 0.0
+
+    angle_of_attack: float = 0.0 # Thats the current angle of attack, the one we slowly change
+    airspeed: float = 0.0
+
+    # Yield strength of 6061-T6 aluminum
+    # yield_point_pa = 276_000_000.0
+    # Artificial test value to avoid damaging the real wing during testing
+    yield_point_pa: float = 100_000_000.0
+    max_angle_deg: float = 12.0
+    max_speed_kmh: float = 80.0
+    max_stepper_steps: int = 2720
+
     stepper_position: int = 0
     heatmap_mode: str = "damage"
 
@@ -99,15 +113,6 @@ class TwinState:
         stress_min = min(stress_abs) if stress_abs else 0.0
         stress_max = max(stress_abs) if stress_abs else 0.0
 
-        # Yield strength of 6061-T6 aluminum
-        # yield_point_pa = 276_000_000.0
-        # Artificial test value to avoid damaging the real wing during testing
-        yield_point_pa = 100_000_000.0
-
-        max_angle_deg = 12.0
-        max_speed_kmh = 80.0
-        max_stepper_steps = 2720
-
         return {
             "strain": float(np.mean(self.strain_vector)) if self.strain_vector else 0.0,
             "forces": [round(f, 4) for f in self.forces],
@@ -126,12 +131,14 @@ class TwinState:
             "target_angle_of_attack": self.target_angle_of_attack,
             "new_speed": self.airspeed,
             "target_speed": self.target_airspeed,
+            "desired_angle_of_attack": self.desired_angle_of_attack,
+            "desired_speed": self.desired_airspeed,
             "stepper_position": self.stepper_position,
             "heatmap_mode": self.heatmap_mode,
-            "yield_point_pa": yield_point_pa,
-            "max_angle_deg": max_angle_deg,
-            "max_speed_kmh": max_speed_kmh,
-            "max_stepper_steps": max_stepper_steps,
+            "yield_point_pa": self.yield_point_pa,
+            "max_angle_deg": self.max_angle_deg,
+            "max_speed_kmh": self.max_speed_kmh,
+            "max_stepper_steps": self.max_stepper_steps,
         }
 
     def for_esp32(self) -> dict:
