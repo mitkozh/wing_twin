@@ -18,7 +18,7 @@ class StressFieldPlotter(BasePlotter):
         """Plot latest stress field."""
         plt = self._get_plt()
 
-        if not stress_field_history:
+        if stress_field_history is None or (isinstance(stress_field_history, np.ndarray) and stress_field_history.size == 0):
             return self._empty_plot(plt, filename, "No stress field data available", "Stress Field")
 
         latest = np.array(stress_field_history[-1])
@@ -51,7 +51,7 @@ class DeformationFieldPlotter(BasePlotter):
         """Plot latest deformation field."""
         plt = self._get_plt()
 
-        if not deformation_field_history:
+        if deformation_field_history is None or (isinstance(deformation_field_history, np.ndarray) and deformation_field_history.size == 0):
             return self._empty_plot(plt, filename, "No deformation field data available", "Deformation Field")
 
         latest = np.array(deformation_field_history[-1])

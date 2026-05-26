@@ -41,6 +41,7 @@ class DigitalTwinEngine:
         self,
         config: Optional[EngineConfig] = None,
         data_source: Optional[DataSource] = None,
+        initial_fatigue_state: Optional[FatigueState] = None,
     ):
         self.config = config or EngineConfig()
         self._matrices: Optional[TransferMatrices] = None
@@ -48,7 +49,7 @@ class DigitalTwinEngine:
         self._data_source: Optional[DataSource] = None
 
         self.state = TwinState()
-        self.fatigue_state = FatigueState()
+        self.fatigue_state = initial_fatigue_state or FatigueState()
         self._strain_buffer: deque = deque(
             maxlen=self.config.fatigue.strain_buffer_size
         )
@@ -151,6 +152,7 @@ class DigitalTwinEngine:
             config=self.config.fatigue,
         )
         self._cycles.extend(new_cycles)
+        self.state.cycles = list(self.fatigue_state.cycles)
 
         if self.fatigue_state.node_damages:
             values = list(self.fatigue_state.node_damages.values())

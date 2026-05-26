@@ -1,7 +1,8 @@
 """
-Analysis module - data export and loading utilities.
+Analysis module - recording and data loading utilities.
 """
 
-from .data_export import DataExporter, DataLoader
+from .loader import DataLoader, RecordingData
+from .recorder import DataRecorder, save_fatigue_state, load_fatigue_state
 
-__all__ = ["DataExporter", "DataLoader"]
+__all__ = ["DataLoader", "RecordingData", "DataRecorder", "save_fatigue_state", "load_fatigue_state"]

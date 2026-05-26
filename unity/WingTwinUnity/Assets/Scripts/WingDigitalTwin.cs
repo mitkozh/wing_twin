@@ -74,6 +74,9 @@ public class WingDigitalTwin : MonoBehaviour
     [Header("Simulation Parameters")]
     [SerializeField] float scaling = 1f;
 
+    [Header("Charts")]
+    [SerializeField] private ChartPanel chartPanel;
+
     [Header("Canvas Elements")]
     [SerializeField] List<ViewGroup> UIViewGroups = new List<ViewGroup>();
 
@@ -129,6 +132,11 @@ public class WingDigitalTwin : MonoBehaviour
         string meshPath = System.IO.Path.Combine(
             Application.streamingAssetsPath, "FinalMesh_surface.json");
         LoadMeshFromJson(meshPath);
+
+        if (chartPanel != null)
+        {
+            chartPanel.gameObject.SetActive(false);
+        }
 
         currentReconnectDelay = reconnectDelay;
         lastMessageTime = Time.time;
@@ -288,26 +296,44 @@ public class WingDigitalTwin : MonoBehaviour
         }
     }
 
-    void UpdateStressLegendValues()
+    void UpdateLegendValues()
     {
         if (stressLabels == null || stressLabels.Count == 0)
             return;
 
         int labelCount = stressLabels.Count;
 
-        for (int i = 0; i < labelCount; i++)
+        if (showDamageHeatmap)
         {
-            float t = i / (float)(labelCount - 1);
-            float value = Mathf.Lerp(0f, yieldPointPa, t);
+            for (int i = 0; i < labelCount; i++)
+            {
+                float t = i / (float)(labelCount - 1);
+                float value = Mathf.Lerp(0f, 1f, t);
 
-            string suffix = "";
+                string suffix = "";
+                if (i == labelCount - 1)
+                    suffix = " Max";
+                else if (i == 0)
+                    suffix = " Min";
 
-            if (i == labelCount - 1)
-                suffix = " Max";
-            else if (i == 0)
-                suffix = " Min";
+                stressLabels[i].text = $"{value:P0}{suffix}";
+            }
+        }
+        else
+        {
+            for (int i = 0; i < labelCount; i++)
+            {
+                float t = i / (float)(labelCount - 1);
+                float value = Mathf.Lerp(0f, yieldPointPa, t);
 
-            stressLabels[i].text = $"{value:E3}{suffix}";
+                string suffix = "";
+                if (i == labelCount - 1)
+                    suffix = " Max";
+                else if (i == 0)
+                    suffix = "Min";
+
+                stressLabels[i].text = $"{value:E3}{suffix}";
+            }
         }
     }
 
@@ -384,6 +410,22 @@ public class WingDigitalTwin : MonoBehaviour
         }
     }
 
+    void PushChartData(TwinState data)
+    {
+        if (chartPanel == null) return;
+
+        chartPanel.PushStrain(data.strain);
+        chartPanel.PushDamage(data.damage);
+        chartPanel.PushStress(data.stress_max, data.yield_point_pa > 0 ? data.yield_point_pa : yieldPointPa);
+
+        if (data.cycles_binned != null && data.cycles_binned.Count > 0)
+        {
+            float[] ranges = data.cycles_binned.Select(c => c.range).ToArray();
+            float[] counts = data.cycles_binned.Select(c => c.count).ToArray();
+            chartPanel.SetRainflowBins(ranges, counts);
+        }
+    }
+
     void HandleMessage(string json)
     {
         try
@@ -450,6 +492,7 @@ public class WingDigitalTwin : MonoBehaviour
 
             Enqueue(UpdateUI);
             Enqueue(() => UpdateWingVisualization(data));
+            Enqueue(() => PushChartData(data));
         }
         catch (Exception ex)
         {
@@ -547,7 +590,7 @@ public class WingDigitalTwin : MonoBehaviour
             wingRenderer.material.SetColor("_EmissionColor", new Color(em, em, em));
         }
 
-        UpdateStressLegendValues();
+        UpdateLegendValues();
     }
 
     void UpdateDeformation()
@@ -759,6 +802,10 @@ public class WingDigitalTwin : MonoBehaviour
             {
                 ToggleHeatmapMode();
             }
+            if (Input.GetKeyDown(KeyCode.C) && chartPanel != null)
+            {
+                chartPanel.gameObject.SetActive(!chartPanel.gameObject.activeSelf);
+            }
         }
 
         // Update connection label
@@ -866,6 +913,14 @@ public class WingDigitalTwin : MonoBehaviour
         public float new_speed;
         public float target_speed;
         public int stepper_position;
+        public List<CycleBin> cycles_binned;
+    }
+
+    [Serializable]
+    public class CycleBin
+    {
+        public float range;
+        public float count;
     }
 
     [Serializable]
