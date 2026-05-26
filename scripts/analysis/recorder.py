@@ -95,56 +95,67 @@ class DataRecorder:
         if self._frame % self.flush_interval == 0:
             self.flush()
 
-    def flush(self) -> None:
-        """Flush buffered data to HDF5 file."""
+    def flush(self) -> bool:
+        """Flush buffered data to HDF5 file.
+
+        Returns True if data was written, False otherwise.
+        """
         if not any(v for v in self._buf.values()):
-            return
+            return False
 
         first = self._flushes == 0
         self._flushes += 1
 
-        f = h5py.File(self._h5_path, "w" if first else "a")
+        try:
+            with h5py.File(self._h5_path, "w" if first else "a") as f:
+                if first:
+                    f.create_dataset("metadata/schema_version", data=SCHEMA_VERSION)
+                    f.create_dataset("metadata/start_time", data=self._start_time)
+                    f.create_dataset("metadata/scalar_interval", data=self.scalar_interval)
+                    f.create_dataset("metadata/field_interval", data=self.field_interval)
 
-        if first:
-            f.create_dataset("metadata/schema_version", data=SCHEMA_VERSION)
-            f.create_dataset("metadata/start_time", data=self._start_time)
-            f.create_dataset("metadata/scalar_interval", data=self.scalar_interval)
-            f.create_dataset("metadata/field_interval", data=self.field_interval)
+                def _append(name, data_list, dtype=np.float64):
+                    if not data_list:
+                        return
+                    arr = np.array(data_list, dtype=dtype)
+                    if name in f:
+                        ds = f[name]
+                        old = ds.shape[0]
+                        ds.resize(old + arr.shape[0], axis=0)
+                        ds[old:] = arr
+                    else:
+                        f.create_dataset(
+                            name, data=arr,
+                            maxshape=(None,) + arr.shape[1:],
+                            compression="gzip",
+                            shuffle=True,
+                        )
 
-        def _append(name, data_list, dtype=np.float64):
-            if not data_list:
-                return
-            arr = np.array(data_list, dtype=dtype)
-            if name in f:
-                ds = f[name]
-                old = ds.shape[0]
-                ds.resize(old + arr.shape[0], axis=0)
-                ds[old:] = arr
-            else:
-                f.create_dataset(
-                    name, data=arr,
-                    maxshape=(None,) + arr.shape[1:],
-                    compression="gzip",
-                    shuffle=True,
-                )
-
-        _append("observations/timestamps", self._buf["timestamps"])
-        _append("observations/scalars", self._buf["scalars"])
-        _append("fields/timestamps", self._buf["field_timestamps"])
-        _append("fields/stress", self._buf["field_stress"])
-        _append("fields/damage", self._buf["field_damage"])
-        _append("fields/deformation", self._buf["field_deform"])
+                _append("observations/timestamps", self._buf["timestamps"])
+                _append("observations/scalars", self._buf["scalars"])
+                _append("fields/timestamps", self._buf["field_timestamps"])
+                _append("fields/stress", self._buf["field_stress"])
+                _append("fields/damage", self._buf["field_damage"])
+                _append("fields/deformation", self._buf["field_deform"])
+        except (OSError, RuntimeError) as exc:
+            logger.error("Failed to flush recording: %s", exc)
+            return False
 
         for key in self._buf:
             self._buf[key].clear()
-
-        f.close()
         logger.debug("Flushed chunk %d to %s", self._flushes, self._h5_path)
+        return True
 
-    def finalize(self) -> Path:
-        """Finalize recording and close all files."""
-        if self._buf["timestamps"] or self._buf["field_timestamps"]:
-            self.flush()
+    def finalize(self) -> Optional[Path]:
+        """Finalize recording and close all files.
+
+        Returns the HDF5 path on success, or None if finalization failed.
+        """
+        try:
+            if self._buf["timestamps"] or self._buf["field_timestamps"]:
+                self.flush()
+        except Exception as exc:
+            logger.error("Final flush failed: %s", exc)
 
         meta = {
             "start_time": self._start_time,
@@ -156,9 +167,13 @@ class DataRecorder:
             "file": str(self._h5_path),
             "scalar_names": SCALAR_NAMES,
         }
-        meta_path = self.output_dir / "metadata.json"
-        with open(meta_path, "w") as f:
-            json.dump(meta, f, indent=2)
+        try:
+            meta_path = self.output_dir / "metadata.json"
+            with open(meta_path, "w") as f:
+                json.dump(meta, f, indent=2)
+        except Exception as exc:
+            logger.error("Failed to write recording metadata: %s", exc)
+            return None
 
         logger.info(
             "Recording saved: %s (%.1f s, %d frames)",

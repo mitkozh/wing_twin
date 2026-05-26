@@ -12,6 +12,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class WingDigitalTwin : MonoBehaviour
@@ -771,38 +772,38 @@ public class WingDigitalTwin : MonoBehaviour
             }
         }
 
-        if (!connected && Input.GetKeyDown(KeyCode.Space))
+        if (!connected && Keyboard.current.spaceKey.wasPressedThisFrame)
             _ = ConnectAsync();
-        if (Input.GetKeyDown(KeyCode.Escape) && ws != null)
+        if (Keyboard.current.escapeKey.wasPressedThisFrame && ws != null)
             _ = ws.Close();
 
         if (connected)
         {
-            if (Input.GetKeyDown(KeyCode.P))
+            if (Keyboard.current.pKey.wasPressedThisFrame)
             {
                 UI_Pause();
             }
-            if (Input.GetKeyDown(KeyCode.R))
+            if (Keyboard.current.rKey.wasPressedThisFrame)
             {
                 UI_Reset();
             }
-            if (Input.GetKeyDown(KeyCode.S))
+            if (Keyboard.current.sKey.wasPressedThisFrame)
             {
                 UI_Status();
             }
-            if (Input.GetKeyDown(KeyCode.F))
+            if (Keyboard.current.fKey.wasPressedThisFrame)
             {
                 SendFlightState(planeAngleSlider.value, speedSlider != null ? speedSlider.value : currentPlaneSpeed);
             }
-            if (Input.GetKeyDown(KeyCode.H))
+            if (Keyboard.current.hKey.wasPressedThisFrame)
             {
                 ToggleHelp();
             }
-            if (Input.GetKeyDown(KeyCode.M))
+            if (Keyboard.current.mKey.wasPressedThisFrame)
             {
                 ToggleHeatmapMode();
             }
-            if (Input.GetKeyDown(KeyCode.C) && chartPanel != null)
+            if (Keyboard.current.cKey.wasPressedThisFrame && chartPanel != null)
             {
                 chartPanel.gameObject.SetActive(!chartPanel.gameObject.activeSelf);
             }
