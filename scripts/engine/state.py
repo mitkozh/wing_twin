@@ -55,6 +55,7 @@ class TwinState:
     target_airspeed: float = 0.0
     stepper_position: int = 0
     heatmap_mode: str = "damage"
+    cycles: list = field(default_factory=list)
 
     def for_unity(self) -> dict:
         """Format state for Unity WebSocket."""
@@ -108,6 +109,22 @@ class TwinState:
         max_speed_kmh = 80.0
         max_stepper_steps = 2720
 
+        # Bin cycles for rainflow chart
+        cycles_binned = []
+        if self.cycles:
+            bin_width = 2.0
+            max_range = max(r for r, _ in self.cycles) if self.cycles else 0.0
+            if max_range > 0:
+                num_bins = int(np.ceil(max_range / bin_width))
+                bins = [0.0] * num_bins
+                for r, c in self.cycles:
+                    idx = min(int(r / bin_width), num_bins - 1)
+                    bins[idx] += c
+                cycles_binned = [
+                    {"range": round((i + 0.5) * bin_width, 1), "count": round(c, 2)}
+                    for i, c in enumerate(bins)
+                ]
+
         return {
             "strain": float(np.mean(self.strain_vector)) if self.strain_vector else 0.0,
             "forces": [round(f, 4) for f in self.forces],
@@ -132,6 +149,7 @@ class TwinState:
             "max_angle_deg": max_angle_deg,
             "max_speed_kmh": max_speed_kmh,
             "max_stepper_steps": max_stepper_steps,
+            "cycles_binned": cycles_binned,
         }
 
     def for_esp32(self) -> dict:

@@ -28,6 +28,7 @@ htmlcov/
 
 # Generated output
 figures/
+recordings/
 *.log
 .env
 
@@ -88,4 +89,3 @@ docs/
 
 # ESP32 firmware credentials
 esp32/secrets.h
-

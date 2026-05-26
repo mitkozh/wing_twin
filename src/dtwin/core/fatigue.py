@@ -54,6 +54,37 @@ class FatigueState:
     node_damages: dict = field(default_factory=dict)
     node_res_sigs: dict = field(default_factory=dict)
 
+    def to_dict(self) -> dict:
+        """Serialize fatigue state for persistence across runs."""
+        return {
+            "damage": self.damage,
+            "confidence": self.confidence,
+            "filtered_residual": self.filtered_residual,
+            "low_confidence_frames": self.low_confidence_frames,
+            "alert_active": self.alert_active,
+            "cycles": self.cycles,
+            "res_sig": self.res_sig,
+            "node_damages": {str(k): v for k, v in self.node_damages.items()},
+        }
+
+    @staticmethod
+    def from_dict(data: dict) -> "FatigueState":
+        """Deserialize fatigue state from a dict."""
+        state = FatigueState()
+        state.damage = data.get("damage", 0.0)
+        state.confidence = data.get("confidence", 100.0)
+        state.filtered_residual = data.get("filtered_residual", 0.0)
+        state.low_confidence_frames = data.get("low_confidence_frames", 0)
+        state.alert_active = data.get("alert_active", False)
+        state.cycles = [tuple(c) for c in data.get("cycles", [])]
+        state.res_sig = data.get("res_sig", [])
+        node_damages = {int(k): v for k, v in data.get("node_damages", {}).items()}
+        state.node_damages = node_damages
+        for node_idx in node_damages:
+            state.node_buffers[node_idx] = deque(maxlen=500)
+            state.node_res_sigs[node_idx] = []
+        return state
+
 
 def sn_curve_for_material(material: str = "aluminum") -> SNCurve:
     """Get S-N curve parameters for common materials."""
@@ -257,8 +288,9 @@ def accumulate_damage_at_nodes(
     for node_idx, stress_val in zip(critical_indices, critical_stresses):
         if node_idx not in state.node_buffers:
             state.node_buffers[node_idx] = deque(maxlen=config.node_buffer_size)
-            state.node_damages[node_idx] = 0.0
             state.node_res_sigs[node_idx] = []
+            if node_idx not in state.node_damages:
+                state.node_damages[node_idx] = 0.0
 
         state.node_buffers[node_idx].append(stress_val)
 

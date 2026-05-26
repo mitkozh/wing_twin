@@ -12,3 +12,4 @@ dependencies:
     - websockets>=11.0.0
     - py_fatigue>=2.0.0
     - matplotlib
+    - h5py>=3.8.0

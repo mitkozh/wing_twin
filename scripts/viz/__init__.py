@@ -8,7 +8,7 @@ from .damage import DamagePlotter
 from .rainflow import RainflowPlotter
 from .sn_curve import SnCurvePlotter
 from .fields import StressFieldPlotter, DeformationFieldPlotter
-from .generator import VisualizationGenerator
+from .generator import VisualizationGenerator, generate_figures_from_recording
 
 __all__ = [
     "BasePlotter",
@@ -19,4 +19,5 @@ __all__ = [
     "StressFieldPlotter",
     "DeformationFieldPlotter",
     "VisualizationGenerator",
+    "generate_figures_from_recording",
 ]
