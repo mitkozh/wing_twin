@@ -6,22 +6,19 @@ Uses real sensors via MQTT - connects to the physical wing system.
 
 import argparse
 import asyncio
-import signal
 import time
 from pathlib import Path
 from typing import Optional
 
 from dtwin.core.fatigue import FatigueState
 
+from ._lifecycle import cancel_task, finalize_recorder, setup_recorder, setup_signal_handler
+
 from ..settings import PROJECT_ROOT, Config
 from ..engine import DigitalTwinEngine, EngineConfig
 from ..sources import MqttSource
 from ..output import MqttPublisher, WebSocketBroadcaster, EngineCommandHandler
-from ..analysis import (
-    DataRecorder,
-    save_fatigue_state,
-    load_fatigue_state,
-)
+from ..analysis import load_fatigue_state
 from ..viz import generate_figures_from_recording
 from ..logger import get_logger
 
@@ -57,38 +54,11 @@ async def run_production(
     command_handler = EngineCommandHandler(engine)
     broadcaster.set_state_provider(engine.state.for_unity)
 
-    recorder = None
-    rec_dir = None
+    recorder, rec_dir = setup_recorder(record, record_figures)
     stop_event = asyncio.Event()
 
-    def _signal_handler():
-        logger.info("Shutdown requested...")
-        stop_event.set()
-
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, _signal_handler)
-
-    if record or record_figures:
-        from datetime import datetime
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        rec_dir = PROJECT_ROOT / "recordings" / f"run_{stamp}"
-        scalar_int = 1 if record else 10
-        recorder = DataRecorder(rec_dir, scalar_interval=scalar_int, field_interval=50)
-
-    logger.info("=" * 60)
-    logger.info("  Wing Digital Twin - Production Mode")
-    logger.info("=" * 60)
-    logger.info("  MQTT:   %s:%d", config.mqtt.broker, config.mqtt.port)
-    logger.info("  Sensors topic: %s", config.mqtt.sensors_topic)
-    logger.info("  Control topic: %s", config.mqtt.control_topic)
-    if record:
-        logger.info("  Recording: enabled -> recordings/")
-    if record_figures:
-        logger.info("  Figures:  enabled on exit")
-    if resume_state is not None:
-        logger.info("  Resuming from prior run (D=%.4f, %d cycles)", resume_state.damage, len(resume_state.cycles or []))
-    logger.info("=" * 60)
+    setup_signal_handler(loop, stop_event)
 
     async def process_loop():
         while not stop_event.is_set():
@@ -109,21 +79,12 @@ async def run_production(
         logger.info("Shutting down...")
     finally:
         stop_event.set()
-        process_task.cancel()
-        ws_task.cancel()
-        try:
-            await process_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await ws_task
-        except asyncio.CancelledError:
-            pass
+        await cancel_task(process_task)
+        await cancel_task(ws_task)
         await asyncio.sleep(0.1)
 
+        finalize_recorder(recorder, engine, rec_dir)
         if recorder is not None:
-            recorder.finalize()
-            save_fatigue_state(engine.fatigue_state, rec_dir)
             logger.info("Recording finalized")
 
         return rec_dir
@@ -171,6 +132,20 @@ def main():
     resume_state = None
     if args.resume:
         resume_state = load_fatigue_state(Path(args.resume))
+
+    logger.info("=" * 60)
+    logger.info("  Wing Digital Twin - Physical Mode")
+    logger.info("=" * 60)
+    logger.info("  MQTT:   %s:%d", config.mqtt.broker, config.mqtt.port)
+    logger.info("  Sensors topic: %s", config.mqtt.sensors_topic)
+    logger.info("  Control topic: %s", config.mqtt.control_topic)
+    if args.record:
+        logger.info("  Recording: enabled -> recordings/")
+    if args.figures:
+        logger.info("  Figures:  enabled on exit")
+    if resume_state is not None:
+        logger.info("  Resuming from prior run (D=%.4f, %d cycles)", resume_state.damage, len(resume_state.cycles or []))
+    logger.info("=" * 60)
 
     rec_dir = asyncio.run(
         run_production(config, record=args.record, record_figures=args.figures, resume_state=resume_state)

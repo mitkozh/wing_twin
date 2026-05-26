@@ -4,7 +4,6 @@ Wing Digital Twin Demo CLI Entry Point.
 
 import argparse
 import asyncio
-import signal
 import threading
 import time
 from typing import Optional
@@ -13,12 +12,10 @@ from dtwin.core.fatigue import FatigueConfig, FatigueState
 
 from pathlib import Path
 
+from ._lifecycle import cancel_task, finalize_recorder, setup_recorder, setup_signal_handler
+
 from ..settings import PROJECT_ROOT, SimulationConfig
-from ..analysis import (
-    DataRecorder,
-    save_fatigue_state,
-    load_fatigue_state,
-)
+from ..analysis import load_fatigue_state
 from ..viz import generate_figures_from_recording
 from ..engine import DigitalTwinEngine, EngineConfig
 from ..sources import SimulatorSource
@@ -45,8 +42,13 @@ async def run_demo_async(
     engine = DigitalTwinEngine(config, initial_fatigue_state=resume_state)
 
     logger.info("Loading transfer matrices...")
-    engine.load_matrices()
-    logger.info("Loaded successfully (%d gauge channels)", engine.num_gauges)
+    try:
+        engine.load_matrices()
+        logger.info("Loaded successfully (%d gauge channels)", engine.num_gauges)
+    except FileNotFoundError as e:
+        logger.error("%s", e)
+        logger.error("Cannot start without transfer matrices")
+        raise
 
     sim_config = SimulationConfig()
     simulator = SimulatorSource(sim_config)
@@ -55,16 +57,10 @@ async def run_demo_async(
 
     stop_event = asyncio.Event()
 
-    def _signal_handler():
-        logger.info("Shutdown requested...")
-        stop_event.set()
-
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, _signal_handler)
+    setup_signal_handler(loop, stop_event)
 
-    recorder = None
-    rec_dir = None
+    recorder, rec_dir = setup_recorder(record, record_figures)
 
     if not headless:
         broadcaster = WebSocketBroadcaster()
@@ -75,13 +71,6 @@ async def run_demo_async(
 
         broadcaster.set_state_provider(state_provider)
         broadcaster.set_command_handler(command_handler)
-
-    if record or record_figures:
-        from datetime import datetime
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        rec_dir = PROJECT_ROOT / "recordings" / f"run_{stamp}"
-        scalar_int = 1 if record else 10
-        recorder = DataRecorder(rec_dir, scalar_interval=scalar_int, field_interval=50)
 
     async def process_loop():
         while not stop_event.is_set():
@@ -108,26 +97,18 @@ async def run_demo_async(
             await stop_event.wait()
     except asyncio.TimeoutError:
         pass
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("Shutting down...")
+    finally:
+        stop_event.set()
+        await cancel_task(process_task)
+        if not headless:
+            await cancel_task(broadcaster_task)
+            await asyncio.sleep(0.1)
 
-    stop_event.set()
-
-    process_task.cancel()
-    try:
-        await process_task
-    except asyncio.CancelledError:
-        pass
-
-    if not headless:
-        broadcaster_task.cancel()
-        try:
-            await broadcaster_task
-        except asyncio.CancelledError:
-            pass
-        await asyncio.sleep(0.1)
-
-    if recorder is not None:
-        recorder.finalize()
-        save_fatigue_state(engine.fatigue_state, rec_dir)
+        finalize_recorder(recorder, engine, rec_dir)
+        if recorder is not None:
+            logger.info("Recording finalized")
 
     return engine, rec_dir
 
