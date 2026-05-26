@@ -29,7 +29,7 @@ class FatigueConfig:
     rainflow_range_bin_width: float = 2.0  # MPa
     critical_stress_threshold: float = 50.0  # MPa
     critical_node_percentile: float = 90.0
-    max_critical_nodes: int = 100
+    max_critical_nodes: int = 2000
     node_buffer_size: int = 500
     ema_alpha: float = 0.1
     confidence_threshold: float = 50.0  # percentage
@@ -60,7 +60,7 @@ def sn_curve_for_material(material: str = "aluminum") -> SNCurve:
     curves = {
         "aluminum": SNCurve(slope=3.0, intercept=15.0, endurance=1e7),
         "steel": SNCurve(slope=5.0, intercept=17.0, endurance=1e7),
-        "demo": SNCurve(slope=3.0, intercept=10.0, endurance=1e6),
+        "demo": SNCurve(slope=3.0, intercept=8.0, endurance=1e6),
     }
     return curves.get(material.lower(), curves["aluminum"])
 

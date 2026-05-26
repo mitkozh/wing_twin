@@ -62,7 +62,7 @@ def compute_pitch_damping_force(
 
 def force_to_steps(
     F_newtons: float,
-    steps_per_newton: float = 68.0,
+    steps_per_newton: float = 204.0,
 ) -> int:
     """
     Convert aerodynamic force (N) to a stepper absolute position.

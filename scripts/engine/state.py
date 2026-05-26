@@ -99,6 +99,15 @@ class TwinState:
         stress_min = min(stress_abs) if stress_abs else 0.0
         stress_max = max(stress_abs) if stress_abs else 0.0
 
+        # Yield strength of 6061-T6 aluminum
+        # yield_point_pa = 276_000_000.0
+        # Artificial test value to avoid damaging the real wing during testing
+        yield_point_pa = 100_000_000.0
+
+        max_angle_deg = 12.0
+        max_speed_kmh = 80.0
+        max_stepper_steps = 2720
+
         return {
             "strain": float(np.mean(self.strain_vector)) if self.strain_vector else 0.0,
             "forces": [round(f, 4) for f in self.forces],
@@ -119,6 +128,10 @@ class TwinState:
             "target_speed": self.target_airspeed,
             "stepper_position": self.stepper_position,
             "heatmap_mode": self.heatmap_mode,
+            "yield_point_pa": yield_point_pa,
+            "max_angle_deg": max_angle_deg,
+            "max_speed_kmh": max_speed_kmh,
+            "max_stepper_steps": max_stepper_steps,
         }
 
     def for_esp32(self) -> dict:

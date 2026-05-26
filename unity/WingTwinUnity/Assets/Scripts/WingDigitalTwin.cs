@@ -59,9 +59,9 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] float commonPlaneSpeed = 120f;
     [SerializeField] float windExaggeration = 1f;
 
-    const float MAX_ANGLE_DEGREES = 15f;
-    const float MAX_SPEED_KMH = 200f;
-    const float MAX_STEPPER_STEPS = 2720f;
+    float maxAngleDeg = 12f;
+    float maxSpeedKmh = 80f;
+    float maxStepperSteps = 2720f;
 
     [Header("LED Colors")]
     [SerializeField] private Color greenColor = new Color(0.1f, 1.0f, 0.1f);
@@ -112,6 +112,7 @@ public class WingDigitalTwin : MonoBehaviour
     private Vector3[] deformedVertices;
     private float stressMin;
     private float stressMax;
+    private float yieldPointPa = 100_000_000f;
 
     private Color[] vertexColors;
     private float[] meshStressValues;
@@ -144,17 +145,17 @@ public class WingDigitalTwin : MonoBehaviour
         if (speedSlider != null)
             speedSlider.onValueChanged.AddListener(OnSpeedSliderChanged);
 
-        planeAngleSlider.minValue = -MAX_ANGLE_DEGREES;
-        planeAngleSlider.maxValue = MAX_ANGLE_DEGREES;
+        planeAngleSlider.minValue = -maxAngleDeg;
+        planeAngleSlider.maxValue = maxAngleDeg;
         if (stepsSlider != null)
         {
             stepsSlider.minValue = 0f;
-            stepsSlider.maxValue = MAX_STEPPER_STEPS;
+            stepsSlider.maxValue = maxStepperSteps;
         }
         if (speedSlider != null)
         {
             speedSlider.minValue = 0f;
-            speedSlider.maxValue = MAX_SPEED_KMH;
+            speedSlider.maxValue = maxSpeedKmh;
         }
 
         await ConnectAsync();
@@ -295,7 +296,7 @@ public class WingDigitalTwin : MonoBehaviour
         for (int i = 0; i < labelCount; i++)
         {
             float t = i / (float)(labelCount - 1);
-            float value = Mathf.Lerp(stressMin, stressMax, t);
+            float value = Mathf.Lerp(0f, yieldPointPa, t);
 
             string suffix = "";
 
@@ -415,7 +416,20 @@ public class WingDigitalTwin : MonoBehaviour
             maintenanceAlert = data.maintenance_alert;
             stressMin = data.stress_min;
             stressMax = data.stress_max;
-
+            yieldPointPa = data.yield_point_pa > 0 ? data.yield_point_pa : yieldPointPa;
+            if (data.max_angle_deg > 0) {
+                maxAngleDeg = data.max_angle_deg;
+                planeAngleSlider.minValue = -maxAngleDeg;
+                planeAngleSlider.maxValue = maxAngleDeg;
+            }
+            if (data.max_speed_kmh > 0) {
+                maxSpeedKmh = data.max_speed_kmh;
+                speedSlider.maxValue = maxSpeedKmh;
+            }
+            if (data.max_stepper_steps > 0) {
+                maxStepperSteps = data.max_stepper_steps;
+                stepsSlider.maxValue = maxStepperSteps;
+            }
 
             currentPlaneAngle = data.new_angle_of_attack;
             currentPlaneSpeed = data.new_speed;
@@ -589,7 +603,7 @@ public class WingDigitalTwin : MonoBehaviour
         for (int i = 0; i < vertexCount; i++)
         {
             float absStress = Mathf.Abs(stressField[i]);
-            float t = Mathf.Clamp01(absStress / stressMax);
+            float t = Mathf.Clamp01(absStress / yieldPointPa);
             vertexColors[i] = stressGradient.Evaluate(t);
         }
 
@@ -850,6 +864,10 @@ public class WingDigitalTwin : MonoBehaviour
         public bool maintenance_alert;
         public float stress_min;
         public float stress_max;
+        public float yield_point_pa;
+        public float max_angle_deg;
+        public float max_speed_kmh;
+        public float max_stepper_steps;
         public float new_angle_of_attack;
         public float target_angle_of_attack;
         public float new_speed;

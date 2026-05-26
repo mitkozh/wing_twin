@@ -108,6 +108,7 @@ class SimulatorSource(DataSource):
             self._gust_remaining -= 1
 
         noise = np.random.normal(0, 0.05)
+        noise = 0.0
         return steady + bending + torsion + turbulence + gust + noise
 
     def _read(self, t: float, airspeed: float, angle_deg: float) -> tuple[np.ndarray, float]:
