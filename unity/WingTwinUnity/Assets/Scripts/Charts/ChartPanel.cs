@@ -209,8 +209,9 @@ public class ChartPanel : MonoBehaviour
         yAxis.min = -maxStrain * 1.1f;
         yAxis.max = maxStrain * 1.1f;
 
+        if (!strainChart || !strainChart.isActiveAndEnabled) return;
         int idx = (strainHead - 1 + chartCapacity) % chartCapacity;
-        strainChart.UpdateData(0, idx, value);
+        try { strainChart.UpdateData(0, idx, value); } catch { }
     }
 
     public void PushDamage(float value)
@@ -223,9 +224,10 @@ public class ChartPanel : MonoBehaviour
         var yAxis = damageChart.EnsureChartComponent<YAxis>();
         yAxis.min = 0f;
         yAxis.max = Mathf.Max(maxDamage * 1.1f, 0.1f);
+        if (!damageChart || !damageChart.isActiveAndEnabled) return;
         int idx = (damageHead - 1 + chartCapacity) % chartCapacity;
-        damageChart.UpdateData(0, idx, value);
-        damageChart.RefreshChart();
+        try { damageChart.UpdateData(0, idx, value); } catch { }
+        try { damageChart.RefreshChart(); } catch { }
     }
 
     public void PushStress(float value, float yieldPoint)
@@ -245,20 +247,25 @@ public class ChartPanel : MonoBehaviour
         stressYAxis.min = 0f;
         stressYAxis.max = axisMax;
 
-        int idx = (stressHead - 1 + chartCapacity) % chartCapacity;
-        stressChart.UpdateData(0, idx, value);
-
-        if (yieldChanged)
+        if (!stressChart || !stressChart.isActiveAndEnabled) return;
+        try
         {
-            for (int i = 0; i < chartCapacity; i++)
-                stressChart.UpdateData(1, i, currentYield);
-        }
-        else
-        {
-            stressChart.UpdateData(1, idx, currentYield);
-        }
+            int idx = (stressHead - 1 + chartCapacity) % chartCapacity;
+            stressChart.UpdateData(0, idx, value);
 
-        stressChart.RefreshChart();
+            if (yieldChanged)
+            {
+                for (int i = 0; i < chartCapacity; i++)
+                    stressChart.UpdateData(1, i, currentYield);
+            }
+            else
+            {
+                stressChart.UpdateData(1, idx, currentYield);
+            }
+
+            stressChart.RefreshChart();
+        }
+        catch { }
     }
 
     public void SetRainflowBins(float[] ranges, float[] counts)
@@ -266,37 +273,41 @@ public class ChartPanel : MonoBehaviour
         if (!initialized) return;
         if (ranges == null || counts == null || ranges.Length == 0 || ranges.Length != counts.Length)
             return;
-
-        var xAxis = rainflowChart.EnsureChartComponent<XAxis>();
-        var yAxis = rainflowChart.EnsureChartComponent<YAxis>();
-        yAxis.min = 0f;
-
-        if (lastRainflowBinCount != counts.Length)
+        if (!rainflowChart || !rainflowChart.isActiveAndEnabled) return;
+        try
         {
-            xAxis.ClearData();
-            rainflowChart.ClearData();
-            for (int i = 0; i < ranges.Length; i++)
-            {
-                rainflowChart.AddXAxisData(ranges[i].ToString("F1"));
-                rainflowChart.AddData(0, counts[i]);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < ranges.Length; i++)
-            {
-                rainflowChart.UpdateData(0, i, counts[i]);
-                rainflowChart.UpdateXAxisData(0, ranges[i].ToString("F1"), i);
-            }
-        }
+            var xAxis = rainflowChart.EnsureChartComponent<XAxis>();
+            var yAxis = rainflowChart.EnsureChartComponent<YAxis>();
+            yAxis.min = 0f;
 
-        lastRainflowBinCount = counts.Length;
-        float maxCount = 1f;
-        for (int i = 0; i < counts.Length; i++)
-            if (counts[i] > maxCount) maxCount = counts[i];
+            if (lastRainflowBinCount != counts.Length)
+            {
+                xAxis.ClearData();
+                rainflowChart.ClearData();
+                for (int i = 0; i < ranges.Length; i++)
+                {
+                    rainflowChart.AddXAxisData(ranges[i].ToString("F1"));
+                    rainflowChart.AddData(0, counts[i]);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < ranges.Length; i++)
+                {
+                    rainflowChart.UpdateData(0, i, counts[i]);
+                    rainflowChart.UpdateXAxisData(0, ranges[i].ToString("F1"), i);
+                }
+            }
 
-        yAxis.max = maxCount * 1.15f;
-        rainflowChart.RefreshChart();
+            lastRainflowBinCount = counts.Length;
+            float maxCount = 1f;
+            for (int i = 0; i < counts.Length; i++)
+                if (counts[i] > maxCount) maxCount = counts[i];
+
+            yAxis.max = maxCount * 1.15f;
+            rainflowChart.RefreshChart();
+        }
+        catch { }
     }
 
     public void NextChart()
