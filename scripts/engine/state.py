@@ -69,7 +69,7 @@ class TwinState:
 
     stepper_position: int = 0
     heatmap_mode: str = "damage"
-    cycles: list = field(default_factory=list)
+    cycles_histogram: dict = field(default_factory=dict)
 
     def for_unity(self) -> dict:
         """Format state for Unity WebSocket."""
@@ -115,20 +115,10 @@ class TwinState:
         stress_max = max(stress_abs) if stress_abs else 0.0
 
         # Bin cycles for rainflow chart
-        cycles_binned = []
-        if self.cycles:
-            bin_width = 2.0
-            max_range = max(r for r, _ in self.cycles) if self.cycles else 0.0
-            if max_range > 0:
-                num_bins = int(np.ceil(max_range / bin_width))
-                bins = [0.0] * num_bins
-                for r, c in self.cycles:
-                    idx = min(int(r / bin_width), num_bins - 1)
-                    bins[idx] += c
-                cycles_binned = [
-                    {"range": round((i + 0.5) * bin_width, 1), "count": round(c, 2)}
-                    for i, c in enumerate(bins)
-                ]
+        cycles_binned = [
+            {"range": r, "count": round(c, 2)}
+            for r, c in sorted(self.cycles_histogram.items())
+        ] if self.cycles_histogram else []
 
         return {
             "strain": float(np.mean(self.strain_vector)) if self.strain_vector else 0.0,

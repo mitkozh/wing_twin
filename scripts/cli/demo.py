@@ -74,9 +74,17 @@ async def run_demo_async(
 
     async def process_loop():
         while not stop_event.is_set():
-            if engine.step():
-                if recorder is not None:
+            try:
+                stepped = engine.step()
+            except Exception as e:
+                logger.error("Engine step failed: %s", e)
+                stepped = False
+
+            if stepped and recorder is not None:
+                try:
                     recorder.record_frame(engine)
+                except Exception as e:
+                    logger.error("Recording failed: %s", e)
 
             if not headless and broadcaster is not None and broadcaster._clients:
                 await broadcaster.broadcast()

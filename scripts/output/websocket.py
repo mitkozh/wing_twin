@@ -76,8 +76,12 @@ class WebSocketBroadcaster:
         if not self._clients or not self._state_provider:
             return
 
-        state = self._state_provider()
-        msg = json.dumps(state)
+        try:
+            state = self._state_provider()
+            msg = json.dumps(state)
+        except Exception as e:
+            logger.error("State provider error: %s", e)
+            return
 
         disconnected = []
         for client in self._clients:

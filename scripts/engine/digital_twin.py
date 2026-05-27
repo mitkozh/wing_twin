@@ -97,6 +97,7 @@ class DigitalTwinEngine:
             self.state.damage = 0.0
             self.fatigue_state = FatigueState()
             self._cycles.clear()
+            self.state.cycles_histogram.clear()
         if target in ("strain", "all"):
             self._strain_buffer.clear()
             self.state.strain_vector = []
@@ -152,7 +153,11 @@ class DigitalTwinEngine:
             config=self.config.fatigue,
         )
         self._cycles.extend(new_cycles)
-        self.state.cycles = list(self.fatigue_state.cycles)
+        bin_width = self.config.fatigue.rainflow_range_bin_width
+        for r, c in new_cycles:
+            idx = int(r / bin_width)
+            key = round((idx + 0.5) * bin_width, 1)
+            self.state.cycles_histogram[key] = self.state.cycles_histogram.get(key, 0.0) + c
 
         if self.fatigue_state.node_damages:
             values = list(self.fatigue_state.node_damages.values())

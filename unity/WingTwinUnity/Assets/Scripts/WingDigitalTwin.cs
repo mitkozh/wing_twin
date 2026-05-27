@@ -1,9 +1,6 @@
 /*
- * Wing Digital Twin - Unity WebSocket Client
- * Receives {strain, forces, stress_field, deformation_field, damage, confidence, speed, led_state, maintenance_alert}
- * from Python WebSocket via force-reconstruction pipeline.
+ * Wing Digital Twin Unity WebSocket Client
  */
-
 using NativeWebSocket;
 using Newtonsoft.Json;
 using System;
@@ -175,7 +172,6 @@ public class WingDigitalTwin : MonoBehaviour
         planeCurrentSpeedLabel.text = $"Current Plane Speed: {currentPlaneSpeed:F1}";
         planeTargetSpeedLabel.text = $"Target Plane Speed: {targetPlaneSpeed:F1}";
 
-        Debug.Log($"Max Stress: {stressMax}");
         // Debug.Log($"currentPlaneSpeed={currentPlaneSpeed}, common={commonPlaneSpeed}, exaggeration={windExaggeration}");
         foreach (ParticleSystem ps in windParticles)
         {
@@ -188,7 +184,7 @@ public class WingDigitalTwin : MonoBehaviour
     }
     private void UpdatePlaneAngle()
     {
-        rotationalPivot.transform.localRotation = Quaternion.Euler(0, currentPlaneAngle, 0);
+        rotationalPivot.transform.localRotation = Quaternion.Euler(currentPlaneAngle, 0, 0);
 
         planeCurrentAngleLabel.text = $"Current Plane Angle: {currentPlaneAngle:F1}";
         planeTargetAngleLabel.text = $"Target Plane Angle: {targetAngleOfAttack:F1}";
@@ -331,7 +327,7 @@ public class WingDigitalTwin : MonoBehaviour
                 if (i == labelCount - 1)
                     suffix = " Max";
                 else if (i == 0)
-                    suffix = "Min";
+                    suffix = " Min";
 
                 stressLabels[i].text = $"{value:E3}{suffix}";
             }
@@ -483,6 +479,17 @@ public class WingDigitalTwin : MonoBehaviour
 
             if (stepsSliderLabel != null)
                 stepsSliderLabel.text = $"Steps: {data.stepper_position}";
+            if (angleSliderLabel != null)
+                angleSliderLabel.text = $"Angle: {targetAngleOfAttack:F1}°";
+            if (speedSliderLabel != null)
+                speedSliderLabel.text = $"Speed: {targetPlaneSpeed:F0} km/h";
+
+            suppressSliderCallback = true;
+            if (planeAngleSlider != null)
+                planeAngleSlider.value = targetAngleOfAttack;
+            if (speedSlider != null)
+                speedSlider.value = targetPlaneSpeed;
+            suppressSliderCallback = false;
 
             if (data.stress_field != null && data.stress_field.Count > 0)
                 stressField = data.stress_field.ToArray();
@@ -531,8 +538,6 @@ public class WingDigitalTwin : MonoBehaviour
             if (maintenanceAlert) alertLabel.text = "MAINTENANCE REQUIRED";
         }
 
-        if (stepsSliderLabel != null && stepsSlider != null)
-            stepsSliderLabel.text = $"Steps: {(int)stepsSlider.value}";
     }
 
     void UpdateDamageSlider(Slider slider, TextMeshProUGUI label, float value, string title)

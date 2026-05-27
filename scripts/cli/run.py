@@ -62,9 +62,17 @@ async def run_production(
 
     async def process_loop():
         while not stop_event.is_set():
-            if engine.step():
-                if recorder is not None:
+            try:
+                stepped = engine.step()
+            except Exception as e:
+                logger.error("Engine step failed: %s", e)
+                stepped = False
+
+            if stepped and recorder is not None:
+                try:
                     recorder.record_frame(engine)
+                except Exception as e:
+                    logger.error("Recording failed: %s", e)
 
             mqtt_publisher.publish(config.mqtt.control_topic, engine.state.for_esp32())
             await asyncio.sleep(0.05)

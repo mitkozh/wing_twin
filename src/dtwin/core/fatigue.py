@@ -136,11 +136,14 @@ def accumulate_damage(
     if sn_curve is None:
         sn_curve = sn_curve_for_material("demo")
 
-    cc = CycleCount.from_timeseries(
-        combined,
-        unit="MPa",
-        range_bin_width=config.rainflow_range_bin_width,
-    )
+    try:
+        cc = CycleCount.from_timeseries(
+            combined,
+            unit="MPa",
+            range_bin_width=config.rainflow_range_bin_width,
+        )
+    except ValueError:
+        return 0.0, []
 
     result_dict = cc.as_dict()
     state.res_sig = result_dict.get("res_sig", [])
@@ -153,8 +156,11 @@ def accumulate_damage(
     ]
     state.cycles.extend(cycles_for_hist)
 
-    damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
-    damage = float(np.sum(damage_per_bin))
+    if len(cc.stress_range) > 0:
+        damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
+        damage = float(np.sum(damage_per_bin))
+    else:
+        damage = 0.0
     state.damage = min(state.damage + damage, 1.0)
     return damage, cycles_for_hist
 
@@ -307,17 +313,24 @@ def accumulate_damage_at_nodes(
 
             state.node_buffers[node_idx].clear()
 
-            cc = CycleCount.from_timeseries(
-                combined,
-                unit="MPa",
-                range_bin_width=config.rainflow_range_bin_width,
-            )
+            try:
+                cc = CycleCount.from_timeseries(
+                    combined,
+                    unit="MPa",
+                    range_bin_width=config.rainflow_range_bin_width,
+                )
+            except ValueError:
+                state.node_res_sigs[node_idx] = []
+                continue
 
             result_dict = cc.as_dict()
             state.node_res_sigs[node_idx] = result_dict.get("res_sig", [])
 
-            damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
-            node_damage = float(np.sum(damage_per_bin))
+            if len(cc.stress_range) > 0:
+                damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
+                node_damage = float(np.sum(damage_per_bin))
+            else:
+                node_damage = 0.0
 
             state.node_damages[node_idx] = min(state.node_damages[node_idx] + node_damage, 1.0)
             total_damage += node_damage
