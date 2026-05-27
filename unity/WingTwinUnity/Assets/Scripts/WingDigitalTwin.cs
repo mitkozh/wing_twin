@@ -50,8 +50,8 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] TextMeshProUGUI speedSliderLabel;
     [SerializeField] GameObject planeScene;
     [SerializeField] TextMeshProUGUI planeCurrentSpeedLabel;
-    [SerializeField] TextMeshProUGUI planeTargetSpeedLabel;
-    [SerializeField] TextMeshProUGUI planeTargetAngleLabel;
+    //[SerializeField] TextMeshProUGUI planeTargetSpeedLabel;
+    //[SerializeField] TextMeshProUGUI planeTargetAngleLabel;
     [SerializeField] TextMeshProUGUI planeCurrentAngleLabel;
     [SerializeField] List<ParticleSystem> windParticles = new List<ParticleSystem>();
     [SerializeField] float commonPlaneSpeed = 40f;
@@ -170,9 +170,9 @@ public class WingDigitalTwin : MonoBehaviour
     private void UpdatePlaneSpeed()
     {
         planeCurrentSpeedLabel.text = $"Current Plane Speed: {currentPlaneSpeed:F1}";
-        planeTargetSpeedLabel.text = $"Target Plane Speed: {targetPlaneSpeed:F1}";
+        //planeTargetSpeedLabel.text = $"Allowed Plane Speed: {targetPlaneSpeed:F1}";
 
-        Debug.Log($"currentPlaneSpeed={currentPlaneSpeed}, common={commonPlaneSpeed}, exaggeration={windExaggeration}");
+        //Debug.Log($"currentPlaneSpeed={currentPlaneSpeed}, common={commonPlaneSpeed}, exaggeration={windExaggeration}");
         foreach (ParticleSystem ps in windParticles)
         {
             float change = currentPlaneSpeed / commonPlaneSpeed;
@@ -187,7 +187,7 @@ public class WingDigitalTwin : MonoBehaviour
         rotationalPivot.transform.localRotation = Quaternion.Euler(currentPlaneAngle, 0, 0);
 
         planeCurrentAngleLabel.text = $"Current Plane Angle: {currentPlaneAngle:F1}";
-        planeTargetAngleLabel.text = $"Target Plane Angle: {targetAngleOfAttack:F1}";
+        //planeTargetAngleLabel.text = $"Allowed Plane Angle: {targetAngleOfAttack:F1}";
     }
 
     public void SwitchViewButton(int camera)
@@ -480,9 +480,9 @@ public class WingDigitalTwin : MonoBehaviour
             if (stepsSliderLabel != null)
                 stepsSliderLabel.text = $"Steps: {data.stepper_position}";
             if (angleSliderLabel != null)
-                angleSliderLabel.text = $"Angle: {targetAngleOfAttack:F1}°";
+                angleSliderLabel.text = $"Angle: {planeAngleSlider.value:F1} / {targetAngleOfAttack:F1} ° (D / A)";
             if (speedSliderLabel != null)
-                speedSliderLabel.text = $"Speed: {targetPlaneSpeed:F0} km/h";
+                speedSliderLabel.text = $"Speed: {speedSlider.value:F1} / {targetPlaneSpeed:F1} km/h (D / A)";
 
             //suppressSliderCallback = true;
             if (stepsSlider != null)
@@ -868,7 +868,7 @@ public class WingDigitalTwin : MonoBehaviour
         if (suppressSliderCallback) return;
         suppressSliderCallback = true;
 
-        UpdateSliderLabel(angleSliderLabel, $"Angle: {angle:F1}°");
+        UpdateSliderLabel(angleSliderLabel, $"Angle: {angle:F1} / {targetAngleOfAttack:F1} ° (D / A)");
 
         suppressSliderCallback = false;
 
@@ -880,7 +880,7 @@ public class WingDigitalTwin : MonoBehaviour
     {
         if (suppressSliderCallback) return;
 
-        UpdateSliderLabel(speedSliderLabel, $"Speed: {speed:F0} km/h");
+        UpdateSliderLabel(speedSliderLabel, $"Speed: {speed:F1} / {targetPlaneSpeed:F1} km/h (D / A)");
 
         float angle = planeAngleSlider != null ? planeAngleSlider.value : 0f;
         SendFlightState(angle, speed);
