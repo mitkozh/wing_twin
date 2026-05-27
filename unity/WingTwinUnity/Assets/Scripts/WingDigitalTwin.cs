@@ -485,6 +485,8 @@ public class WingDigitalTwin : MonoBehaviour
                 speedSliderLabel.text = $"Speed: {targetPlaneSpeed:F0} km/h";
 
             suppressSliderCallback = true;
+            if (stepsSlider != null)
+                stepsSlider.value = data.stepper_position;
             if (planeAngleSlider != null)
                 planeAngleSlider.value = targetAngleOfAttack;
             if (speedSlider != null)
