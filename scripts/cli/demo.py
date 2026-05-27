@@ -74,6 +74,8 @@ async def run_demo_async(
 
     async def process_loop():
         while not stop_event.is_set():
+            print("PROCESS LOOP TICK")
+
             try:
                 stepped = engine.step()
             except Exception as e:

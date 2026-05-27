@@ -172,7 +172,7 @@ public class WingDigitalTwin : MonoBehaviour
         planeCurrentSpeedLabel.text = $"Current Plane Speed: {currentPlaneSpeed:F1}";
         planeTargetSpeedLabel.text = $"Target Plane Speed: {targetPlaneSpeed:F1}";
 
-        // Debug.Log($"currentPlaneSpeed={currentPlaneSpeed}, common={commonPlaneSpeed}, exaggeration={windExaggeration}");
+        Debug.Log($"currentPlaneSpeed={currentPlaneSpeed}, common={commonPlaneSpeed}, exaggeration={windExaggeration}");
         foreach (ParticleSystem ps in windParticles)
         {
             float change = currentPlaneSpeed / commonPlaneSpeed;
@@ -484,14 +484,14 @@ public class WingDigitalTwin : MonoBehaviour
             if (speedSliderLabel != null)
                 speedSliderLabel.text = $"Speed: {targetPlaneSpeed:F0} km/h";
 
-            suppressSliderCallback = true;
+            //suppressSliderCallback = true;
             if (stepsSlider != null)
                 stepsSlider.value = data.stepper_position;
-            if (planeAngleSlider != null)
-                planeAngleSlider.value = targetAngleOfAttack;
-            if (speedSlider != null)
-                speedSlider.value = targetPlaneSpeed;
-            suppressSliderCallback = false;
+            //if (planeAngleSlider != null)
+            //    planeAngleSlider.value = targetAngleOfAttack;
+            //if (speedSlider != null)
+            //    speedSlider.value = targetPlaneSpeed;
+            //suppressSliderCallback = false;
 
             if (data.stress_field != null && data.stress_field.Count > 0)
                 stressField = data.stress_field.ToArray();

@@ -305,6 +305,12 @@ class DigitalTwinEngine:
         # without extra data which is usually kept secret. We focus on the fatigue after all.
         self.state.target_angle_of_attack = target_angle
         self.state.target_airspeed = target_speed
+        
+        print(
+    f"[SPEED] desired={self.state.desired_airspeed:.1f}, "
+    f"target={self.state.target_airspeed:.1f}, "
+    f"current={self.state.airspeed:.1f}"
+)
 
     @property
     def cycles(self) -> list:
