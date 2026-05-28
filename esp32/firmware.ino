@@ -23,8 +23,55 @@ const char* SUBSCRIBE_TOPIC = "wing/control";
 // HX711
 const int NUM_ACTIVE = 9;
 const int NUM_CHANNELS = 10;  // 9 active + 1 dummy
-const int HX711_DT_PINS[NUM_CHANNELS] = {4, 12, 13, 14, 15, 16, 17, 18, 19, 21};
-const int HX711_SCK = 5;
+
+const int HX711_SCK = 5;  // shared SCK pin
+
+// Individual DOUT pins for each HX711 channel
+const int DOUT_ROOT_0      = 4;
+const int DOUT_ROOT_45     = 12;
+const int DOUT_ROOT_90     = 13;
+
+const int DOUT_MIDDLE_0    = 14;
+const int DOUT_MIDDLE_45   = 15;
+const int DOUT_MIDDLE_90   = 16;
+
+const int DOUT_TIP_0       = 17;
+const int DOUT_TIP_45      = 18;
+const int DOUT_TIP_90      = 19;
+
+const int DOUT_DUMMY_GAUGE = 21;
+
+const int HX711_DT_PINS[NUM_CHANNELS] = {
+    DOUT_ROOT_0,
+    DOUT_ROOT_45,
+    DOUT_ROOT_90,
+
+    DOUT_MIDDLE_0,
+    DOUT_MIDDLE_45,
+    DOUT_MIDDLE_90,
+
+    DOUT_TIP_0,
+    DOUT_TIP_45,
+    DOUT_TIP_90,
+
+    DOUT_DUMMY_GAUGE
+};
+
+const char* CHANNEL_NAMES[NUM_CHANNELS] = {
+    "root_0",
+    "root_45",
+    "root_90",
+
+    "middle_0",
+    "middle_45",
+    "middle_90",
+
+    "tip_0",
+    "tip_45",
+    "tip_90",
+
+    "dummy_gauge"
+};
 
 // Stepper motor
 const int STEPPER_STEP = 22;
