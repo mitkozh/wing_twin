@@ -45,6 +45,8 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] Slider planeAngleSlider;
     [SerializeField] Slider stepsSlider;
     [SerializeField] Slider speedSlider;
+    [SerializeField] Slider allowedAngleSlider;
+    [SerializeField] Slider allowedSpeedSlider;
     [SerializeField] TextMeshProUGUI angleSliderLabel;
     [SerializeField] TextMeshProUGUI stepsSliderLabel;
     [SerializeField] TextMeshProUGUI speedSliderLabel;
@@ -56,6 +58,8 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] List<ParticleSystem> windParticles = new List<ParticleSystem>();
     [SerializeField] float commonPlaneSpeed = 40f;
     [SerializeField] float windExaggeration = 1f;
+    [SerializeField] Color desiredColor = Color.black;
+    [SerializeField] Color allowedColor = new Color(0.75f, 0.20f, 0.30f);
 
     float maxAngleDeg = 12f;
     float maxSpeedKmh = 80f;
@@ -153,6 +157,10 @@ public class WingDigitalTwin : MonoBehaviour
 
         planeAngleSlider.minValue = -maxAngleDeg;
         planeAngleSlider.maxValue = maxAngleDeg;
+
+        allowedAngleSlider.minValue = -maxAngleDeg;
+        allowedAngleSlider.maxValue = maxAngleDeg;
+
         if (stepsSlider != null)
         {
             stepsSlider.minValue = 0f;
@@ -162,6 +170,9 @@ public class WingDigitalTwin : MonoBehaviour
         {
             speedSlider.minValue = 0f;
             speedSlider.maxValue = maxSpeedKmh;
+
+            allowedSpeedSlider.minValue = 0;
+            allowedSpeedSlider.maxValue = maxSpeedKmh;
         }
 
         await ConnectAsync();
@@ -462,10 +473,15 @@ public class WingDigitalTwin : MonoBehaviour
                 maxAngleDeg = data.max_angle_deg;
                 planeAngleSlider.minValue = -maxAngleDeg;
                 planeAngleSlider.maxValue = maxAngleDeg;
+
+                allowedAngleSlider.minValue = -maxAngleDeg;
+                allowedAngleSlider.maxValue = maxAngleDeg;
             }
             if (data.max_speed_kmh > 0) {
                 maxSpeedKmh = data.max_speed_kmh;
                 speedSlider.maxValue = maxSpeedKmh;
+
+                allowedSpeedSlider.maxValue = maxSpeedKmh;
             }
             if (data.max_stepper_steps > 0) {
                 maxStepperSteps = data.max_stepper_steps;
@@ -477,20 +493,23 @@ public class WingDigitalTwin : MonoBehaviour
             targetAngleOfAttack = data.target_angle_of_attack;
             targetPlaneSpeed = data.target_speed;
 
+            string desiredHex = "#" + ColorUtility.ToHtmlStringRGB(desiredColor);
+            string allowedHex = "#" + ColorUtility.ToHtmlStringRGB(allowedColor);
+
             if (stepsSliderLabel != null)
                 stepsSliderLabel.text = $"Steps: {data.stepper_position}";
             if (angleSliderLabel != null)
-                angleSliderLabel.text = $"Angle: {planeAngleSlider.value:F1} / {targetAngleOfAttack:F1} ° (D / A)";
+                angleSliderLabel.text = $"<color={desiredHex}>Desired Angle: {planeAngleSlider.value:F1}</color> | <color={allowedHex}>Allowed Angle: {targetAngleOfAttack:F1}°</color>";
             if (speedSliderLabel != null)
-                speedSliderLabel.text = $"Speed: {speedSlider.value:F1} / {targetPlaneSpeed:F1} km/h (D / A)";
+                speedSliderLabel.text = $"<color={desiredHex}>Desired Speed: {speedSlider.value:F1}</color> | <color={allowedHex}>Allowed Speed: {targetPlaneSpeed:F1} km/h</color>";
 
             //suppressSliderCallback = true;
             if (stepsSlider != null)
                 stepsSlider.value = data.stepper_position;
-            //if (planeAngleSlider != null)
-            //    planeAngleSlider.value = targetAngleOfAttack;
-            //if (speedSlider != null)
-            //    speedSlider.value = targetPlaneSpeed;
+            if (allowedAngleSlider != null)
+                allowedAngleSlider.value = targetAngleOfAttack;
+            if (allowedSpeedSlider != null)
+                allowedSpeedSlider.value = targetPlaneSpeed;
             //suppressSliderCallback = false;
 
             if (data.stress_field != null && data.stress_field.Count > 0)
@@ -868,7 +887,10 @@ public class WingDigitalTwin : MonoBehaviour
         if (suppressSliderCallback) return;
         suppressSliderCallback = true;
 
-        UpdateSliderLabel(angleSliderLabel, $"Angle: {angle:F1} / {targetAngleOfAttack:F1} ° (D / A)");
+        string desiredHex = "#" + ColorUtility.ToHtmlStringRGB(desiredColor);
+        string allowedHex = "#" + ColorUtility.ToHtmlStringRGB(allowedColor);
+
+        UpdateSliderLabel(angleSliderLabel, $"<color={desiredHex}>Desired Angle: {planeAngleSlider.value:F1}</color> | <color={allowedHex}>Allowed Angle: {targetAngleOfAttack:F1}°</color>");
 
         suppressSliderCallback = false;
 
@@ -880,7 +902,10 @@ public class WingDigitalTwin : MonoBehaviour
     {
         if (suppressSliderCallback) return;
 
-        UpdateSliderLabel(speedSliderLabel, $"Speed: {speed:F1} / {targetPlaneSpeed:F1} km/h (D / A)");
+        string desiredHex = "#" + ColorUtility.ToHtmlStringRGB(desiredColor);
+        string allowedHex = "#" + ColorUtility.ToHtmlStringRGB(allowedColor);
+
+        UpdateSliderLabel(speedSliderLabel, $"<color={desiredHex}>Desired Speed: {speedSlider.value:F1}</color> | <color={allowedHex}>Allowed Speed: {targetPlaneSpeed:F1} km/h</color>");
 
         float angle = planeAngleSlider != null ? planeAngleSlider.value : 0f;
         SendFlightState(angle, speed);
