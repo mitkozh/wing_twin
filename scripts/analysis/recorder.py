@@ -12,6 +12,7 @@ import h5py
 import numpy as np
 
 from dtwin.core.fatigue import FatigueState
+from dtwin.core.life_prediction import LifePredictionState
 
 from ..logger import get_logger
 
@@ -232,3 +233,26 @@ def load_fatigue_state(path: Path) -> Optional[FatigueState]:
     logger.info("Loaded fatigue state from %s (D=%.4f, %d cycles)",
                 path, data.get("damage", 0.0), len(data.get("cycles", [])))
     return FatigueState.from_dict(data)
+
+def save_life_prediction_state(prediction_state: LifePredictionState, output_dir: Path) -> None:
+    data = prediction_state.to_dict()
+    path = Path(output_dir) / "prediction_state.json"
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+    logger.info("Prediction state saved to %s", path)
+
+
+def load_life_prediction_state(path: Path) -> Optional[LifePredictionState]:
+    path = Path(path)
+    if path.is_dir():
+        path = path / "prediction_state.json"
+
+    if not path.exists():
+        logger.warning("No prediction state found at %s", path)
+        return None
+
+    with open(path) as f:
+        data = json.load(f)
+
+    logger.info("Loaded prediction state from %s", path)
+    return LifePredictionState.from_dict(data)

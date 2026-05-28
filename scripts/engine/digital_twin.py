@@ -28,6 +28,7 @@ from dtwin.core.fatigue import (
     update_confidence,
 )
 from dtwin.core.matrices import TransferMatrices
+from dtwin.core.life_prediction import LifePredictionState
 
 from .config import EngineConfig
 from .state import TwinState
@@ -62,6 +63,8 @@ class DigitalTwinEngine:
         self.state.max_angle_deg = self.config.max_aoa
         self.state.max_speed_kmh = self.config.reference_speed
         self.state.max_stepper_steps = self.config.max_stepper_steps
+
+        self.life_prediction_state = LifePredictionState()
 
         if self.config.seed is not None:
             set_random_seed(self.config.seed)

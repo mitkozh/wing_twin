@@ -62,10 +62,16 @@ class TwinState:
     # Yield strength of 6061-T6 aluminum
     # yield_point_pa = 276_000_000.0
     # Artificial test value to avoid damaging the real wing during testing
-    yield_point_pa: float = 100_000_000.0
+    yield_point_pa: float = 100_000_000.0 # Safety yield limit
     max_angle_deg: float = 12.0
     max_speed_kmh: float = 80.0
     max_stepper_steps: int = 2720
+
+    cycles_remaining: float = 0.0
+    flight_allowed: bool = True
+    prediction_warning: str = ""
+
+
 
     stepper_position: int = 0
     heatmap_mode: str = "damage"

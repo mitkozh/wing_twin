@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..settings import PROJECT_ROOT
-from ..analysis import DataRecorder, save_fatigue_state
+from ..analysis import DataRecorder, save_fatigue_state, save_life_prediction_state
 from ..logger import get_logger
 
 logger = get_logger(__name__)
@@ -94,6 +94,19 @@ def finalize_recorder(recorder: Optional[DataRecorder], engine, rec_dir: Optiona
         recorder.finalize()
     except Exception as exc:
         logger.error("Recorder finalization failed: %s", exc)
+
+    total_cycles = sum(c for _, c in engine.fatigue_state.cycles)
+
+    prediction = engine.life_prediction_state.update_after_run_predictions(
+        current_damage=engine.state.damage,
+        total_cycles=total_cycles,
+    )
+
+    engine.state.cycles_remaining = prediction["cycles_remaining"]
+    engine.state.flight_allowed = prediction["flight_allowed"]
+    engine.state.prediction_warning = prediction["prediction_warning"]
+
+    save_life_prediction_state(engine.life_prediction_state, rec_dir)
 
     try:
         save_fatigue_state(engine.fatigue_state, rec_dir)
