@@ -40,17 +40,14 @@ dev = [
 ]
 
 [project.scripts]
-wing-orchestrator = "scripts.cli.run:main"
-wing-demo = "scripts.cli.demo:main"
+wing-real-run = "scripts.cli.run:main"
+wing-demo-run = "scripts.cli.demo:main"
 wing-simulator = "scripts.cli.simulator:main"
 wing-mesh-export = "scripts.cli.mesh_export:main"
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-
 [tool.setuptools.packages.find]
-where = ["src"]
-include = ["dtwin*"]
+where = ["src", "."]
+include = ["dtwin*", "scripts*"]
 
 [tool.black]
 line-length = 100

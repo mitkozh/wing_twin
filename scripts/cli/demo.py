@@ -156,12 +156,10 @@ def main():
     parser.add_argument("--duration", type=int, default=30, help="Simulation duration in seconds (use 0 for infinite)")
     parser.add_argument("--run", action="store_true", help="Run indefinitely until Ctrl+C")
     parser.add_argument("--headless", action="store_true", help="Run without WebSocket or dashboard")
-    parser.add_argument("--figures", action="store_true", help="Generate PNG figures after simulation")
-    parser.add_argument("--figures-only", action="store_true", help="Regenerate figures from saved data")
+    parser.add_argument("--figures", nargs="?", const=True, default=False, help="Generate PNG figures (optional: output directory)")
+    parser.add_argument("--figures-only", nargs="?", const=True, default=False, help="Regenerate figures from saved data (optional: data directory)")
     parser.add_argument("--record", action="store_true", help="Record data to HDF5 during run")
-    parser.add_argument("--resume", type=str, default=None, help="Resume from prior run directory (loads fatigue_state.json)")
-    parser.add_argument("--data-dir", type=str, default=None, help="Data directory for --figures-only (default: most recent recording)")
-    parser.add_argument("--output-dir", type=str, default=None, help="Output directory for figures (default: figures/)")
+    parser.add_argument("--resume", type=str, default=None, help="Resume from prior run directory")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible results")
     args = parser.parse_args()
 
@@ -171,11 +169,11 @@ def main():
     if args.seed is not None:
         logger.info("Random seed set to %d", args.seed)
 
-    output_dir = Path(args.output_dir) if args.output_dir else PROJECT_ROOT / "figures"
+    output_dir = Path(args.figures) if isinstance(args.figures, str) else PROJECT_ROOT / "figures"
     output_dir.mkdir(exist_ok=True)
 
-    if getattr(args, 'figures_only', False):
-        data_dir = _resolve_data_dir(args.data_dir)
+    if args.figures_only:
+        data_dir = _resolve_data_dir(args.figures_only if isinstance(args.figures_only, str) else None)
         if data_dir:
             generate_figures_from_recording(data_dir, output_dir)
         else:
@@ -205,7 +203,7 @@ def main():
         run_demo_async(
             args.duration, args.seed,
             record=args.record,
-            record_figures=args.figures,
+            record_figures=bool(args.figures),
             headless=args.headless,
             resume_state=resume_state,
         )

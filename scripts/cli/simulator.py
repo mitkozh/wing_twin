@@ -6,13 +6,44 @@ import argparse
 import json
 import time
 
-import paho.mqtt.client as mqtt
-
-from scripts.settings import SimulationConfig
+from scripts.settings import SimulationConfig, MqttConfig
 from scripts.sources import SimulatorSource
+from scripts.mqtt.client import MqttClientBase
 from scripts.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class SimulatorMqttClient(MqttClientBase):
+    """MQTT client for the sensor simulator, publishes sensor data and subscribes to control commands."""
+
+    def __init__(self, simulator, config=None):
+        super().__init__(config)
+        self._simulator = simulator
+        self._sensors_topic = self.config.sensors_topic
+        self._control_topic = self.config.control_topic
+
+    def _register_callbacks(self):
+        self._client.on_message = self._on_control
+
+    def _on_connect(self, client, userdata, flags, rc):
+        super()._on_connect(client, userdata, flags, rc)
+        if rc == 0:
+            client.subscribe(self._control_topic)
+
+    def _on_control(self, client, userdata, msg):
+        try:
+            payload = json.loads(msg.payload.decode())
+            if "position" in payload:
+                self._simulator.state.airspeed = float(payload.get("speed", self._simulator.state.airspeed))
+            elif "servo" in payload:
+                self._simulator.set_speed(int(payload["servo"]))
+        except Exception:
+            pass
+
+    def publish_sensor(self, payload: dict) -> None:
+        if self._client and self._connected:
+            self._client.publish(self._sensors_topic, json.dumps(payload))
 
 
 def main():
@@ -23,8 +54,10 @@ def main():
 
     from dtwin.core.matrices import load_transfer_matrices
 
-    config = SimulationConfig()
-    simulator = SimulatorSource(config)
+    sim_config = SimulationConfig()
+    mqtt_config = MqttConfig(broker=args.broker, port=args.port)
+
+    simulator = SimulatorSource(sim_config)
     matrices = load_transfer_matrices()
     simulator.set_matrices(matrices)
     logger.info("Loaded: %d gauge channels", simulator.state.num_gauges)
@@ -32,41 +65,15 @@ def main():
     logger.info("=" * 60)
     logger.info("  Wing Digital Twin - Sensor Simulator")
     logger.info("=" * 60)
-    logger.info("  Sample rate:  %d Hz", config.sample_rate)
+    logger.info("  Sample rate:  %d Hz", sim_config.sample_rate)
+    logger.info("  MQTT:        %s:%d", mqtt_config.broker, mqtt_config.port)
+    logger.info("  Publish:     %s", mqtt_config.sensors_topic)
+    logger.info("  Subscribe:   %s", mqtt_config.control_topic)
     logger.info("=" * 60)
 
-    mqtt_client = mqtt.Client()
-    mqtt_publish = "wing/sensors"
-    mqtt_subscribe = "wing/control"
-
-    def on_connect(client, userdata, flags, rc):
-        if rc == 0:
-            logger.info("Connected to MQTT broker")
-        else:
-            logger.error("MQTT connection failed: %s", rc)
-
-    def on_control(client, userdata, msg):
-        try:
-            payload = json.loads(msg.payload.decode())
-            if "position" in payload:
-                steps = int(payload["position"])
-                simulator.state.airspeed = float(payload.get("speed", simulator.state.airspeed))
-            elif "servo" in payload:
-                simulator.set_speed(int(payload["servo"]))
-        except Exception:
-            pass
-
-    mqtt_client.on_connect = on_connect
-    mqtt_client.on_message = on_control
-
-    try:
-        mqtt_client.connect(args.broker, args.port, 60)
-        mqtt_client.subscribe(mqtt_subscribe)
-    except Exception as e:
-        logger.error("Cannot connect to MQTT: %s", e)
+    mqtt_client = SimulatorMqttClient(simulator, mqtt_config)
+    if not mqtt_client.connect():
         return
-
-    mqtt_client.loop_start()
 
     logger.info("%-10s %-12s %-12s", "Time", "Strain[0]", "AccelZ")
     logger.info("-" * 40)
@@ -87,16 +94,15 @@ def main():
                     "accel_z": int(reading.accel_z),
                     "timestamp": reading.timestamp,
                 }
-            mqtt_client.publish(mqtt_publish, json.dumps(payload))
+            mqtt_client.publish_sensor(payload)
 
-            if int(simulator.state.time_elapsed * config.sample_rate) % 10 == 0:
+            if int(simulator.state.time_elapsed * sim_config.sample_rate) % 10 == 0:
                 strain_val = reading.strain if reading.strain_vector is None else reading.strain_vector[0]
                 logger.info("%-10.1f %-12.2f %-12.0f", simulator.state.time_elapsed, strain_val, reading.accel_z)
 
-            time.sleep(1 / config.sample_rate)
+            time.sleep(1 / sim_config.sample_rate)
     except KeyboardInterrupt:
         logger.info("Stopping...")
-        mqtt_client.loop_stop()
         mqtt_client.disconnect()
 
 

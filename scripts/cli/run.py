@@ -1,5 +1,5 @@
 """
-Wing Digital Twin Production Runner CLI Entry Point.
+Wing Digital Twin Real Run CLI Entry Point.
 
 Uses real sensors via MQTT - connects to the physical wing system.
 """
@@ -111,26 +111,24 @@ def _resolve_data_dir(hint: Optional[str] = None) -> Optional[Path]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Wing Digital Twin Production Runner")
+    parser = argparse.ArgumentParser(description="Wing Digital Twin Real Run")
     parser.add_argument("--broker", default="localhost", help="MQTT broker address")
     parser.add_argument("--port", type=int, default=1883, help="MQTT broker port")
     parser.add_argument("--record", action="store_true", help="Record data to HDF5 during run")
-    parser.add_argument("--figures", action="store_true", help="Generate PNG figures on shutdown")
-    parser.add_argument("--figures-only", action="store_true", help="Regenerate figures from saved data")
-    parser.add_argument("--data-dir", type=str, default=None, help="Data directory for --figures-only (default: most recent recording)")
-    parser.add_argument("--resume", type=str, default=None, help="Resume from prior run directory (loads fatigue_state.json)")
-    parser.add_argument("--output-dir", type=str, default=None, help="Output directory for figures (default: figures/)")
+    parser.add_argument("--figures", nargs="?", const=True, default=False, help="Generate PNG figures (optional: output directory)")
+    parser.add_argument("--figures-only", nargs="?", const=True, default=False, help="Regenerate figures from saved data (optional: data directory)")
+    parser.add_argument("--resume", type=str, default=None, help="Resume from prior run directory")
     args = parser.parse_args()
 
     config = Config()
     config.mqtt.broker = args.broker
     config.mqtt.port = args.port
 
-    output_dir = Path(args.output_dir) if args.output_dir else PROJECT_ROOT / "figures"
+    output_dir = Path(args.figures) if isinstance(args.figures, str) else PROJECT_ROOT / "figures"
     output_dir.mkdir(exist_ok=True)
 
-    if getattr(args, 'figures_only', False):
-        data_dir = _resolve_data_dir(args.data_dir)
+    if args.figures_only:
+        data_dir = _resolve_data_dir(args.figures_only if isinstance(args.figures_only, str) else None)
         if data_dir:
             generate_figures_from_recording(data_dir, output_dir)
         else:
@@ -142,7 +140,7 @@ def main():
         resume_state = load_fatigue_state(Path(args.resume))
 
     logger.info("=" * 60)
-    logger.info("  Wing Digital Twin - Physical Mode")
+    logger.info("  Wing Digital Twin - Real Run Mode")
     logger.info("=" * 60)
     logger.info("  MQTT:   %s:%d", config.mqtt.broker, config.mqtt.port)
     logger.info("  Sensors topic: %s", config.mqtt.sensors_topic)
@@ -156,7 +154,7 @@ def main():
     logger.info("=" * 60)
 
     rec_dir = asyncio.run(
-        run_production(config, record=args.record, record_figures=args.figures, resume_state=resume_state)
+        run_production(config, record=args.record, record_figures=bool(args.figures), resume_state=resume_state)
     )
 
     if args.figures and rec_dir is not None:

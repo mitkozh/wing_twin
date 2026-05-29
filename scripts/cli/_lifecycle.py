@@ -85,7 +85,7 @@ def finalize_recorder(recorder: Optional[DataRecorder], engine, rec_dir: Optiona
     """Flush recordings and persist fatigue state.
 
     This is safe to call even if the recorder is None or if finalization
-    encounters an error — failures are logged but never propagated.
+    encounters an error - failures are logged but never propagated.
     """
     if recorder is None:
         return

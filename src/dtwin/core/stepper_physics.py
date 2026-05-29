@@ -27,7 +27,7 @@ def compute_aero_force(
     Compute resultant aerodynamic force (N) on the prototype wing
     for the given simulated flight condition using thin-airfoil theory.
     """
-    V = airspeed_kmh / 3.6          # km/h → m/s
+    V = airspeed_kmh / 3.6          # km/h -> m/s
     q = 0.5 * AIR_DENSITY * V ** 2  # dynamic pressure (Pa)
     alpha = math.radians(angle_deg)
 
