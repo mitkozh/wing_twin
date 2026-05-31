@@ -2,8 +2,6 @@
 Core digital twin processing engine.
 """
 
-import math
-from collections import deque
 from typing import Optional
 
 import numpy as np
@@ -11,15 +9,7 @@ import numpy as np
 from wing_twin.fea.matrices import TransferMatrices, load_transfer_matrices
 from wing_twin.fea.force_reconstruct import solve_forces
 from wing_twin.fea.field_compute import compute_stress_field, compute_deformation_field
-from wing_twin.fatigue.fatigue import (
-    FatigueState,
-    set_random_seed,
-    accumulate_damage_at_nodes,
-    sn_curve_for_material,
-    update_confidence,
-    accumulate_damage,
-)
-from wing_twin.fatigue.life_prediction import LifePredictionState
+from wing_twin.fatigue.fatigue import FatigueState, set_random_seed
 from wing_twin.physics.aero import (
     compute_aero_force,
     compute_pitch_damping_force,
@@ -28,11 +18,13 @@ from wing_twin.physics.aero import (
 from wing_twin.control.control import decide_control, decide_control_stress
 from wing_twin.config import EngineConfig
 from wing_twin.engine.state import TwinState
+from wing_twin.engine.dynamics import FlightDynamics
+from wing_twin.engine.fatigue_tracker import FatigueTracker
 from wing_twin.types import DataSource, SensorReading
 
 
 class DigitalTwinEngine:
-    """Processes sensor data and computes digital twin state."""
+    """Orchestrates the digital twin pipeline."""
 
     def __init__(
         self,
@@ -46,23 +38,19 @@ class DigitalTwinEngine:
         self._data_source: Optional[DataSource] = None
 
         self.state = TwinState()
-        self.fatigue_state = initial_fatigue_state or FatigueState()
-        self._strain_buffer: deque = deque(
-            maxlen=self.config.fatigue.strain_buffer_size
+        self.dynamics = FlightDynamics(
+            angle_accel=self.config.angle_accel,
+            speed_accel=self.config.speed_accel,
         )
-        self._cycles: list = []
-        self._prev_angle_of_attack: float = 0.0
-        self._angle_velocity: float = 0.0
-        self._speed_velocity: float = 0.0
-
-        self._prev_low_confidence = False
+        self.fatigue = FatigueTracker(
+            self.config.fatigue,
+            initial_state=initial_fatigue_state,
+        )
 
         self.state.yield_point_pa = self.config.stress_limit
         self.state.max_angle_deg = self.config.max_aoa
         self.state.max_speed_kmh = self.config.reference_speed
         self.state.max_stepper_steps = self.config.max_stepper_steps
-
-        self.life_prediction_state = LifePredictionState()
 
         if self.config.seed is not None:
             set_random_seed(self.config.seed)
@@ -82,8 +70,27 @@ class DigitalTwinEngine:
             self._num_gauges = self._matrices.n_gauges
 
     @property
+    def fatigue_state(self) -> FatigueState:
+        return self.fatigue.state
+
+    @property
     def matrices(self) -> Optional[TransferMatrices]:
         return self._matrices
+
+    @property
+    def life_prediction_state(self):
+        return self.fatigue.life_prediction
+
+    @property
+    def cycles(self) -> list:
+        return self.fatigue.cycles
+
+    def clear_cycles(self) -> None:
+        self.fatigue.clear_cycles()
+
+    @property
+    def num_gauges(self) -> int:
+        return self._num_gauges
 
     def load_matrices(self, matrix_dir: Optional[str] = None) -> None:
         matrix_path = matrix_dir or self.config.matrix_dir
@@ -91,23 +98,60 @@ class DigitalTwinEngine:
         self._num_gauges = self._matrices.n_gauges
 
     def reset(self, target: str = "all") -> None:
-        if target in ("damage", "all"):
-            self.state.damage = 0.0
-            self.fatigue_state = FatigueState()
-            self._prev_low_confidence = False
-            self._cycles.clear()
-            self.state.cycles_histogram.clear()
+        self.fatigue.reset(target)
         if target in ("strain", "all"):
-            self._strain_buffer.clear()
             self.state.strain_vector = []
             self.state.forces = []
             self.state.stress_field = []
             self.state.deformation_field = []
+        if target in ("damage", "all"):
+            self.state.damage = 0.0
+            self.state.cycles_histogram.clear()
 
-    def process_reading(self, reading: SensorReading) -> None:
+    def step(self) -> bool:
+        """Execute one processing step. Returns True if new data was processed."""
+        if self._data_source is None:
+            return False
+
+        dt = 1.0 / self.config.sample_rate
+
+        self._update_safe_targets()
+
+        self.dynamics.update(self.state, dt)
+
+        F_aero = compute_aero_force(
+            self.state.angle_of_attack,
+            self.state.airspeed,
+        )
+        d_alpha_dt = self.dynamics.d_alpha_dt(
+            self.state.angle_of_attack, self.config.sample_rate
+        )
+        F_damping = compute_pitch_damping_force(
+            self.state.angle_of_attack,
+            self.state.airspeed,
+            d_alpha_dt,
+            chord=self.config.chord,
+            Cmq=self.config.Cmq,
+        )
+        self.state.stepper_position = force_to_steps(
+            F_aero + F_damping, self.config.steps_per_newton
+        )
+
+        if hasattr(self._data_source, 'set_airspeed'):
+            self._data_source.set_airspeed(self.state.airspeed)
+        if hasattr(self._data_source, 'set_angle_of_attack'):
+            self._data_source.set_angle_of_attack(self.state.angle_of_attack)
+
+        reading = self._data_source.read()
+        if reading is not None:
+            self._process_reading(reading)
+            return True
+        return False
+
+    def _process_reading(self, reading: SensorReading) -> None:
+        """Process a sensor reading through FEA -> fatigue -> control."""
         if self._matrices is None:
-            raise RuntimeError("Call load_matrices() before process_reading()")
-        self._strain_buffer.append(reading.strain)
+            raise RuntimeError("Call load_matrices() before processing readings")
 
         if reading.strain_vector is not None:
             strain_vec = reading.strain_vector
@@ -126,189 +170,44 @@ class DigitalTwinEngine:
         self.state.stress_field = stress.tolist()
         self.state.deformation_field = deformation.tolist()
 
-        expected_raw = self._matrices.H @ F
-        update_confidence(
-            self.fatigue_state,
-            strain_vec,
-            expected_raw,
-            config=self.config.fatigue,
+        expected_strain = self._matrices.H @ F
+
+        self.fatigue.process(
+            strain_vector=strain_vec,
+            stress_field_pa=stress,
+            expected_strain=expected_strain,
+            twin_state=self.state,
+            matrices=self._matrices,
+            single_strain=reading.strain,
         )
-
-        stress_mpa = stress / 1e6
-        accumulate_damage_at_nodes(
-            stress_mpa,
-            self.fatigue_state,
-            sn_curve=sn_curve_for_material(self.config.fatigue.material),
-            config=self.config.fatigue,
-        )
-
-        self.state.node_damages = dict(self.fatigue_state.node_damages)
-
-        _, new_cycles = accumulate_damage(
-            self._strain_buffer,
-            self.fatigue_state,
-            sn_curve=sn_curve_for_material(self.config.fatigue.material),
-            config=self.config.fatigue,
-        )
-        self._cycles.extend(new_cycles)
-        bin_width = self.config.fatigue.rainflow_range_bin_width
-        for r, c in new_cycles:
-            idx = int(r / bin_width)
-            key = round((idx + 0.5) * bin_width, 1)
-            self.state.cycles_histogram[key] = self.state.cycles_histogram.get(key, 0.0) + c
-
-        if self.fatigue_state.node_damages:
-            values = list(self.fatigue_state.node_damages.values())
-            self.state.damage = max(values)
-            sorted_vals = sorted(values, reverse=True)
-            top_10_pct = sorted_vals[: max(1, len(sorted_vals) // 10)]
-            self.state.avg_damage = (
-                sum(top_10_pct) / len(top_10_pct) if top_10_pct else 0.0
-            )
-        else:
-            self.state.damage = self.fatigue_state.damage
-            self.state.avg_damage = 0.0
-
-        self.state.confidence = self.fatigue_state.confidence
-
-        low_conf = self.fatigue_state.low_confidence_frames >= self.config.fatigue.confidence_frames_threshold
-        if low_conf and not self._prev_low_confidence:
-            self.state.add_notification(
-                "maint_low_conf", "warning",
-                "Maintenance Required",
-                "Sensor readings show low confidence.",
-            )
-        elif not low_conf and self._prev_low_confidence:
-            self.state.dismiss_notification("maint_low_conf")
-        self._prev_low_confidence = low_conf
 
         if self.state.heatmap_mode == "stress" and self.state.stress_field:
             max_stress_pa = max(abs(s) for s in self.state.stress_field)
             self.state.led_state, self.state.speed_pct = decide_control_stress(
-                max_stress_pa,
-                speed_pct=self.state.speed_pct,
+                max_stress_pa, speed_pct=self.state.speed_pct,
             )
         else:
             self.state.led_state, self.state.speed_pct = decide_control(
                 self.state.damage,
-                self.fatigue_state.confidence,
+                self.state.confidence,
                 config=self.config.fatigue,
             )
 
-    def _accel_towards(
-        self, pos: float, vel: float, target: float, accel: float, dt: float
-    ) -> tuple[float, float]:
-        error = target - pos
-        if abs(error) < 1e-6 and abs(vel) < 1e-6:
-            return target, 0.0
-
-        braking_dist = (vel * vel) / (2 * accel) if abs(vel) > 0.0 else 0.0
-
-        if abs(error) <= braking_dist:
-            vel -= math.copysign(accel * dt, vel)
-        else:
-            vel += math.copysign(accel * dt, error)
-
-        if vel * error < 0:
-            vel = 0.0
-
-        pos += vel * dt
-
-        if (pos - target) * error > 0.0:
-            pos = target
-            vel = 0.0
-
-        return pos, vel
-
-    def step(self) -> bool:
-        if self._data_source is None:
-            return False
-
-        dt = 1.0 / self.config.sample_rate
-
-        self._update_safe_targets()
-
-        self.state.angle_of_attack, self._angle_velocity = self._accel_towards(
-            self.state.angle_of_attack,
-            self._angle_velocity,
-            self.state.target_angle_of_attack,
-            self.config.angle_accel,
-            dt,
-        )
-        self.state.airspeed, self._speed_velocity = self._accel_towards(
-            self.state.airspeed,
-            self._speed_velocity,
-            self.state.target_airspeed,
-            self.config.speed_accel,
-            dt,
-        )
-
-        F_aero = compute_aero_force(
-            self.state.angle_of_attack,
-            self.state.airspeed,
-        )
-
-        d_alpha_dt = (
-            self.state.angle_of_attack - self._prev_angle_of_attack
-        ) * self.config.sample_rate
-        F_damping = compute_pitch_damping_force(
-            self.state.angle_of_attack,
-            self.state.airspeed,
-            d_alpha_dt,
-            chord=self.config.chord,
-            Cmq=self.config.Cmq,
-        )
-
-        F_target = F_aero + F_damping
-        self.state.stepper_position = force_to_steps(
-            F_target, self.config.steps_per_newton
-        )
-        self._prev_angle_of_attack = self.state.angle_of_attack
-
-        if hasattr(self._data_source, 'set_airspeed'):
-            self._data_source.set_airspeed(self.state.airspeed)
-        if hasattr(self._data_source, 'set_angle_of_attack'):
-            self._data_source.set_angle_of_attack(self.state.angle_of_attack)
-
-        reading = self._data_source.read()
-        if reading is not None:
-            self.process_reading(reading)
-            return True
-        return False
-
     def _update_safe_targets(self) -> None:
+        """Convert desired angle/speed into safe targets."""
         desired_angle = float(self.state.desired_angle_of_attack)
         desired_speed = float(self.state.desired_airspeed)
 
-        max_aoa = self.config.max_aoa
-        min_speed = self.config.min_airspeed
-        max_speed = self.config.reference_speed
-        stress_limit = self.config.stress_limit
-
-        target_angle = max(-max_aoa, min(max_aoa, desired_angle))
-        target_speed = max(min_speed, min(max_speed, desired_speed))
+        target_angle = max(-self.config.max_aoa, min(self.config.max_aoa, desired_angle))
+        target_speed = max(self.config.min_airspeed, min(self.config.reference_speed, desired_speed))
 
         if self.state.stress_field:
             max_stress = max(abs(s) for s in self.state.stress_field)
-
-            if max_stress > stress_limit and max_stress > 0.0:
-                speed_scale = (stress_limit / max_stress) ** 0.5
-                target_speed = max(min_speed, target_speed * speed_scale)
-
-                if target_speed == min_speed:
-                    angle_scale = stress_limit / max_stress
-                    target_angle *= angle_scale
+            if max_stress > self.config.stress_limit and max_stress > 0.0:
+                speed_scale = (self.config.stress_limit / max_stress) ** 0.5
+                target_speed = max(self.config.min_airspeed, target_speed * speed_scale)
+                if target_speed == self.config.min_airspeed:
+                    target_angle *= self.config.stress_limit / max_stress
 
         self.state.target_angle_of_attack = target_angle
         self.state.target_airspeed = target_speed
-
-    @property
-    def cycles(self) -> list:
-        return self._cycles
-
-    def clear_cycles(self) -> None:
-        self._cycles.clear()
-
-    @property
-    def num_gauges(self) -> int:
-        return self._num_gauges

@@ -16,16 +16,16 @@ Requires Python >= 3.10. Dependencies: `paho-mqtt`, `numpy`, `scipy`, `websocket
 
 ## CLI Commands
 
-| Command | Description | Equivalent |
-|---|---|---|
-| `wing-demo-run` | Run with simulated sensor data, optional WebSocket + Unity | `python -m scripts.cli.demo` |
-| `wing-real-run` | Run with real MQTT sensor data from physical wing | `python -m scripts.cli.run` |
-| `wing-simulator` | Standalone MQTT sensor simulator publishing to broker | `python -m scripts.cli.simulator` |
-| `wing-mesh-export` | Convert VTK-HDF mesh to JSON for Unity | `python -m scripts.cli.mesh_export` |
+| Command | Description |
+|---|---|
+| `wing-demo-run` | Run with simulated sensor data, optional WebSocket + Unity |
+| `wing-real-run` | Run with real MQTT sensor data from physical wing |
+| `wing-simulator` | Standalone MQTT sensor simulator publishing to broker |
+| `wing-mesh-export` | Convert VTK-HDF mesh to JSON for Unity |
 
 ### Flags
 
-**wing-demo-run** (`python -m scripts.cli.demo`)
+**wing-demo-run**
 
 | Flag | Description |
 |-|-|
@@ -38,7 +38,7 @@ Requires Python >= 3.10. Dependencies: `paho-mqtt`, `numpy`, `scipy`, `websocket
 | `--resume DIR` | Resume from prior run directory |
 | `--seed N` | Random seed for reproducibility |
 
-**wing-real-run** (`python -m scripts.cli.run`)
+**wing-real-run**
 
 | Flag | Description |
 |-|-|
@@ -56,51 +56,57 @@ pyproject.toml            Package config and entry points
 environment.yml           Conda environment definition
 mosquitto.yml             MQTT broker configuration
 
-src/dtwin/                Installed package
-  __init__.py             Re-exports core public API
-  core/
-    matrices.py           Load FEA transfer matrices (H, H_inv, S, U)
-    force_reconstruct.py  Reconstruct forces: F = H_inv @ strain
-    field_compute.py      Compute stress/deformation: S@F, U@F
-    fatigue.py            Rainflow counting, Miner's damage, confidence
-    control.py            LED / speed decisions from damage
-    stepper_physics.py    Aerodynamic force (thin-airfoil theory)
-    life_prediction.py    Remaining cycles estimation
+src/wing_twin/            Installed package (wing_twin v2.0.0)
+  __init__.py             Package metadata, public exports
 
-scripts/                  CLI and engine (not installed as package)
-  __init__.py
-  types.py                Shared DataSource / SensorReading types
-  settings.py             I/O config (MqttConfig, SimulationConfig, file paths)
-  logger.py               Logging setup (WING_TWIN_LOG_LEVEL)
+  config.py               Unified config dataclasses:
+                            EngineConfig, FatigueConfig, MqttConfig,
+                            WebSocketConfig, SimulationConfig, ...
+
+  types.py                DataSource (ABC), SensorReading
+
+  physics/
+    aero.py               Aerodynamic force (thin-airfoil theory),
+                            pitch damping, force_to_steps
+
+  fea/
+    matrices.py           Load FEA transfer matrices (H, H_inv, S, U)
+    force_reconstruct.py  F = H_inv @ strain
+    field_compute.py      sigma = S @ F, u = U @ F
+
+  fatigue/
+    fatigue.py            Rainflow counting, Miner's damage,
+                            confidence tracking, node damage buffers
+    life_prediction.py    Run-to-run remaining cycles estimation
+
+  control/
+    control.py            LED / speed decisions from damage or stress
 
   engine/
-    digital_twin.py       DigitalTwinEngine (strain -> forces -> stress/deformation -> fatigue damage)
+    engine.py             DigitalTwinEngine (orchestrator)
+    dynamics.py           FlightDynamics (acceleration-limited ramping)
+    fatigue_tracker.py    FatigueTracker (strain buffer, cycles,
+                            confidence, notifications)
     state.py              TwinState (for_unity / for_esp32 serialization)
-    config.py             EngineConfig (flight envelope, wing geometry, safety limits)
 
-  sources/
-    mqtt.py               MqttSource (reads real sensor data via MQTT)
-    simulator.py          SimulatorSource (generates synthetic strain)
+  io/
+    logger.py             Logging (WING_TWIN_LOG_LEVEL)
+    mqtt.py               MqttClientBase, MqttHandler, MqttSource,
+                            MqttPublisher
+    websocket.py          WebSocketBroadcaster + EngineCommandHandler
+    simulator.py          SimulatorSource (synthetic strain data)
 
-  output/
-    websocket.py          WebSocketBroadcaster (pushes state to Unity)
-    mqtt.py               MqttPublisher (sends control to ESP32)
-    command.py            EngineCommandHandler (WebSocket commands from Unity)
-
-  mqtt/
-    client.py             Shared MQTT client base
-    handler.py            Parses incoming sensor messages
+  recorder/
+    recorder.py           Incremental HDF5 recording + state persistence
+    loader.py             Load recorded data for post-processing
 
   mesh/
     exporter.py           Extracts surface mesh from VTK-HDF to JSON
 
-  analysis/
-    recorder.py           Incremental HDF5 recording
-    loader.py             Load recorded data for post-processing
-
   viz/
-    generator.py          Figure generation from recordings
-    base.py, strain.py, damage.py, rainflow.py, sn_curve.py, fields.py
+    generator.py          Orchestrates all plotters
+    base.py, strain.py, damage.py, rainflow.py,
+    sn_curve.py, fields.py
 
   cli/
     run.py                wing-real-run
@@ -117,7 +123,7 @@ unity/WingTwinUnity/      Unity 6 project (3D visualization)
 transfer_matrices/        Pre-computed FEA matrices (.npy)
   H.npy, Inverse_H.npy, EquivalentStress.npy, TotalDeformation.npy
 
-mesh/                     Wing mesh files
+mesh/
   FinalMesh.vtkhdf        Full FEA mesh
   FinalMesh_surface.json  Surface mesh exported for Unity
 ```
@@ -127,21 +133,27 @@ mesh/                     Wing mesh files
 ```mermaid
 graph TB
     Sensors["Strain Gauges<br/>(physical wing)"]
-    Simulator["SimulatorSource<br/>(synthetic data)"]
-    MQTTSrc["MqttSource<br/>(real sensor data)"]
-    Engine["DigitalTwinEngine<br/>scripts/engine/digital_twin.py"]
-    Core["Core Physics<br/>src/dtwin/core/<br/>- force_reconstruct.py<br/>- field_compute.py<br/>- fatigue.py<br/>- control.py<br/>- stepper_physics.py<br/>- life_prediction.py"]
-    MQTTPub["MqttPublisher<br/>scripts/output/mqtt.py"]
-    WS["WebSocketBroadcaster<br/>scripts/output/websocket.py"]
-    Cmd["EngineCommandHandler<br/>scripts/output/command.py"]
+    Simulator["SimulatorSource<br/>src/wing_twin/io/simulator.py"]
+    MQTTSrc["MqttSource<br/>src/wing_twin/io/mqtt.py"]
+    Engine["DigitalTwinEngine<br/>src/wing_twin/engine/engine.py"]
+    Dynamics["FlightDynamics<br/>src/wing_twin/engine/dynamics.py"]
+    Fatigue["FatigueTracker<br/>src/wing_twin/engine/fatigue_tracker.py"]
+    FEA["FEA Processing<br/>src/wing_twin/fea/<br/>force_reconstruct + field_compute"]
+    Aero["Aero Physics<br/>src/wing_twin/physics/aero.py"]
+    MQTTPub["MqttPublisher<br/>src/wing_twin/io/mqtt.py"]
+    WS["WebSocketBroadcaster<br/>src/wing_twin/io/websocket.py"]
+    Cmd["EngineCommandHandler"]
     Unity["Unity 3D Client<br/>(visualization)"]
     ESP32["ESP32<br/>(stepper motor + LED)"]
-    Recorder["DataRecorder<br/>scripts/analysis/recorder.py"]
+    Recorder["DataRecorder<br/>src/wing_twin/recorder/recorder.py"]
 
     Sensors -->|MQTT: wing/sensors| MQTTSrc
     Simulator -->|synthetic strain| Engine
     MQTTSrc -->|strain readings| Engine
-    Engine -->|uses| Core
+    Engine -->|delegates ramp| Dynamics
+    Engine -->|delegates fatigue| Fatigue
+    Engine -->|calls| FEA
+    Engine -->|calls| Aero
     Engine -->|state| MQTTPub
     Engine -->|state| WS
     Engine -->|frame data| Recorder
@@ -151,17 +163,19 @@ graph TB
     Cmd -->|set_flight_state / reset / ...| Engine
 ```
 
-### Data Flow
+### Engine Pipeline (per tick)
 
-1. **Strain** arrives from physical gauges (MQTT) or a simulator
-2. **Forces** are reconstructed via `F = H_inv @ strain` (pseudoinverse of strain sensitivity matrix)
-3. **Stress** and **deformation** fields are computed: `sigma = S @ F`, `u = U @ F`
-4. **Fatigue damage** accumulated via rainflow cycle counting + Miner's rule per critical node
-5. **Confidence** tracked via EMA-filtered residual between observed and expected strain
-6. **Life prediction** estimates remaining cycles based on damage rate
-7. **Control decisions** (LED state, speed limit) are made from damage/confidence/stress
-8. **State** is pushed to **Unity** (WebSocket) for 3D visualization and to **ESP32** (MQTT) for hardware actuation
-9. **Commands** from Unity (set flight state, reset damage, change heatmap mode) are handled by `EngineCommandHandler`
+1. **Safety limiting** - clamp desired angle/speed to envelope limits, reduce if stress is too high
+2. **Flight dynamics** (`FlightDynamics`) - smoothly ramp actual angle/speed toward targets with configurable acceleration limits
+3. **Aero force** (`physics/aero.py`) - compute aerodynamic lift + drag + pitch damping from current flight state
+4. **Stepper position** (`physics/aero.force_to_steps`) - convert aero force to stepper absolute position for hardware actuation
+5. **Sensor read** - get latest strain reading from MQTT or simulator
+6. **FEA processing** (`fea/`) - `F = H_inv @ strain`, `sigma = S @ F`, `u = U @ F`
+7. **Confidence** (`fatigue.update_confidence`) - EMA-filtered residual between observed and expected strain
+8. **Per-node fatigue** (`fatigue.accumulate_damage_at_nodes`) - rainflow + Miner on each critically stressed node
+9. **Global fatigue** (`fatigue.accumulate_damage`) - rainflow + Miner on the global strain buffer
+10. **Control decision** (`control/`) - LED state + speed limit from damage/confidence/stress
+11. **Life prediction** (`fatigue/life_prediction.py`) - estimates remaining cycles based on damage rate (end-of-run)
 
 ### Transfer Matrices
 
@@ -195,7 +209,7 @@ wing-simulator --broker localhost
 
 ## Unity Visualization
 
-The `unity/WingTwinUnity` folder is a **Unity 6** project. It connects to the Python backend via WebSocket and provides a real-time 3D view  and control of the wing.
+The `unity/WingTwinUnity` folder is a **Unity 6** project. It connects to the Python backend via WebSocket and provides a real-time 3D view and control of the wing.
 
 ### Setup
 
