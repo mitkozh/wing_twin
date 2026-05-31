@@ -82,6 +82,7 @@ class SimulatorSource(DataSource):
         bending = 0.0
         torsion = 0.0
         turbulence = 0.0
+        noise = 0.0
         gust = 0.0
         if np.random.random() < 1 / (60 * self.config.sample_rate):
             self._gust_remaining = int(0.5 * self.config.sample_rate)
@@ -90,7 +91,6 @@ class SimulatorSource(DataSource):
                 math.pi * (1 - self._gust_remaining / (0.5 * self.config.sample_rate))
             )
             self._gust_remaining -= 1
-        noise = 0.0
         return steady + bending + torsion + turbulence + gust + noise
 
     def _read(self, t: float, airspeed: float, angle_deg: float) -> tuple[np.ndarray, float]:

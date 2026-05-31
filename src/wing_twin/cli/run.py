@@ -73,7 +73,10 @@ async def run_production(
                 except Exception as e:
                     logger.error("Recording failed: %s", e)
 
-            mqtt_publisher.publish(config.mqtt.control_topic, engine.state.for_esp32())
+            loop.run_in_executor(
+                None, mqtt_publisher.publish,
+                config.mqtt.control_topic, engine.state.for_esp32(),
+            )
             await asyncio.sleep(0.05)
             await broadcaster.broadcast()
 

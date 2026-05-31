@@ -201,13 +201,27 @@ class DigitalTwinEngine:
         target_angle = max(-self.config.max_aoa, min(self.config.max_aoa, desired_angle))
         target_speed = max(self.config.min_airspeed, min(self.config.reference_speed, desired_speed))
 
-        if self.state.stress_field:
-            max_stress = max(abs(s) for s in self.state.stress_field)
-            if max_stress > self.config.stress_limit and max_stress > 0.0:
-                speed_scale = (self.config.stress_limit / max_stress) ** 0.5
-                target_speed = max(self.config.min_airspeed, target_speed * speed_scale)
-                if target_speed == self.config.min_airspeed:
-                    target_angle *= self.config.stress_limit / max_stress
+        if self._matrices is not None and self.state.forces:
+            F_current = np.array(self.state.forces, dtype=np.float64)
+            F_current_mag = float(np.linalg.norm(F_current))
+
+            if F_current_mag > 1e-12:
+                F_aero_current = compute_aero_force(
+                    self.state.angle_of_attack, self.state.airspeed
+                )
+                F_aero_target = compute_aero_force(target_angle, target_speed)
+
+                min_aero = max(0.01 * F_aero_target, 1e-9)
+                stress_scale = F_aero_target / max(F_aero_current, min_aero)
+                F_predicted = F_current * stress_scale
+                stress_predicted = compute_stress_field(self._matrices.S, F_predicted)
+                max_stress_pred = float(np.max(np.abs(stress_predicted)))
+
+                if max_stress_pred > self.config.stress_limit and max_stress_pred > 0.0:
+                    reduction = (self.config.stress_limit / max_stress_pred) ** 0.5
+                    target_speed = max(self.config.min_airspeed, target_speed * reduction)
+                    if target_speed == self.config.min_airspeed:
+                        target_angle *= self.config.stress_limit / max_stress_pred
 
         self.state.target_angle_of_attack = target_angle
         self.state.target_airspeed = target_speed

@@ -96,44 +96,40 @@ class TwinState:
     def for_unity(self) -> dict:
         """Format state for Unity WebSocket."""
         node_ids = _get_surface_node_ids()
+        n_surface = len(node_ids) if node_ids else 0
 
-        surface_stress = []
-        if node_ids and self.stress_field:
-            for nid in node_ids:
-                if nid < len(self.stress_field):
-                    surface_stress.append(round(self.stress_field[nid], 2))
-                elif self.stress_field:
-                    surface_stress.append(round(self.stress_field[-1], 2))
-                else:
-                    surface_stress.append(0.0)
-        elif self.stress_field:
-            n_surface = len(node_ids) if node_ids else 9102
+        has_stress = self.stress_field is not None and len(self.stress_field) > 0
+        has_deform = self.deformation_field is not None and len(self.deformation_field) > 0
+
+        if n_surface > 0 and has_stress:
+            sf = np.asarray(self.stress_field, dtype=np.float64)
+            valid = np.array([nid for nid in node_ids if nid < len(sf)], dtype=np.int32)
+            clipped = np.clip(valid, 0, len(sf) - 1)
+            surface_stress = np.round(sf[clipped], 2).tolist()
+        elif has_stress:
             surface_stress = [round(s, 2) for s in self.stress_field[:n_surface]]
-
-        surface_deform = []
-        if node_ids and self.deformation_field:
-            for nid in node_ids:
-                if nid < len(self.deformation_field):
-                    surface_deform.append(round(self.deformation_field[nid], 6))
-                elif self.deformation_field:
-                    surface_deform.append(round(self.deformation_field[-1], 6))
-                else:
-                    surface_deform.append(0.0)
-        elif self.deformation_field:
-            n_surface = len(node_ids) if node_ids else 9102
-            surface_deform = [round(u, 6) for u in self.deformation_field[:n_surface]]
-
-        surface_damage = []
-        if node_ids and self.node_damages:
-            for nid in node_ids:
-                surface_damage.append(round(self.node_damages.get(int(nid), 0.0), 4))
         else:
-            surface_damage = [0.0] * (len(node_ids) if node_ids else 0)
+            surface_stress = []
 
-        stress_abs = [abs(s) for s in surface_stress]
+        if n_surface > 0 and has_deform:
+            df = np.asarray(self.deformation_field, dtype=np.float64)
+            valid = np.array([nid for nid in node_ids if nid < len(df)], dtype=np.int32)
+            clipped = np.clip(valid, 0, len(df) - 1)
+            surface_deform = np.round(df[clipped], 6).tolist()
+        elif has_deform:
+            surface_deform = [round(u, 6) for u in self.deformation_field[:n_surface]]
+        else:
+            surface_deform = []
 
-        stress_min = min(stress_abs) if stress_abs else 0.0
-        stress_max = max(stress_abs) if stress_abs else 0.0
+        if n_surface > 0 and self.node_damages:
+            surface_damage = [round(self.node_damages.get(int(nid), 0.0), 4) for nid in node_ids]
+        else:
+            surface_damage = [0.0] * n_surface if n_surface else []
+
+        stress_arr = np.array(surface_stress, dtype=np.float64) if surface_stress else np.array([])
+        stress_abs = np.abs(stress_arr)
+        stress_min = float(np.min(stress_abs)) if stress_abs.size > 0 else 0.0
+        stress_max = float(np.max(stress_abs)) if stress_abs.size > 0 else 0.0
 
         cycles_binned = [
             {"range": r, "count": round(c, 2)}

@@ -11,6 +11,7 @@ Units:
   - Confidence: percentage (0 to 100)
 """
 
+import concurrent.futures
 import numpy as np
 from collections import deque
 from dataclasses import dataclass, field
@@ -29,7 +30,7 @@ class FatigueConfig:
     rainflow_range_bin_width: float = 2.0
     critical_stress_threshold: float = 50.0
     critical_node_percentile: float = 90.0
-    max_critical_nodes: int = 2000
+    max_critical_nodes: int = 200
     node_buffer_size: int = 500
     ema_alpha: float = 0.1
     confidence_threshold: float = 50.0
@@ -207,6 +208,52 @@ def identify_critical_nodes(
     return critical_indices, critical_stresses
 
 
+def _process_single_node(
+    node_idx: int,
+    stress_val: float,
+    state: FatigueState,
+    sn_curve: SNCurve,
+    config: FatigueConfig,
+) -> float:
+    """Rainflow + Miner for one critical node. Returns incremental damage."""
+    if node_idx not in state.node_buffers:
+        state.node_buffers[node_idx] = deque(maxlen=config.node_buffer_size)
+        state.node_res_sigs[node_idx] = []
+        if node_idx not in state.node_damages:
+            state.node_damages[node_idx] = 0.0
+
+    state.node_buffers[node_idx].append(stress_val)
+
+    if len(state.node_buffers[node_idx]) < config.min_buffer_size:
+        return 0.0
+
+    pending = list(state.node_res_sigs[node_idx])
+    state.node_res_sigs[node_idx] = []
+
+    stress_arr = np.array(state.node_buffers[node_idx], dtype=np.float64)
+    combined = np.concatenate([np.array(pending), stress_arr]) if pending else stress_arr
+    state.node_buffers[node_idx].clear()
+
+    try:
+        cc = CycleCount.from_timeseries(
+            combined, unit="MPa", range_bin_width=config.rainflow_range_bin_width,
+        )
+    except ValueError:
+        state.node_res_sigs[node_idx] = []
+        return 0.0
+
+    result_dict = cc.as_dict()
+    state.node_res_sigs[node_idx] = result_dict.get("res_sig", [])
+
+    if len(cc.stress_range) == 0:
+        return 0.0
+
+    damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
+    node_damage = float(np.sum(damage_per_bin))
+    state.node_damages[node_idx] = min(state.node_damages[node_idx] + node_damage, 1.0)
+    return node_damage
+
+
 def accumulate_damage_at_nodes(
     stress_field: np.ndarray,
     state: FatigueState,
@@ -228,49 +275,23 @@ def accumulate_damage_at_nodes(
         sn_curve = sn_curve_for_material("demo")
 
     total_damage = 0.0
+    n_workers = min(4, len(critical_indices))
 
-    for node_idx, stress_val in zip(critical_indices, critical_stresses):
-        if node_idx not in state.node_buffers:
-            state.node_buffers[node_idx] = deque(maxlen=config.node_buffer_size)
-            state.node_res_sigs[node_idx] = []
-            if node_idx not in state.node_damages:
-                state.node_damages[node_idx] = 0.0
-
-        state.node_buffers[node_idx].append(stress_val)
-
-        if len(state.node_buffers[node_idx]) >= config.min_buffer_size:
-            pending = list(state.node_res_sigs[node_idx])
-            state.node_res_sigs[node_idx] = []
-
-            stress_arr = np.array(state.node_buffers[node_idx], dtype=np.float64)
-
-            if pending:
-                combined = np.concatenate([np.array(pending), stress_arr])
-            else:
-                combined = stress_arr
-
-            state.node_buffers[node_idx].clear()
-
-            try:
-                cc = CycleCount.from_timeseries(
-                    combined,
-                    unit="MPa",
-                    range_bin_width=config.rainflow_range_bin_width,
+    if n_workers <= 1:
+        for node_idx, stress_val in zip(critical_indices, critical_stresses):
+            total_damage += _process_single_node(
+                int(node_idx), float(stress_val), state, sn_curve, config,
+            )
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as executor:
+            futures = [
+                executor.submit(
+                    _process_single_node,
+                    int(node_idx), float(stress_val), state, sn_curve, config,
                 )
-            except ValueError:
-                state.node_res_sigs[node_idx] = []
-                continue
-
-            result_dict = cc.as_dict()
-            state.node_res_sigs[node_idx] = result_dict.get("res_sig", [])
-
-            if len(cc.stress_range) > 0:
-                damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
-                node_damage = float(np.sum(damage_per_bin))
-            else:
-                node_damage = 0.0
-
-            state.node_damages[node_idx] = min(state.node_damages[node_idx] + node_damage, 1.0)
-            total_damage += node_damage
+                for node_idx, stress_val in zip(critical_indices, critical_stresses)
+            ]
+            for future in concurrent.futures.as_completed(futures):
+                total_damage += future.result()
 
     return total_damage, len(critical_indices)
