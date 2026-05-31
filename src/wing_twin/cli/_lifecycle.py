@@ -91,7 +91,6 @@ def finalize_recorder(recorder: Optional[DataRecorder], engine, rec_dir: Optiona
 
     engine.state.cycles_remaining = prediction["cycles_remaining"]
     engine.state.flight_allowed = prediction["flight_allowed"]
-    engine.state.prediction_warning = prediction["prediction_warning"]
 
     save_life_prediction_state(engine.life_prediction_state, rec_dir)
 

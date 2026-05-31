@@ -30,6 +30,7 @@ class FatigueTracker:
         self._strain_buffer: deque = deque(maxlen=config.strain_buffer_size)
         self._cycles: list = []
         self._prev_low_confidence = False
+        self._prev_flight_blocked = False
         self.life_prediction = LifePredictionState()
 
     @property
@@ -43,6 +44,7 @@ class FatigueTracker:
         if target in ("damage", "all"):
             self.state = FatigueState()
             self._prev_low_confidence = False
+            self._prev_flight_blocked = False
             self._cycles.clear()
         if target in ("strain", "all"):
             self._strain_buffer.clear()
@@ -108,6 +110,27 @@ class FatigueTracker:
         else:
             twin_state.damage = self.state.damage
             twin_state.avg_damage = 0.0
+
+        # Life prediction
+        total_cycles = sum(c for _, c in self.state.cycles)
+        result = self.life_prediction.update_after_run_predictions(
+            current_damage=twin_state.damage,
+            total_cycles=float(total_cycles),
+        )
+        twin_state.cycles_remaining = result["cycles_remaining"]
+        flight_allowed = result["flight_allowed"]
+        twin_state.flight_allowed = flight_allowed
+
+        if not flight_allowed and not self._prev_flight_blocked:
+            twin_state.add_notification(
+                "fatigue_life_low", "critical",
+                "Fatigue Life Low",
+                "Estimated fatigue life is too low to allow for the next flight. "
+                "Flying the plane is not advised.",
+            )
+        elif flight_allowed and self._prev_flight_blocked:
+            twin_state.dismiss_notification("fatigue_life_low")
+        self._prev_flight_blocked = not flight_allowed
 
     def _check_notifications(self, twin_state: TwinState) -> None:
         low_conf = self.state.low_confidence_frames >= self.config.confidence_frames_threshold

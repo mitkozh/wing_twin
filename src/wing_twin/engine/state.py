@@ -67,7 +67,6 @@ class TwinState:
 
     cycles_remaining: float = 0.0
     flight_allowed: bool = True
-    prediction_warning: str = ""
 
     stepper_position: int = 0
     heatmap_mode: str = "damage"
@@ -163,6 +162,9 @@ class TwinState:
             "max_speed_kmh": self.max_speed_kmh,
             "max_stepper_steps": self.max_stepper_steps,
             "cycles_binned": cycles_binned,
+            "cycles_remaining": (round(self.cycles_remaining, 0) if self.cycles_remaining != float('inf')
+                                 else -1.0),
+            "flight_allowed": self.flight_allowed,
         }
 
     def for_esp32(self) -> dict:
