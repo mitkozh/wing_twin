@@ -22,6 +22,7 @@ class EngineCommandHandler:
             "set_flight_state": self._cmd_set_flight_state,
             "set_heatmap_mode": self._cmd_set_heatmap_mode,
             "status": self._cmd_status,
+            "dismiss_notification": self._cmd_dismiss_notification,
         }
 
     def register_handler(self, command: str, handler: Callable) -> None:
@@ -104,6 +105,13 @@ class EngineCommandHandler:
             return {"cmd": "error", "message": f"Invalid mode: {mode}. Use 'stress' or 'damage'"}
         self._engine.state.heatmap_mode = mode
         return {"cmd": "ack", "action": "set_heatmap_mode", "mode": mode}
+
+    def _cmd_dismiss_notification(self, cmd: dict) -> dict:
+        nid = cmd.get("notification_id")
+        if not nid:
+            return {"cmd": "error", "message": "Missing 'notification_id'"}
+        self._engine.state.dismiss_notification(nid)
+        return {"cmd": "ack", "action": "dismiss_notification", "notification_id": nid}
 
     def _cmd_status(self, cmd: dict) -> dict:
         return {

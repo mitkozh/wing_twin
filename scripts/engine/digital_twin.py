@@ -59,6 +59,8 @@ class DigitalTwinEngine:
         self._angle_velocity: float = 0.0
         self._speed_velocity: float = 0.0
 
+        self._prev_low_confidence = False
+
         self.state.yield_point_pa = self.config.stress_limit
         self.state.max_angle_deg = self.config.max_aoa
         self.state.max_speed_kmh = self.config.reference_speed
@@ -99,6 +101,7 @@ class DigitalTwinEngine:
         if target in ("damage", "all"):
             self.state.damage = 0.0
             self.fatigue_state = FatigueState()
+            self._prev_low_confidence = False
             self._cycles.clear()
             self.state.cycles_histogram.clear()
         if target in ("strain", "all"):
@@ -175,7 +178,17 @@ class DigitalTwinEngine:
             self.state.avg_damage = 0.0
 
         self.state.confidence = self.fatigue_state.confidence
-        self.state.maintenance_alert = self.fatigue_state.alert_active
+
+        low_conf = self.fatigue_state.low_confidence_frames >= self.config.fatigue.confidence_frames_threshold
+        if low_conf and not self._prev_low_confidence:
+            self.state.add_notification(
+                "maint_low_conf", "warning",
+                "Maintenance Required",
+                "Sensor readings show low confidence.",
+            )
+        elif not low_conf and self._prev_low_confidence:
+            self.state.dismiss_notification("maint_low_conf")
+        self._prev_low_confidence = low_conf
 
         if self.state.heatmap_mode == "stress" and self.state.stress_field:
             max_stress_pa = max(abs(s) for s in self.state.stress_field)

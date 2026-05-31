@@ -47,7 +47,6 @@ class FatigueState:
     confidence: float = 100.0
     filtered_residual: float = 0.0
     low_confidence_frames: int = 0
-    alert_active: bool = False
     cycles: Optional[List[Tuple[float, float]]] = field(default_factory=list)
     res_sig: List[float] = field(default_factory=list)
     node_buffers: dict = field(default_factory=dict)
@@ -61,7 +60,6 @@ class FatigueState:
             "confidence": self.confidence,
             "filtered_residual": self.filtered_residual,
             "low_confidence_frames": self.low_confidence_frames,
-            "alert_active": self.alert_active,
             "cycles": self.cycles,
             "res_sig": self.res_sig,
             "node_damages": {str(k): v for k, v in self.node_damages.items()},
@@ -75,7 +73,6 @@ class FatigueState:
         state.confidence = data.get("confidence", 100.0)
         state.filtered_residual = data.get("filtered_residual", 0.0)
         state.low_confidence_frames = data.get("low_confidence_frames", 0)
-        state.alert_active = data.get("alert_active", False)
         state.cycles = [tuple(c) for c in data.get("cycles", [])]
         state.res_sig = data.get("res_sig", [])
         node_damages = {int(k): v for k, v in data.get("node_damages", {}).items()}
@@ -205,8 +202,6 @@ def update_confidence(
         state.low_confidence_frames += 1
     else:
         state.low_confidence_frames = 0
-
-    state.alert_active = state.low_confidence_frames >= config.confidence_frames_threshold
 
     return state.confidence
 

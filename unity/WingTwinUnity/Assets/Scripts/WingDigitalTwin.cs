@@ -27,11 +27,14 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] private TextMeshProUGUI avgDamageLabel;
     [SerializeField] private TextMeshProUGUI speedLabel;
     [SerializeField] private TextMeshProUGUI confidenceLabel;
-    [SerializeField] private TextMeshProUGUI alertLabel;
     [SerializeField] private TextMeshProUGUI connectionLabel;
     [SerializeField] private Toggle heatmapModeToggle;
     [SerializeField] private Text heatmapToggleLabel;
     [SerializeField] private Image stressBar;
+
+    [Header("Notifications")]
+    [SerializeField] private ToastNotification toastPrefab;
+    [SerializeField] private Transform notificationPanel;
     public int stressBarHeight = 256;
     public int stressBarWidth = 16;
 
@@ -99,7 +102,6 @@ public class WingDigitalTwin : MonoBehaviour
     private int currentSpeed = 100;
     private string currentState = "green";
     private float currentConfidence = 100f;
-    private bool maintenanceAlert = false;
     private float[] stressField = Array.Empty<float>();
     private float[] deformationField = Array.Empty<float>();
     private float[] nodeDamages = Array.Empty<float>();
@@ -111,6 +113,9 @@ public class WingDigitalTwin : MonoBehaviour
     public Transform labelParent;
 
     private readonly List<TMP_Text> stressLabels = new();
+
+    private readonly HashSet<string> shownNotifications = new();
+    private readonly List<ToastNotification> activeToasts = new();
 
     private Mesh mesh;
     private Vector3[] originalVertices;
@@ -465,7 +470,6 @@ public class WingDigitalTwin : MonoBehaviour
             currentSpeed = data.speed;
             currentState = data.led_state;
             currentConfidence = data.confidence;
-            maintenanceAlert = data.maintenance_alert;
             stressMin = data.stress_min;
             stressMax = data.stress_max;
             yieldPointPa = data.yield_point_pa > 0 ? data.yield_point_pa : yieldPointPa;
@@ -520,6 +524,7 @@ public class WingDigitalTwin : MonoBehaviour
                 nodeDamages = data.node_damages.ToArray();
 
             Enqueue(UpdateUI);
+            Enqueue(() => ProcessNotifications(data.notifications));
             Enqueue(() => UpdateWingVisualization(data));
             Enqueue(() => PushChartData(data));
         }
@@ -553,12 +558,36 @@ public class WingDigitalTwin : MonoBehaviour
         
         if (speedLabel != null) speedLabel.text = $"Vmax: {currentSpeed}%";
         if (confidenceLabel != null) confidenceLabel.text = $"Confidence: {currentConfidence:F1}%";
-        if (alertLabel != null)
-        {
-            alertLabel.gameObject.SetActive(maintenanceAlert);
-            if (maintenanceAlert) alertLabel.text = "MAINTENANCE REQUIRED";
-        }
 
+    }
+
+    void ProcessNotifications(List<NotificationData> notifications)
+    {
+        if (notifications == null || notificationPanel == null)
+            return;
+
+        foreach (var notif in notifications)
+        {
+            if (string.IsNullOrEmpty(notif.id) || shownNotifications.Contains(notif.id))
+                continue;
+
+            shownNotifications.Add(notif.id);
+
+            ToastNotification toast = ToastNotification.Create(
+                notif.id, notif.type, notif.title, notif.message,
+                notificationPanel, toastPrefab, OnNotificationDismissed);
+            if (toast != null)
+                activeToasts.Add(toast);
+        }
+    }
+
+    void OnNotificationDismissed(string notificationId)
+    {
+        activeToasts.RemoveAll(t => t == null);
+        SendCommand("dismiss_notification", new Dictionary<string, object>
+        {
+            { "notification_id", notificationId }
+        });
     }
 
     void UpdateDamageSlider(Slider slider, TextMeshProUGUI label, float value, string title)
@@ -934,7 +963,7 @@ public class WingDigitalTwin : MonoBehaviour
         public float confidence;
         public int speed;
         public string led_state;
-        public bool maintenance_alert;
+        public List<NotificationData> notifications;
         public float stress_min;
         public float stress_max;
         public float yield_point_pa;
@@ -947,6 +976,16 @@ public class WingDigitalTwin : MonoBehaviour
         public float target_speed;
         public int stepper_position;
         public List<CycleBin> cycles_binned;
+    }
+
+    [Serializable]
+    public class NotificationData
+    {
+        public string id;
+        public string type;
+        public string title;
+        public string message;
+        public double timestamp;
     }
 
     [Serializable]
