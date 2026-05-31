@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wing-twin"
-version = "1.0.0"
+version = "2.0.0"
 description = "Real-time wing fatigue monitoring system with force-reconstruction digital twin architecture"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -40,14 +40,14 @@ dev = [
 ]
 
 [project.scripts]
-wing-real-run = "scripts.cli.run:main"
-wing-demo-run = "scripts.cli.demo:main"
-wing-simulator = "scripts.cli.simulator:main"
-wing-mesh-export = "scripts.cli.mesh_export:main"
+wing-real-run = "wing_twin.cli.run:main"
+wing-demo-run = "wing_twin.cli.demo:main"
+wing-simulator = "wing_twin.cli.simulator:main"
+wing-mesh-export = "wing_twin.cli.mesh_export:main"
 
 [tool.setuptools.packages.find]
-where = ["src", "."]
-include = ["dtwin*", "scripts*"]
+where = ["src"]
+include = ["wing_twin*"]
 
 [tool.black]
 line-length = 100
