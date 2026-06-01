@@ -20,7 +20,6 @@ public class ToastManager : MonoBehaviour
 
     private VisualElement notificationContainer;
     private readonly Dictionary<string, VisualElement> activeToasts = new();
-    private readonly HashSet<string> shownNotificationIds = new();
 
     private void Awake()
     {
@@ -28,14 +27,14 @@ public class ToastManager : MonoBehaviour
             uiDocument = GetComponent<UIDocument>();
         if (uiDocument != null)
             notificationContainer = uiDocument.rootVisualElement?.Q("notification-container");
+        if (notificationContainer == null)
+            Debug.LogWarning("ToastManager: notification-container not found in UXML. Toasts will not display.");
     }
 
     public void Show(string id, string type, string title, string message, Action<string> onDismiss)
     {
-        if (string.IsNullOrEmpty(id) || shownNotificationIds.Contains(id) || notificationContainer == null)
+        if (string.IsNullOrEmpty(id) || activeToasts.ContainsKey(id) || notificationContainer == null)
             return;
-
-        shownNotificationIds.Add(id);
 
         Color bgColor = type switch
         {
@@ -56,7 +55,7 @@ public class ToastManager : MonoBehaviour
         var titleLabel = new Label(title);
         titleLabel.AddToClassList("toast-title");
 
-        var closeBtn = new Button(() => { if (onDismiss != null) StartCoroutine(FadeOutToast(id, onDismiss)); });
+        var closeBtn = new Button(() => { StartCoroutine(FadeOutToast(id, onDismiss)); });
         closeBtn.text = "X";
         closeBtn.AddToClassList("toast-close-btn");
 
@@ -86,6 +85,8 @@ public class ToastManager : MonoBehaviour
         if (!activeToasts.TryGetValue(id, out var toast))
             yield break;
 
+        activeToasts.Remove(id);
+
         float elapsed = 0f;
         float startOpacity = toast.style.opacity.value;
 
@@ -97,7 +98,6 @@ public class ToastManager : MonoBehaviour
         }
 
         notificationContainer.Remove(toast);
-        activeToasts.Remove(id);
         onDismiss?.Invoke(id);
     }
 }

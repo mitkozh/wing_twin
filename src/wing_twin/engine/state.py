@@ -72,8 +72,6 @@ class TwinState:
     cycles_histogram: dict = field(default_factory=dict)
 
     notifications: list = field(default_factory=list)
-    _notification_history: set = field(default_factory=set)
-    _notification_counter: int = 0
 
     # Flight lifecycle state
     flight_phase: str = "on_ground"
@@ -93,7 +91,7 @@ class TwinState:
     pre_flight_warning: str = ""
 
     def add_notification(self, nid: str, ntype: str, title: str, message: str) -> None:
-        if nid in self._notification_history:
+        if any(n["id"] == nid for n in self.notifications):
             return
         self.notifications.append({
             "id": nid,
@@ -102,11 +100,9 @@ class TwinState:
             "message": message,
             "timestamp": time.time(),
         })
-        self._notification_history.add(nid)
 
     def dismiss_notification(self, nid: str) -> None:
         self.notifications[:] = [n for n in self.notifications if n["id"] != nid]
-        self._notification_history.add(nid)
 
     def for_unity(self) -> dict:
         """Format state for Unity WebSocket."""
