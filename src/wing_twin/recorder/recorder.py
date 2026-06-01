@@ -3,6 +3,7 @@ Incremental data recorder for simulation runs.
 """
 
 import json
+import tempfile
 import time
 from pathlib import Path
 from typing import Optional
@@ -10,8 +11,6 @@ from typing import Optional
 import h5py
 import numpy as np
 
-from wing_twin.fatigue.fatigue import FatigueState
-from wing_twin.fatigue.life_prediction import LifePredictionState
 from wing_twin.io.logger import get_logger
 
 logger = get_logger(__name__)
@@ -95,8 +94,19 @@ class DataRecorder:
         first = self._flushes == 0
         self._flushes += 1
 
+        target_path = self._h5_path
+        write_path = target_path
+
+        # First write uses temp file for atomicity
+        if first:
+            tmp_dir = target_path.parent
+            with tempfile.NamedTemporaryFile(
+                dir=tmp_dir, prefix=".h5_tmp_", suffix=".h5", delete=False
+            ) as tmp:
+                write_path = Path(tmp.name)
+
         try:
-            with h5py.File(self._h5_path, "w" if first else "a") as f:
+            with h5py.File(write_path, "w" if first else "a") as f:
                 if first:
                     f.create_dataset("metadata/schema_version", data=SCHEMA_VERSION)
                     f.create_dataset("metadata/start_time", data=self._start_time)
@@ -128,7 +138,13 @@ class DataRecorder:
                 _append("fields/deformation", self._buf["field_deform"])
         except (OSError, RuntimeError) as exc:
             logger.error("Failed to flush recording: %s", exc)
+            if first and write_path != target_path:
+                write_path.unlink(missing_ok=True)
             return False
+
+        # Atomic rename for first write
+        if first and write_path != target_path:
+            write_path.replace(target_path)
 
         for key in self._buf:
             self._buf[key].clear()
@@ -191,68 +207,26 @@ def load_recording(path: Path) -> dict:
     return result
 
 
-def save_fatigue_state(fatigue_state: FatigueState, output_dir: Path) -> None:
-    data = fatigue_state.to_dict()
-    path = Path(output_dir) / "fatigue_state.json"
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-    logger.info("Fatigue state saved to %s", path)
+def save_engine_snapshot(engine, output_dir: Path) -> None:
+    snapshot = engine.save_snapshot()
+    path = Path(output_dir) / "state.json"
+    snapshot.to_file(path)
+    logger.info(
+        "Engine snapshot saved to %s (D=%.4f, %d cycles, %d flights)",
+        path,
+        engine.fatigue.state.damage,
+        len(engine.fatigue.state.cycles or []),
+        engine.life_prediction_state.total_flights,
+    )
 
 
-def load_fatigue_state(path: Path) -> Optional[FatigueState]:
+def load_engine_snapshot(path: Path):
+    from wing_twin.engine.state import EngineSnapshot
     path = Path(path)
     if path.is_dir():
-        path = path / "fatigue_state.json"
-    if not path.exists():
-        logger.warning("No fatigue state found at %s", path)
+        path = path / "state.json"
+    try:
+        return EngineSnapshot.from_file(path)
+    except FileNotFoundError:
+        logger.warning("No engine snapshot found at %s", path)
         return None
-    with open(path) as f:
-        data = json.load(f)
-    logger.info("Loaded fatigue state from %s (D=%.4f, %d cycles)",
-                path, data.get("damage", 0.0), len(data.get("cycles", [])))
-    return FatigueState.from_dict(data)
-
-
-def save_life_prediction_state(prediction_state: LifePredictionState, output_dir: Path) -> None:
-    data = prediction_state.to_dict()
-    path = Path(output_dir) / "prediction_state.json"
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-    logger.info("Prediction state saved to %s", path)
-
-
-def load_life_prediction_state(path: Path) -> Optional[LifePredictionState]:
-    path = Path(path)
-    if path.is_dir():
-        path = path / "prediction_state.json"
-    if not path.exists():
-        logger.warning("No prediction state found at %s", path)
-        return None
-    with open(path) as f:
-        data = json.load(f)
-    logger.info("Loaded prediction state from %s", path)
-    return LifePredictionState.from_dict(data)
-
-
-def save_engine_flight_state(engine, output_dir: Path) -> None:
-    """Save current flight progress so mid-run aborts don't lose data."""
-    data = {
-        "km_this_flight": engine._km_this_flight,
-        "last_flight_damage": engine._last_flight_damage,
-    }
-    path = Path(output_dir) / "flight_state.json"
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-    logger.info("Flight state saved to %s", path)
-
-
-def load_engine_flight_state(path: Path) -> Optional[dict]:
-    path = Path(path)
-    if path.is_dir():
-        path = path / "flight_state.json"
-    if not path.exists():
-        return None
-    with open(path) as f:
-        data = json.load(f)
-    logger.info("Loaded flight state from %s", path)
-    return data

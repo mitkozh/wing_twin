@@ -26,13 +26,21 @@ class FatigueTracker:
         config: FatigueConfig,
         initial_state: Optional[FatigueState] = None,
         initial_life_prediction: Optional[LifePredictionState] = None,
+        tracker_snapshot: Optional[dict] = None,
     ):
         self.config = config
         self.state = initial_state or FatigueState()
-        self._strain_buffer: deque = deque(maxlen=config.strain_buffer_size)
-        self._cycles: list = []
-        self._prev_low_confidence = False
-        self._prev_flight_blocked = False
+        if tracker_snapshot:
+            buf = tracker_snapshot.get("strain_buffer", [])
+            self._strain_buffer: deque = deque(buf, maxlen=config.strain_buffer_size)
+            self._cycles: list = list(tracker_snapshot.get("cycles", []))
+            self._prev_low_confidence = tracker_snapshot.get("prev_low_confidence", False)
+            self._prev_flight_blocked = tracker_snapshot.get("prev_flight_blocked", False)
+        else:
+            self._strain_buffer: deque = deque(maxlen=config.strain_buffer_size)
+            self._cycles: list = []
+            self._prev_low_confidence = False
+            self._prev_flight_blocked = False
         self.life_prediction = initial_life_prediction or LifePredictionState(
             initial_remaining_km=config.initial_remaining_km,
         )
@@ -43,6 +51,14 @@ class FatigueTracker:
 
     def clear_cycles(self) -> None:
         self._cycles.clear()
+
+    def tracker_snapshot(self) -> dict:
+        return {
+            "strain_buffer": list(self._strain_buffer),
+            "cycles": list(self._cycles),
+            "prev_low_confidence": self._prev_low_confidence,
+            "prev_flight_blocked": self._prev_flight_blocked,
+        }
 
     def reset(self, target: str = "all") -> None:
         if target in ("damage", "all"):

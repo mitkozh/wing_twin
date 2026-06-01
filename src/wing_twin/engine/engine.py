@@ -21,7 +21,7 @@ from wing_twin.physics.aero import (
 )
 from wing_twin.control.control import decide_control, decide_control_stress
 from wing_twin.config import EngineConfig
-from wing_twin.engine.state import TwinState
+from wing_twin.engine.state import TwinState, EngineSnapshot
 from wing_twin.engine.dynamics import FlightDynamics
 from wing_twin.engine.fatigue_tracker import FatigueTracker
 from wing_twin.fatigue.life_prediction import LifePredictionState
@@ -42,24 +42,48 @@ class DigitalTwinEngine:
         self,
         config: Optional[EngineConfig] = None,
         data_source: Optional[DataSource] = None,
-        initial_fatigue_state: Optional[FatigueState] = None,
-        initial_life_prediction: Optional[LifePredictionState] = None,
-        initial_flight_state: Optional[dict] = None,
+        engine_snapshot: Optional[EngineSnapshot] = None,
     ):
         self.config = config or EngineConfig()
         self._matrices: Optional[TransferMatrices] = None
         self._num_gauges: Optional[int] = None
         self._data_source: Optional[DataSource] = None
 
-        self.state = TwinState()
+        # Restore TwinState from snapshot or start fresh
+        if engine_snapshot and engine_snapshot.twin:
+            self.state = TwinState.from_snapshot_dict(engine_snapshot.twin)
+        else:
+            self.state = TwinState()
+
         self.dynamics = FlightDynamics(
             angle_accel=self.config.angle_accel,
             speed_accel=self.config.speed_accel,
         )
+
+        # Prepare FatigueTracker inputs from snapshot
+        initial_fatigue = None
+        initial_life = None
+        tracker_snap = None
+        if engine_snapshot:
+            if engine_snapshot.fatigue:
+                initial_fatigue = FatigueState.from_dict(engine_snapshot.fatigue)
+            if engine_snapshot.life:
+                initial_life = LifePredictionState.from_dict(engine_snapshot.life)
+            if engine_snapshot.strain_buffer is not None:
+                tracker_snap = {
+                    "strain_buffer": engine_snapshot.strain_buffer,
+                    "cycles": engine_snapshot.tracker_cycles or [],
+                    "prev_low_confidence": engine_snapshot.prev_low_confidence,
+                    "prev_flight_blocked": engine_snapshot.prev_flight_blocked,
+                }
+            if engine_snapshot.dynamics:
+                self.dynamics.from_dict(engine_snapshot.dynamics)
+
         self.fatigue = FatigueTracker(
             self.config.fatigue,
-            initial_state=initial_fatigue_state,
-            initial_life_prediction=initial_life_prediction,
+            initial_state=initial_fatigue,
+            initial_life_prediction=initial_life,
+            tracker_snapshot=tracker_snap,
         )
 
         self.state.yield_point_pa = self.config.stress_limit
@@ -69,15 +93,23 @@ class DigitalTwinEngine:
         self.state.max_landing_altitude = self.config.max_landing_altitude
 
         # Flight state machine
-        self._flight_phase: FlightPhase = FlightPhase.ON_GROUND
-        self._takeoff_timer: float = 0.0
-        self._landing_timer: float = 0.0
-        self._km_this_flight: float = 0.0
-        self._last_flight_damage: float = 0.0
+        if engine_snapshot and engine_snapshot.flight:
+            self._km_this_flight = engine_snapshot.flight.get("km_this_flight", 0.0)
+            self._last_flight_damage = engine_snapshot.flight.get("last_flight_damage", 0.0)
+            phase_str = engine_snapshot.flight.get("flight_phase", "on_ground")
+            self._flight_phase = FlightPhase(phase_str)
+            self._takeoff_timer = engine_snapshot.flight.get("takeoff_timer", 0.0)
+            self._landing_timer = engine_snapshot.flight.get("landing_timer", 0.0)
+        else:
+            self._flight_phase: FlightPhase = FlightPhase.ON_GROUND
+            self._takeoff_timer: float = 0.0
+            self._landing_timer: float = 0.0
+            self._km_this_flight: float = 0.0
+            self._last_flight_damage: float = 0.0
 
         # Process aborted flight data from previous run
-        if initial_flight_state:
-            self._resolve_aborted_flight(initial_flight_state)
+        if engine_snapshot and engine_snapshot.flight:
+            self._resolve_aborted_flight(engine_snapshot.flight)
 
         # Initialise NeuralFoil aerodynamic model
         self._aero_model: NeuralFoilModel = init_neuralfoil(
@@ -176,6 +208,26 @@ class DigitalTwinEngine:
         self.life_prediction_state.update_after_flight(
             damage_delta=damage_delta,
             km_delta=km,
+        )
+
+    def save_snapshot(self) -> EngineSnapshot:
+        ts = self.fatigue.tracker_snapshot()
+        return EngineSnapshot(
+            twin=self.state.to_snapshot_dict(),
+            fatigue=self.fatigue.state.to_dict(),
+            life=self.life_prediction_state.to_dict(),
+            flight={
+                "km_this_flight": self._km_this_flight,
+                "last_flight_damage": self._last_flight_damage,
+                "flight_phase": self._flight_phase.value,
+                "takeoff_timer": self._takeoff_timer,
+                "landing_timer": self._landing_timer,
+            },
+            dynamics=self.dynamics.to_dict(),
+            strain_buffer=ts["strain_buffer"],
+            tracker_cycles=ts["cycles"],
+            prev_low_confidence=ts["prev_low_confidence"],
+            prev_flight_blocked=ts["prev_flight_blocked"],
         )
 
     def request_takeoff(self) -> bool:
@@ -421,7 +473,8 @@ class DigitalTwinEngine:
                 single_strain=reading.strain,
             )
         else:
-            self.state.damage = self.fatigue.state.damage
+            nd = self.fatigue.state.node_damages
+            self.state.damage = max(nd.values()) if nd else self.fatigue.state.damage
             self.state.confidence = self.fatigue.state.confidence
 
         if self.state.heatmap_mode == "stress" and self.state.stress_field:

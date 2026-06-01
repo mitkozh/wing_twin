@@ -1,9 +1,14 @@
 """
 TwinState - Data class representing the current digital twin state.
+EngineSnapshot - Unified save/restore container for full engine state.
 """
 
+import json
+import tempfile
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
 
 import numpy as np
 
@@ -197,3 +202,91 @@ class TwinState:
             "position": self.stepper_position,
             "led": self.led_state,
         }
+
+    def to_snapshot_dict(self) -> dict:
+        fields_to_save = [
+            "damage", "avg_damage", "confidence", "speed_pct", "led_state",
+            "desired_angle_of_attack", "desired_airspeed",
+            "target_angle_of_attack", "target_airspeed",
+            "angle_of_attack", "airspeed",
+            "flight_allowed", "stepper_position", "heatmap_mode",
+            "flight_phase", "altitude", "km_this_flight",
+            "total_km_flown", "flight_number",
+            "remaining_km", "planned_km", "pre_flight_safe", "pre_flight_warning",
+            "cycles_histogram", "notifications",
+            "strain_vector", "forces", "stress_field", "deformation_field",
+            "node_damages",
+        ]
+        return {k: getattr(self, k) for k in fields_to_save}
+
+    @staticmethod
+    def from_snapshot_dict(data: dict) -> "TwinState":
+        state = TwinState()
+        for k, v in data.items():
+            if hasattr(state, k):
+                setattr(state, k, v)
+        if state.node_damages:
+            state.node_damages = {int(k): v for k, v in state.node_damages.items()}
+        return state
+
+
+SNAPSHOT_VERSION = 2
+
+
+@dataclass
+class EngineSnapshot:
+    version: int = SNAPSHOT_VERSION
+    twin: Optional[dict] = None
+    fatigue: Optional[dict] = None
+    life: Optional[dict] = None
+    flight: Optional[dict] = None
+    dynamics: Optional[dict] = None
+    strain_buffer: Optional[list] = None
+    tracker_cycles: Optional[list] = None
+    prev_low_confidence: bool = False
+    prev_flight_blocked: bool = False
+
+    def to_file(self, path: Path) -> None:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "version": self.version,
+            "twin": self.twin,
+            "fatigue": self.fatigue,
+            "life": self.life,
+            "flight": self.flight,
+            "dynamics": self.dynamics,
+            "strain_buffer": self.strain_buffer,
+            "tracker_cycles": self.tracker_cycles,
+            "prev_low_confidence": self.prev_low_confidence,
+            "prev_flight_blocked": self.prev_flight_blocked,
+        }
+        tmp = path.with_suffix(".tmp")
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+        tmp.replace(path)
+
+    @staticmethod
+    def from_file(path: Path) -> "EngineSnapshot":
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Engine snapshot not found: {path}")
+        with open(path) as f:
+            data = json.load(f)
+        version = data["version"]
+        if version > SNAPSHOT_VERSION:
+            raise ValueError(
+                f"Snapshot version {version} is newer than supported {SNAPSHOT_VERSION}"
+            )
+        return EngineSnapshot(
+            version=version,
+            twin=data["twin"],
+            fatigue=data["fatigue"],
+            life=data["life"],
+            flight=data["flight"],
+            dynamics=data["dynamics"],
+            strain_buffer=data["strain_buffer"],
+            tracker_cycles=data["tracker_cycles"],
+            prev_low_confidence=data["prev_low_confidence"],
+            prev_flight_blocked=data["prev_flight_blocked"],
+        )

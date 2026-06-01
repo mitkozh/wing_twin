@@ -26,7 +26,9 @@ class LifePredictionState:
         return max(0.0, (1.0 - self.total_damage) / self.ema_damage_per_km)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d["remaining_km"] = self.remaining_km
+        return d
 
     @staticmethod
     def from_dict(data: dict) -> "LifePredictionState":

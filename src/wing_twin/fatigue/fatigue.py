@@ -62,22 +62,33 @@ class FatigueState:
             "cycles": self.cycles,
             "res_sig": self.res_sig,
             "node_damages": {str(k): v for k, v in self.node_damages.items()},
+            "node_buffers": {
+                str(k): list(v) for k, v in self.node_buffers.items()
+            },
+            "node_res_sigs": {
+                str(k): v for k, v in self.node_res_sigs.items()
+            },
         }
 
     @staticmethod
     def from_dict(data: dict) -> "FatigueState":
         state = FatigueState()
-        state.damage = data.get("damage", 0.0)
-        state.confidence = data.get("confidence", 100.0)
-        state.filtered_residual = data.get("filtered_residual", 0.0)
-        state.low_confidence_frames = data.get("low_confidence_frames", 0)
-        state.cycles = [tuple(c) for c in data.get("cycles", [])]
-        state.res_sig = data.get("res_sig", [])
-        node_damages = {int(k): v for k, v in data.get("node_damages", {}).items()}
-        state.node_damages = node_damages
-        for node_idx in node_damages:
-            state.node_buffers[node_idx] = deque(maxlen=500)
-            state.node_res_sigs[node_idx] = []
+        state.damage = data["damage"]
+        state.confidence = data["confidence"]
+        state.filtered_residual = data["filtered_residual"]
+        state.low_confidence_frames = data["low_confidence_frames"]
+        state.cycles = [tuple(c) for c in data["cycles"]]
+        state.res_sig = data["res_sig"]
+        state.node_damages = {int(k): v for k, v in data["node_damages"].items()}
+        node_buffers_raw = data["node_buffers"]
+        node_res_sigs_raw = data["node_res_sigs"]
+        all_node_keys = set(state.node_damages) | {
+            int(k) for k in node_buffers_raw
+        } | {int(k) for k in node_res_sigs_raw}
+        for node_idx in all_node_keys:
+            buf_data = node_buffers_raw.get(str(node_idx), [])
+            state.node_buffers[node_idx] = deque(buf_data, maxlen=500)
+            state.node_res_sigs[node_idx] = node_res_sigs_raw.get(str(node_idx), [])
         return state
 
 

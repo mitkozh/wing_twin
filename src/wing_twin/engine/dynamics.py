@@ -51,6 +51,18 @@ class FlightDynamics:
     def speed_velocity(self) -> float:
         return self._speed_velocity
 
+    def to_dict(self) -> dict:
+        return {
+            "angle_velocity": self._angle_velocity,
+            "speed_velocity": self._speed_velocity,
+            "prev_angle_of_attack": self.prev_angle_of_attack,
+        }
+
+    def from_dict(self, data: dict) -> None:
+        self._angle_velocity = data.get("angle_velocity", 0.0)
+        self._speed_velocity = data.get("speed_velocity", 0.0)
+        self.prev_angle_of_attack = data.get("prev_angle_of_attack", 0.0)
+
     def reset(self) -> None:
         self._angle_velocity = 0.0
         self._speed_velocity = 0.0
