@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -77,6 +78,7 @@ public partial class WingDigitalTwin : MonoBehaviour
         viewGroups[2] = root.Q("view-group-3");
 
         leftPanel = root.Q("left-panel");
+        flightMetricsPanel = root.Q("flight-metrics-panel");
         stressLegend = root.Q("stress-legend");
         notificationContainer = root.Q("notification-container");
 
@@ -86,6 +88,40 @@ public partial class WingDigitalTwin : MonoBehaviour
 
         planeSpeedLabel = root.Q<Label>("plane-speed-label");
         planeAngleLabel = root.Q<Label>("plane-angle-label");
+
+        metricAltitude = root.Q<Label>("metric-altitude");
+        metricDistance = root.Q<Label>("metric-distance");
+        metricTotal = root.Q<Label>("metric-total");
+        metricFlights = root.Q<Label>("metric-flights");
+        metricRemaining = root.Q<Label>("metric-remaining");
+
+        takeoffBtn = root.Q<Button>("takeoff-btn");
+        landBtn = root.Q<Button>("land-btn");
+        preflightControls = root.Q("preflight-controls");
+        inflightControls = root.Q("inflight-controls");
+        preflightTitle = root.Q<Label>("preflight-title");
+        preflightSlider = root.Q<Slider>("preflight-slider");
+        preflightSliderValue = root.Q<Label>("preflight-slider-value");
+        preflightSubmitBtn = root.Q<Button>("preflight-submit-btn");
+
+        if (preflightSlider != null)
+        {
+            preflightSlider.RegisterValueChangedCallback(evt =>
+            {
+                if (preflightSliderValue != null)
+                    preflightSliderValue.text = $"{evt.newValue:F0} km";
+            });
+            preflightSlider.SetValueWithoutNotify(10f);
+            if (preflightSliderValue != null)
+                preflightSliderValue.text = "10 km";
+        }
+
+        if (takeoffBtn != null)
+            takeoffBtn.clicked += OnTakeoffClicked;
+        if (landBtn != null)
+            landBtn.clicked += OnLandClicked;
+        if (preflightSubmitBtn != null)
+            preflightSubmitBtn.clicked += OnPreflightSubmit;
 
         Color allowedFillColor = new Color(0f, 0.86f, 0.31f, 0.55f);
         if (allowedAngleFill != null)
@@ -187,6 +223,8 @@ public partial class WingDigitalTwin : MonoBehaviour
         bool isView1 = index == 0;
         if (leftPanel != null)
             leftPanel.style.display = isView1 ? DisplayStyle.Flex : DisplayStyle.None;
+        if (flightMetricsPanel != null)
+            flightMetricsPanel.style.display = isView1 ? DisplayStyle.Flex : DisplayStyle.None;
         if (stressLegend != null)
             stressLegend.style.display = isView1 ? DisplayStyle.Flex : DisplayStyle.None;
         if (notificationContainer != null)
@@ -205,6 +243,9 @@ public partial class WingDigitalTwin : MonoBehaviour
 
         if (speedLabel != null) speedLabel.text = $"Vmax: {currentSpeed}%";
         if (confidenceLabel != null) confidenceLabel.text = $"Confidence: {currentConfidence:F1}%";
+
+        UpdateFlightMetrics();
+        UpdateControlPanelMode();
     }
 
     void UpdateDamageSlider(VisualElement fill, Label label, float value, string title)
@@ -252,6 +293,84 @@ public partial class WingDigitalTwin : MonoBehaviour
     {
         if (heatmapToggle != null)
             heatmapToggle.label = isDamageMode ? "Damage" : "Stress";
+    }
+
+    void UpdateFlightMetrics()
+    {
+        if (metricAltitude != null) metricAltitude.text = $"Alt: {altitude:F1} m";
+        if (metricDistance != null) metricDistance.text = $"Dist: {kmThisFlight:F3} km";
+        if (metricTotal != null) metricTotal.text = $"Total: {totalKmFlown + kmThisFlight:F1} km";
+        if (metricFlights != null) metricFlights.text = $"Flights: {flightNumber + 1}";
+        if (metricRemaining != null)
+            metricRemaining.text = remainingKm > 0 && !float.IsInfinity(remainingKm)
+                ? $"Remaining: {remainingKm:F1} km"
+                : "Remaining: -- km";
+    }
+
+    void UpdateControlPanelMode()
+    {
+        bool showPreflight = flightPhase == "on_ground";
+        bool showInflight = flightPhase != "on_ground";
+        bool showTakeoff = flightPhase == "on_ground";
+        bool showLand = flightPhase == "in_flight";
+        bool locked = flightPhase == "taking_off" || flightPhase == "landing";
+
+        if (preflightControls != null)
+            preflightControls.style.display = showPreflight ? DisplayStyle.Flex : DisplayStyle.None;
+        if (inflightControls != null)
+            inflightControls.style.display = showInflight ? DisplayStyle.Flex : DisplayStyle.None;
+        if (takeoffBtn != null)
+        {
+            takeoffBtn.style.display = showTakeoff ? DisplayStyle.Flex : DisplayStyle.None;
+            if (showTakeoff)
+                takeoffBtn.SetEnabled(preFlightSafe && flightAllowed && !locked);
+        }
+        if (landBtn != null)
+        {
+            landBtn.style.display = showLand ? DisplayStyle.Flex : DisplayStyle.None;
+            if (showLand)
+                landBtn.SetEnabled(altitude <= maxLandingAltitude && !locked);
+        }
+
+        LockControls(locked);
+    }
+
+    void LockControls(bool locked)
+    {
+        controlsLocked = locked;
+        if (planeAngleSlider != null) planeAngleSlider.SetEnabled(!locked);
+        if (speedSlider != null) speedSlider.SetEnabled(!locked);
+        if (stepsSlider != null) stepsSlider.SetEnabled(!locked);
+        if (preflightSlider != null) preflightSlider.SetEnabled(!locked);
+        if (preflightSubmitBtn != null) preflightSubmitBtn.SetEnabled(!locked);
+    }
+
+    void OnPreflightSubmit()
+    {
+        if (controlsLocked || preflightSlider == null) return;
+        float dist = preflightSlider.value;
+        if (dist <= 0) return;
+        if (toastManager != null)
+            toastManager.Show("pf_checking", "info", "Pre-Flight", $"Checking {dist:F0} km...", null);
+        SendCommand("plan_flight", new Dictionary<string, object> { { "planned_km", dist } });
+    }
+
+    void OnTakeoffClicked()
+    {
+        if (controlsLocked) return;
+        if (takeoffBtn != null) takeoffBtn.SetEnabled(false);
+        if (toastManager != null)
+            toastManager.Show("to_taking_off", "info", "Takeoff", "Initiating takeoff...", null);
+        SendCommand("takeoff");
+    }
+
+    void OnLandClicked()
+    {
+        if (controlsLocked) return;
+        if (landBtn != null) landBtn.SetEnabled(false);
+        if (toastManager != null)
+            toastManager.Show("ld_landing", "info", "Landing", "Initiating landing...", null);
+        SendCommand("land");
     }
 
     public void UI_Pause()  => SendCommand("pause");

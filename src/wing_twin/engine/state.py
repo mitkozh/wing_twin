@@ -65,7 +65,6 @@ class TwinState:
     max_speed_kmh: float = 80.0
     max_stepper_steps: int = 2720
 
-    cycles_remaining: float = 0.0
     flight_allowed: bool = True
 
     stepper_position: int = 0
@@ -75,6 +74,23 @@ class TwinState:
     notifications: list = field(default_factory=list)
     _notification_history: set = field(default_factory=set)
     _notification_counter: int = 0
+
+    # Flight lifecycle state
+    flight_phase: str = "on_ground"
+    altitude: float = 0.0
+    km_this_flight: float = 0.0
+    total_km_flown: float = 0.0
+    flight_number: int = 0
+
+    max_landing_altitude: float = 50.0
+
+    # Remaining safe flight distance (from life prediction)
+    remaining_km: float = float('inf')
+
+    # Pre-flight planning state
+    planned_km: float = 0.0
+    pre_flight_safe: bool = True
+    pre_flight_warning: str = ""
 
     def add_notification(self, nid: str, ntype: str, title: str, message: str) -> None:
         if nid in self._notification_history:
@@ -162,9 +178,21 @@ class TwinState:
             "max_speed_kmh": self.max_speed_kmh,
             "max_stepper_steps": self.max_stepper_steps,
             "cycles_binned": cycles_binned,
-            "cycles_remaining": (round(self.cycles_remaining, 0) if self.cycles_remaining != float('inf')
-                                 else -1.0),
             "flight_allowed": self.flight_allowed,
+            # Flight lifecycle
+            "flight_phase": self.flight_phase,
+            "altitude": round(self.altitude, 2),
+            "km_this_flight": round(self.km_this_flight, 3),
+            "total_km_flown": round(self.total_km_flown, 2),
+            "flight_number": self.flight_number,
+            # Config values for Unity decision-making
+            "max_landing_altitude": self.max_landing_altitude,
+            # Remaining distance (from life prediction)
+            "remaining_km": round(self.remaining_km, 1),
+            # Pre-flight planning
+            "planned_km": round(self.planned_km, 1),
+            "pre_flight_safe": self.pre_flight_safe,
+            "pre_flight_warning": self.pre_flight_warning,
         }
 
     def for_esp32(self) -> dict:

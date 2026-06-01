@@ -33,6 +33,14 @@
             <ui:Toggle name="heatmap-toggle" class="heatmap-toggle" label="Stress" />
         </ui:VisualElement>
 
+        <ui:VisualElement name="flight-metrics-panel">
+            <ui:Label name="metric-altitude" class="metric-label" text="Alt: 0.0 m" />
+            <ui:Label name="metric-distance" class="metric-label" text="Dist: 0.000 km" />
+            <ui:Label name="metric-total" class="metric-label" text="Total: 0.0 km" />
+            <ui:Label name="metric-flights" class="metric-label" text="Flights: 0" />
+            <ui:Label name="metric-remaining" class="metric-label" text="Remaining: -- km" />
+        </ui:VisualElement>
+
         <ui:VisualElement name="view-switch-panel">
             <ui:Button name="view-btn-1" class="view-switch-btn" text="View 1" />
             <ui:Button name="view-btn-2" class="view-switch-btn" text="View 2" />
@@ -51,30 +59,44 @@
             </ui:VisualElement>
         </ui:VisualElement>
         <ui:VisualElement name="notification-container" />
+
+        <ui:Button name="takeoff-btn" class="phase-btn" text="TAKE OFF" style="display: none;" />
+        <ui:Button name="land-btn" class="phase-btn" text="LAND" style="display: none;" />
     </ui:VisualElement>
 
     <ui:VisualElement name="control-panel">
-        <ui:VisualElement name="angle-group" class="slider-group">
-            <ui:Label name="angle-slider-label" class="slider-label" text="Desired Angle: 0.0° | Allowed: 0.0°" />
-            <ui:Slider name="angle-slider" class="control-slider" direction="horizontal" />
-            <ui:VisualElement name="allowed-angle-slider" class="custom-slider compact">
-                <ui:VisualElement name="allowed-angle-track" class="custom-slider-track">
-                    <ui:VisualElement name="allowed-angle-fill" class="custom-slider-fill" />
+        <ui:VisualElement name="preflight-controls" style="display: none;">
+            <ui:Label name="preflight-title" class="preflight-title" text="Pre-Flight Planning" />
+            <ui:VisualElement name="preflight-row" class="preflight-row">
+                <ui:Label name="preflight-label" class="preflight-field-label" text="Distance (km):" />
+                <ui:Slider name="preflight-slider" class="preflight-slider" direction="horizontal" low-value="1" high-value="550" />
+                <ui:Button name="preflight-submit-btn" class="preflight-submit-btn" text="Check" />
+            </ui:VisualElement>
+            <ui:Label name="preflight-slider-value" class="preflight-slider-value" text="-- km" />
+        </ui:VisualElement>
+        <ui:VisualElement name="inflight-controls">
+            <ui:VisualElement name="angle-group" class="slider-group">
+                <ui:Label name="angle-slider-label" class="slider-label" text="Desired Angle: 0.0° | Allowed: 0.0°" />
+                <ui:Slider name="angle-slider" class="control-slider" direction="horizontal" />
+                <ui:VisualElement name="allowed-angle-slider" class="custom-slider compact">
+                    <ui:VisualElement name="allowed-angle-track" class="custom-slider-track">
+                        <ui:VisualElement name="allowed-angle-fill" class="custom-slider-fill" />
+                    </ui:VisualElement>
                 </ui:VisualElement>
             </ui:VisualElement>
-        </ui:VisualElement>
-        <ui:VisualElement name="speed-group" class="slider-group">
-            <ui:Label name="speed-slider-label" class="slider-label" text="Desired Speed: 0.0 | Allowed: 0.0 km/h" />
-            <ui:Slider name="speed-slider" class="control-slider" direction="horizontal" />
-            <ui:VisualElement name="allowed-speed-slider" class="custom-slider compact">
-                <ui:VisualElement name="allowed-speed-track" class="custom-slider-track">
-                    <ui:VisualElement name="allowed-speed-fill" class="custom-slider-fill" />
+            <ui:VisualElement name="speed-group" class="slider-group">
+                <ui:Label name="speed-slider-label" class="slider-label" text="Desired Speed: 0.0 | Allowed: 0.0 km/h" />
+                <ui:Slider name="speed-slider" class="control-slider" direction="horizontal" />
+                <ui:VisualElement name="allowed-speed-slider" class="custom-slider compact">
+                    <ui:VisualElement name="allowed-speed-track" class="custom-slider-track">
+                        <ui:VisualElement name="allowed-speed-fill" class="custom-slider-fill" />
+                    </ui:VisualElement>
                 </ui:VisualElement>
             </ui:VisualElement>
-        </ui:VisualElement>
-        <ui:VisualElement name="steps-group" class="slider-group">
-            <ui:Label name="steps-slider-label" class="slider-label" text="Steps: 0" />
-            <ui:Slider name="steps-slider" class="control-slider" direction="horizontal" />
+            <ui:VisualElement name="steps-group" class="slider-group">
+                <ui:Label name="steps-slider-label" class="slider-label" text="Steps: 0" />
+                <ui:Slider name="steps-slider" class="control-slider" direction="horizontal" />
+            </ui:VisualElement>
         </ui:VisualElement>
     </ui:VisualElement>
 

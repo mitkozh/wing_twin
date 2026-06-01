@@ -107,6 +107,32 @@ public partial class WingDigitalTwin : MonoBehaviour
     private VisualElement leftPanel;
     private VisualElement stressLegend;
     private VisualElement notificationContainer;
+    private VisualElement flightMetricsPanel;
+    private Label metricAltitude;
+    private Label metricDistance;
+    private Label metricTotal;
+    private Label metricFlights;
+    private Label metricRemaining;
+    private Button takeoffBtn;
+    private Button landBtn;
+    private VisualElement preflightControls;
+    private VisualElement inflightControls;
+    private Label preflightTitle;
+    private Slider preflightSlider;
+    private Label preflightSliderValue;
+    private Button preflightSubmitBtn;
+
+    private string flightPhase = "on_ground";
+    private bool flightAllowed = true;
+    private float altitude;
+    private float kmThisFlight;
+    private float totalKmFlown;
+    private int flightNumber;
+    private float remainingKm = -1f;
+    private float plannedKm;
+    private bool preFlightSafe = true;
+    private bool controlsLocked = false;
+    private float maxLandingAltitude = 50f;
 
     private Mesh mesh;
     private Vector3[] originalVertices;
@@ -318,6 +344,17 @@ public partial class WingDigitalTwin : MonoBehaviour
         public float target_speed;
         public int stepper_position;
         public List<CycleBin> cycles_binned;
+        public string flight_phase;
+        public bool flight_allowed;
+        public float altitude;
+        public float km_this_flight;
+        public float total_km_flown;
+        public int flight_number;
+        public float remaining_km;
+        public float max_landing_altitude;
+        public float planned_km;
+        public bool pre_flight_safe;
+        public string pre_flight_warning;
     }
 
     [Serializable]

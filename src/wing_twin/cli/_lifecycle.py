@@ -82,16 +82,6 @@ def finalize_recorder(recorder: Optional[DataRecorder], engine, rec_dir: Optiona
     except Exception as exc:
         logger.error("Recorder finalization failed: %s", exc)
 
-    total_cycles = sum(c for _, c in engine.fatigue_state.cycles)
-
-    prediction = engine.life_prediction_state.update_after_run_predictions(
-        current_damage=engine.state.damage,
-        total_cycles=total_cycles,
-    )
-
-    engine.state.cycles_remaining = prediction["cycles_remaining"]
-    engine.state.flight_allowed = prediction["flight_allowed"]
-
     save_life_prediction_state(engine.life_prediction_state, rec_dir)
 
     try:

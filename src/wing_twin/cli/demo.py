@@ -29,7 +29,7 @@ async def run_demo_async(
     seed: Optional[int] = None,
     record: bool = False,
     record_figures: bool = False,
-    headless: bool = False,
+    auto_takeoff: bool = False,
     resume_state: Optional[FatigueState] = None,
 ) -> tuple[DigitalTwinEngine, Optional[Path]]:
     config = EngineConfig(seed=seed)
@@ -56,18 +56,28 @@ async def run_demo_async(
 
     recorder, rec_dir = setup_recorder(record, record_figures)
 
-    if not headless:
-        broadcaster = WebSocketBroadcaster()
-        command_handler = EngineCommandHandler(engine)
+    broadcaster = WebSocketBroadcaster()
+    command_handler = EngineCommandHandler(engine)
 
-        def state_provider():
-            return engine.state.for_unity()
+    def state_provider():
+        return engine.state.for_unity()
 
-        broadcaster.set_state_provider(state_provider)
-        broadcaster.set_command_handler(command_handler)
+    broadcaster.set_state_provider(state_provider)
+    broadcaster.set_command_handler(command_handler)
 
     async def process_loop():
+        takeoff_done = False
         while not stop_event.is_set():
+            if auto_takeoff and not takeoff_done and engine.flight_phase.value == "on_ground":
+                engine.request_takeoff()
+                takeoff_done = True
+                logger.info("Auto-takeoff initiated")
+
+            if auto_takeoff and engine.flight_phase.value == "landing" and duration_s <= 0:
+                if engine.state.altitude < 0.5:
+                    stop_event.set()
+                    break
+
             try:
                 stepped = engine.step()
             except Exception as e:
@@ -80,17 +90,16 @@ async def run_demo_async(
                 except Exception as e:
                     logger.error("Recording failed: %s", e)
 
-            if not headless and broadcaster is not None and broadcaster._clients:
+            if broadcaster._clients:
                 await broadcaster.broadcast()
 
             await asyncio.sleep(1.0 / sim_config.sample_rate)
 
     process_task = asyncio.create_task(process_loop())
 
-    if not headless:
-        broadcaster_task = asyncio.create_task(broadcaster.start())
-        display_thread = threading.Thread(target=_display_thread, args=(engine, stop_event), daemon=True)
-        display_thread.start()
+    broadcaster_task = asyncio.create_task(broadcaster.start())
+    display_thread = threading.Thread(target=_display_thread, args=(engine, stop_event), daemon=True)
+    display_thread.start()
 
     try:
         if duration_s > 0:
@@ -104,9 +113,8 @@ async def run_demo_async(
     finally:
         stop_event.set()
         await cancel_task(process_task)
-        if not headless:
-            await cancel_task(broadcaster_task)
-            await asyncio.sleep(0.1)
+        await cancel_task(broadcaster_task)
+        await asyncio.sleep(0.1)
 
         finalize_recorder(recorder, engine, rec_dir)
         if recorder is not None:
@@ -126,7 +134,12 @@ def _display_thread(engine, stop_event):
         filled = int(engine.state.damage * bar_len)
         bar = "#" * filled + "-" * (bar_len - filled)
         state_sym = {"green": "GREEN", "yellow": "YELLOW", "red": "RED"}.get(engine.state.led_state, "UNKNOWN")
-        logger.info("[%4ds] |%s| %5.1f%%  %7s  Vmax=%3d%%", tick, bar, engine.state.damage*100, state_sym, engine.state.speed_pct)
+        phase = engine.state.flight_phase.upper()
+        alt = engine.state.altitude
+        km = engine.state.km_this_flight
+        logger.info("[%4ds] |%s| %5.1f%%  %7s  Vmax=%3d%%  [%s]  alt=%.1fm  km=%.3f",
+                    tick, bar, engine.state.damage*100, state_sym, engine.state.speed_pct,
+                    phase, alt, km)
         import time
         time.sleep(1)
 
@@ -146,7 +159,7 @@ def main():
     parser = argparse.ArgumentParser(description="Wing Digital Twin Demo")
     parser.add_argument("--duration", type=int, default=30, help="Simulation duration in seconds (use 0 for infinite)")
     parser.add_argument("--run", action="store_true", help="Run indefinitely until Ctrl+C")
-    parser.add_argument("--headless", action="store_true", help="Run without WebSocket or dashboard")
+    parser.add_argument("--auto-takeoff", action="store_true", help="Automatically take off on start (for testing)")
     parser.add_argument("--figures", nargs="?", const=True, default=False, help="Generate PNG figures (optional: output directory)")
     parser.add_argument("--figures-only", nargs="?", const=True, default=False, help="Regenerate figures from saved data (optional: data directory)")
     parser.add_argument("--record", action="store_true", help="Record data to HDF5 during run")
@@ -175,13 +188,14 @@ def main():
     if args.resume:
         resume_state = load_fatigue_state(Path(args.resume))
 
-    mode = "Headless" if args.headless else "Full Stack"
     logger.info("=" * 60)
-    logger.info("  Wing Digital Twin Demo (%s)", mode)
+    logger.info("  Wing Digital Twin Demo")
     logger.info("=" * 60)
     fatigue_config = FatigueConfig()
     logger.info("  Sample rate:  %d Hz", SimulationConfig().sample_rate)
     logger.info("  Thresholds:   SAFE<%s  WARN<%s  CRIT>=%s", fatigue_config.damage_warning, fatigue_config.damage_critical, fatigue_config.damage_critical)
+    if args.auto_takeoff:
+        logger.info("  Auto-takeoff: enabled (simulates complete flight cycle)")
     if args.record:
         logger.info("  Recording: enabled -> recordings/")
     if args.figures:
@@ -195,7 +209,7 @@ def main():
             args.duration, args.seed,
             record=args.record,
             record_figures=bool(args.figures),
-            headless=args.headless,
+            auto_takeoff=args.auto_takeoff,
             resume_state=resume_state,
         )
     )

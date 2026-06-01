@@ -102,19 +102,83 @@ public partial class WingDigitalTwin : MonoBehaviour
         {
             if (json.Contains("\"cmd\":"))
             {
+                CheckPendingCallbacks(json);
+
                 var cmdResponse = JsonConvert.DeserializeObject<CommandResponse>(json);
-                if (cmdResponse.cmd == "status")
+                switch (cmdResponse.cmd)
                 {
-                    var status = JsonConvert.DeserializeObject<StatusResponse>(json);
-                    currentDamage = status.damage;
-                    currentSpeed = status.speed;
-                    currentState = status.led_state;
-                    currentConfidence = status.confidence;
-                    Enqueue(UpdateUI);
-                }
-                else if (cmdResponse.cmd == "pong")
-                {
-                    Debug.Log("[WS] Heartbeat received");
+                    case "status":
+                    {
+                        var status = JsonConvert.DeserializeObject<StatusResponse>(json);
+                        currentDamage = status.damage;
+                        currentSpeed = status.speed;
+                        currentState = status.led_state;
+                        currentConfidence = status.confidence;
+                        Enqueue(UpdateUI);
+                        break;
+                    }
+                    case "pong":
+                        Debug.Log("[WS] Heartbeat received");
+                        break;
+                    case "plan_flight_result":
+                    {
+                        Enqueue(() =>
+                        {
+                            try
+                            {
+                                var result = JsonConvert.DeserializeObject<PlanFlightResult>(json);
+                                if (result != null)
+                                {
+                                    preFlightSafe = result.safe;
+                                    if (result.safe)
+                                    {
+                                        if (toastManager != null)
+                                            toastManager.Show("pf_safe", "info", "Pre-Flight",
+                                                $"Safe - remaining: {result.remaining_km:F1} km", null);
+                                    }
+                                    else
+                                    {
+                                        if (toastManager != null)
+                                            toastManager.Show("pf_warning", "warning", "Pre-Flight",
+                                                result.warning, null);
+                                    }
+                                    if (takeoffBtn != null && flightPhase == "on_ground")
+                                        takeoffBtn.SetEnabled(preFlightSafe && flightAllowed);
+                                }
+                            }
+                            catch { }
+                        });
+                        break;
+                    }
+                    case "ack":
+                    {
+                        var jObj = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                        string action = jObj?.ContainsKey("action") == true ? jObj["action"]?.ToString() : "";
+                        if (action == "takeoff" && toastManager != null)
+                        {
+                            Enqueue(() => toastManager.Show("to_ack", "info", "Takeoff", "Taking off...", null));
+                        }
+                        else if (action == "land" && toastManager != null)
+                        {
+                            Enqueue(() => toastManager.Show("ld_ack", "info", "Landing", "Landing...", null));
+                        }
+                        break;
+                    }
+                    case "error":
+                    {
+                        var jObj = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                        string msg = jObj?.ContainsKey("message") == true ? jObj["message"]?.ToString() : "Unknown error";
+                        Enqueue(() =>
+                        {
+                            if (toastManager != null)
+                                toastManager.Show("err_" + Guid.NewGuid().ToString("N"), "error", "Error", msg, null);
+                            if (takeoffBtn != null && flightPhase == "on_ground")
+                                takeoffBtn.SetEnabled(preFlightSafe && flightAllowed);
+                            if (landBtn != null && flightPhase == "in_flight")
+                                landBtn.SetEnabled(altitude <= maxLandingAltitude);
+                        });
+                        break;
+                    }
                 }
                 return;
             }
@@ -149,6 +213,17 @@ public partial class WingDigitalTwin : MonoBehaviour
             currentPlaneSpeed = data.new_speed;
             targetAngleOfAttack = data.target_angle_of_attack;
             targetPlaneSpeed = data.target_speed;
+
+            flightPhase = data.flight_phase ?? "on_ground";
+            altitude = data.altitude;
+            kmThisFlight = data.km_this_flight;
+            totalKmFlown = data.total_km_flown;
+            flightNumber = data.flight_number;
+            remainingKm = data.remaining_km;
+            flightAllowed = data.flight_allowed;
+            maxLandingAltitude = data.max_landing_altitude;
+            plannedKm = data.planned_km;
+            preFlightSafe = data.pre_flight_safe;
 
             string desiredHex = "#" + ColorUtility.ToHtmlStringRGB(desiredColor);
             string allowedHex = "#" + ColorUtility.ToHtmlStringRGB(allowedColor);
@@ -206,8 +281,36 @@ public partial class WingDigitalTwin : MonoBehaviour
 
         if (callback != null)
         {
-            string requestId = cmd + "_" + System.DateTime.Now.Ticks;
+            string requestId = cmd + "_" + DateTime.Now.Ticks;
             pendingCommands[requestId] = callback;
         }
+    }
+
+    void CheckPendingCallbacks(string json)
+    {
+        if (pendingCommands.Count == 0) return;
+        try
+        {
+            var dict = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+            if (dict == null) return;
+            string responseCmd = dict.ContainsKey("cmd") ? dict["cmd"]?.ToString() : "";
+            var matching = pendingCommands.Where(kv => kv.Key.StartsWith(responseCmd)).ToList();
+            foreach (var kv in matching)
+            {
+                try { kv.Value.Invoke(json); } catch { }
+                pendingCommands.Remove(kv.Key);
+            }
+        }
+        catch { }
+    }
+
+    [Serializable]
+    public class PlanFlightResult
+    {
+        public string cmd;
+        public bool safe;
+        public float remaining_km;
+        public float planned_km;
+        public string warning;
     }
 }

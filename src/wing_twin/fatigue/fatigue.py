@@ -38,6 +38,7 @@ class FatigueConfig:
     damage_warning: float = 0.3
     damage_critical: float = 0.8
     material: str = "demo"
+    initial_remaining_km: float = 500.0
 
 
 @dataclass

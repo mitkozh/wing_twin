@@ -95,3 +95,13 @@ class EngineConfig:
 
     angle_accel: float = 15.0
     speed_accel: float = 60.0
+
+    # Flight lifecycle parameters
+    takeoff_speed: float = 72.0
+    takeoff_climb_angle: float = 10.0
+    takeoff_altitude_threshold: float = 8.0
+    landing_approach_speed: float = 65.0
+    landing_touchdown_speed: float = 5.0
+    landing_altitude_threshold: float = 0.5
+    max_landing_altitude: float = 50.0
+    min_safe_altitude: float = 25.0

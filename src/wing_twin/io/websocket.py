@@ -76,7 +76,7 @@ class WebSocketBroadcaster:
             return
 
         disconnected = []
-        for client in self._clients:
+        for client in list(self._clients):
             try:
                 await client.send(msg)
             except Exception as e:
@@ -103,6 +103,9 @@ class EngineCommandHandler:
             "set_heatmap_mode": self._cmd_set_heatmap_mode,
             "status": self._cmd_status,
             "dismiss_notification": self._cmd_dismiss_notification,
+            "plan_flight": self._cmd_plan_flight,
+            "takeoff": self._cmd_takeoff,
+            "land": self._cmd_land,
         }
 
     def register_handler(self, command: str, handler: Callable) -> None:
@@ -156,6 +159,10 @@ class EngineCommandHandler:
         }
 
     def _cmd_set_flight_state(self, cmd: dict) -> dict:
+        # Only allow setting flight state during active flight
+        if self._engine.flight_phase.value != "in_flight":
+            return {"cmd": "ack", "action": "set_flight_state", "ignored": "not in flight"}
+
         angle = cmd.get("angle")
         speed = cmd.get("speed")
 
@@ -176,6 +183,43 @@ class EngineCommandHandler:
             "desired_angle": state.desired_angle_of_attack,
             "desired_speed": state.desired_airspeed,
         }
+
+    def _cmd_plan_flight(self, cmd: dict) -> dict:
+        planned_km = cmd.get("planned_km")
+        if planned_km is None:
+            return {"cmd": "error", "message": "Missing 'planned_km'"}
+        planned_km = float(planned_km)
+        result = self._engine.life_prediction_state.pre_flight_check(planned_km)
+        self._engine.state.planned_km = planned_km
+        self._engine.state.pre_flight_safe = result["safe"]
+        self._engine.state.pre_flight_warning = result["warning"]
+        return {
+            "cmd": "plan_flight_result",
+            "safe": result["safe"],
+            "remaining_km": result["remaining_km"],
+            "planned_km": result["planned_km"],
+            "warning": result["warning"],
+        }
+
+    def _cmd_takeoff(self, cmd: dict) -> dict:
+        phase = self._engine.flight_phase.value
+        if phase != "on_ground":
+            return {"cmd": "error", "message": f"Cannot take off during '{phase}'"}
+        if not self._engine.state.flight_allowed:
+            return {"cmd": "error", "message": "Flight not allowed - fatigue life too low"}
+        ok = self._engine.request_takeoff()
+        if not ok:
+            return {"cmd": "error", "message": "Takeoff rejected"}
+        return {"cmd": "ack", "action": "takeoff", "phase": "taking_off"}
+
+    def _cmd_land(self, cmd: dict) -> dict:
+        phase = self._engine.flight_phase.value
+        if phase != "in_flight":
+            return {"cmd": "error", "message": f"Cannot land during '{phase}'"}
+        ok = self._engine.request_landing()
+        if not ok:
+            return {"cmd": "error", "message": "Landing rejected"}
+        return {"cmd": "ack", "action": "land", "phase": "landing"}
 
     def _cmd_set_heatmap_mode(self, cmd: dict) -> dict:
         mode = cmd.get("mode", "damage")
