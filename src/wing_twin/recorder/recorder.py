@@ -232,3 +232,27 @@ def load_life_prediction_state(path: Path) -> Optional[LifePredictionState]:
         data = json.load(f)
     logger.info("Loaded prediction state from %s", path)
     return LifePredictionState.from_dict(data)
+
+
+def save_engine_flight_state(engine, output_dir: Path) -> None:
+    """Save current flight progress so mid-run aborts don't lose data."""
+    data = {
+        "km_this_flight": engine._km_this_flight,
+        "last_flight_damage": engine._last_flight_damage,
+    }
+    path = Path(output_dir) / "flight_state.json"
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+    logger.info("Flight state saved to %s", path)
+
+
+def load_engine_flight_state(path: Path) -> Optional[dict]:
+    path = Path(path)
+    if path.is_dir():
+        path = path / "flight_state.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        data = json.load(f)
+    logger.info("Loaded flight state from %s", path)
+    return data

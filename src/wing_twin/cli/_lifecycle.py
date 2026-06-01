@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from wing_twin.config import PROJECT_ROOT
-from wing_twin.recorder.recorder import DataRecorder, save_fatigue_state, save_life_prediction_state
+from wing_twin.recorder.recorder import DataRecorder, save_fatigue_state, save_life_prediction_state, save_engine_flight_state
 from wing_twin.io.logger import get_logger
 
 logger = get_logger(__name__)
@@ -83,6 +83,11 @@ def finalize_recorder(recorder: Optional[DataRecorder], engine, rec_dir: Optiona
         logger.error("Recorder finalization failed: %s", exc)
 
     save_life_prediction_state(engine.life_prediction_state, rec_dir)
+
+    try:
+        save_engine_flight_state(engine, rec_dir)
+    except Exception as exc:
+        logger.error("Failed to save flight state: %s", exc)
 
     try:
         save_fatigue_state(engine.fatigue_state, rec_dir)

@@ -22,6 +22,7 @@ from wing_twin.config import EngineConfig
 from wing_twin.engine.state import TwinState
 from wing_twin.engine.dynamics import FlightDynamics
 from wing_twin.engine.fatigue_tracker import FatigueTracker
+from wing_twin.fatigue.life_prediction import LifePredictionState
 from wing_twin.types import DataSource, SensorReading
 
 
@@ -40,6 +41,8 @@ class DigitalTwinEngine:
         config: Optional[EngineConfig] = None,
         data_source: Optional[DataSource] = None,
         initial_fatigue_state: Optional[FatigueState] = None,
+        initial_life_prediction: Optional[LifePredictionState] = None,
+        initial_flight_state: Optional[dict] = None,
     ):
         self.config = config or EngineConfig()
         self._matrices: Optional[TransferMatrices] = None
@@ -54,13 +57,13 @@ class DigitalTwinEngine:
         self.fatigue = FatigueTracker(
             self.config.fatigue,
             initial_state=initial_fatigue_state,
+            initial_life_prediction=initial_life_prediction,
         )
 
         self.state.yield_point_pa = self.config.stress_limit
         self.state.max_angle_deg = self.config.max_aoa
         self.state.max_speed_kmh = self.config.reference_speed
         self.state.max_stepper_steps = self.config.max_stepper_steps
-        self.state.remaining_km = self.life_prediction_state.remaining_km
         self.state.max_landing_altitude = self.config.max_landing_altitude
 
         # Flight state machine
@@ -69,6 +72,13 @@ class DigitalTwinEngine:
         self._landing_timer: float = 0.0
         self._km_this_flight: float = 0.0
         self._last_flight_damage: float = 0.0
+
+        # Process aborted flight data from previous run
+        if initial_flight_state:
+            self._resolve_aborted_flight(initial_flight_state)
+
+        # Sync TwinState from LifePredictionState
+        self._sync_twin_from_life_prediction()
 
         if self.config.seed is not None:
             set_random_seed(self.config.seed)
@@ -141,6 +151,26 @@ class DigitalTwinEngine:
             self.state.km_this_flight = 0.0
             self.flight_phase = FlightPhase.ON_GROUND
 
+    def _sync_twin_from_life_prediction(self) -> None:
+        self.state.total_km_flown = self.life_prediction_state.total_km_flown
+        self.state.flight_number = self.life_prediction_state.total_flights
+        self.state.remaining_km = self.life_prediction_state.remaining_km
+        rem = self.state.remaining_km
+        avg_flight = self.life_prediction_state.ema_km_per_flight
+        self.state.flight_allowed = rem >= avg_flight if avg_flight > 0 else rem > 0
+
+    def _resolve_aborted_flight(self, flight_state: dict) -> None:
+        km = flight_state.get("km_this_flight", 0.0)
+        if km <= 0:
+            return
+        last_damage = flight_state.get("last_flight_damage", 0.0)
+        damage_delta = max(self.fatigue.state.damage - last_damage, 0.0)
+        self._km_this_flight = km
+        self.life_prediction_state.update_after_flight(
+            damage_delta=damage_delta,
+            km_delta=km,
+        )
+
     def request_takeoff(self) -> bool:
         if self._flight_phase != FlightPhase.ON_GROUND:
             return False
@@ -179,12 +209,9 @@ class DigitalTwinEngine:
                 damage_delta=damage_delta,
                 km_delta=km_delta,
             )
-        self.state.total_km_flown = self.life_prediction_state.total_km_flown
-        self.state.flight_number = self.life_prediction_state.total_flights
-        rem = self.life_prediction_state.remaining_km
-        avg_flight = self.life_prediction_state.ema_km_per_flight
-        self.state.flight_allowed = rem >= avg_flight if avg_flight > 0 else rem > 0
-        self.state.remaining_km = rem
+        self._km_this_flight = 0.0
+        self._last_flight_damage = self.state.damage
+        self._sync_twin_from_life_prediction()
 
     def _update_takeoff(self, dt: float) -> None:
         self._takeoff_timer += dt

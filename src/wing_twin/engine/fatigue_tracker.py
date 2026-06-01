@@ -25,6 +25,7 @@ class FatigueTracker:
         self,
         config: FatigueConfig,
         initial_state: Optional[FatigueState] = None,
+        initial_life_prediction: Optional[LifePredictionState] = None,
     ):
         self.config = config
         self.state = initial_state or FatigueState()
@@ -32,7 +33,7 @@ class FatigueTracker:
         self._cycles: list = []
         self._prev_low_confidence = False
         self._prev_flight_blocked = False
-        self.life_prediction = LifePredictionState(
+        self.life_prediction = initial_life_prediction or LifePredictionState(
             initial_remaining_km=config.initial_remaining_km,
         )
 

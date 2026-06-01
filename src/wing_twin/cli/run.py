@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from wing_twin.fatigue.fatigue import FatigueState
+from wing_twin.fatigue.life_prediction import LifePredictionState
 
 from ._lifecycle import cancel_task, finalize_recorder, setup_recorder, setup_signal_handler
 
@@ -18,7 +19,7 @@ from wing_twin.engine.engine import DigitalTwinEngine
 from wing_twin.config import EngineConfig
 from wing_twin.io.mqtt import MqttSource, MqttPublisher
 from wing_twin.io.websocket import WebSocketBroadcaster, EngineCommandHandler
-from wing_twin.recorder.recorder import load_fatigue_state
+from wing_twin.recorder.recorder import load_fatigue_state, load_life_prediction_state, load_engine_flight_state
 from wing_twin.viz.generator import generate_figures_from_recording
 from wing_twin.io.logger import get_logger
 
@@ -30,9 +31,16 @@ async def run_production(
     record: bool = False,
     record_figures: bool = False,
     resume_state: Optional[FatigueState] = None,
+    resume_life: Optional[LifePredictionState] = None,
+    resume_flight: Optional[dict] = None,
 ) -> Optional[Path]:
     engine_config = EngineConfig()
-    engine = DigitalTwinEngine(engine_config, initial_fatigue_state=resume_state)
+    engine = DigitalTwinEngine(
+        engine_config,
+        initial_fatigue_state=resume_state,
+        initial_life_prediction=resume_life,
+        initial_flight_state=resume_flight,
+    )
 
     logger.info("Loading transfer matrices...")
     try:
@@ -137,8 +145,12 @@ def main():
         return
 
     resume_state = None
+    resume_life = None
+    resume_flight = None
     if args.resume:
         resume_state = load_fatigue_state(Path(args.resume))
+        resume_life = load_life_prediction_state(Path(args.resume))
+        resume_flight = load_engine_flight_state(Path(args.resume))
 
     logger.info("=" * 60)
     logger.info("  Wing Digital Twin - Real Run Mode")
@@ -152,10 +164,21 @@ def main():
         logger.info("  Figures:  enabled on exit")
     if resume_state is not None:
         logger.info("  Resuming from prior run (D=%.4f, %d cycles)", resume_state.damage, len(resume_state.cycles or []))
+    if resume_life is not None:
+        logger.info("Life prediction restored (%d flights, %.1f km total)", resume_life.total_flights, resume_life.total_km_flown)
+    if resume_flight and resume_flight.get("km_this_flight", 0) > 0:
+        logger.info("Aborted flight recovered (%.3f km)", resume_flight["km_this_flight"])
     logger.info("=" * 60)
 
     rec_dir = asyncio.run(
-        run_production(config, record=args.record, record_figures=bool(args.figures), resume_state=resume_state)
+        run_production(
+            config,
+            record=args.record,
+            record_figures=bool(args.figures),
+            resume_state=resume_state,
+            resume_life=resume_life,
+            resume_flight=resume_flight,
+        )
     )
 
     if args.figures and rec_dir is not None:
