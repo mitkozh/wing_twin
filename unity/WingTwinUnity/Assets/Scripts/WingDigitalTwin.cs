@@ -68,6 +68,8 @@ public partial class WingDigitalTwin : MonoBehaviour
 
     private float targetAngleOfAttack = 0f;
     private float targetPlaneSpeed = 0f;
+    private float desiredAngleOfAttack = 0f;
+    private float desiredPlaneSpeed = 0f;
     private float currentDamage = 0f;
     private float currentAvgDamage = 0f;
     private int currentSpeed = 100;
@@ -340,8 +342,10 @@ public partial class WingDigitalTwin : MonoBehaviour
         public float max_stepper_steps;
         public float new_angle_of_attack;
         public float target_angle_of_attack;
+        public float desired_angle_of_attack;
         public float new_speed;
         public float target_speed;
+        public float desired_speed;
         public int stepper_position;
         public List<CycleBin> cycles_binned;
         public string flight_phase;

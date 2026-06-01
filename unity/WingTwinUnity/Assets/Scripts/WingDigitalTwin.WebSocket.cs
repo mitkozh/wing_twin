@@ -213,8 +213,18 @@ public partial class WingDigitalTwin : MonoBehaviour
             currentPlaneSpeed = data.new_speed;
             targetAngleOfAttack = data.target_angle_of_attack;
             targetPlaneSpeed = data.target_speed;
+            desiredAngleOfAttack = data.desired_angle_of_attack;
+            desiredPlaneSpeed = data.desired_speed;
 
-            flightPhase = data.flight_phase ?? "on_ground";
+            string newPhase = data.flight_phase ?? "on_ground";
+            flightPhase = newPhase;
+
+            if (flightPhase == "taking_off" || flightPhase == "landing")
+            {
+                planeAngleSlider.SetValueWithoutNotify(desiredAngleOfAttack);
+                speedSlider.SetValueWithoutNotify(desiredPlaneSpeed);
+            }
+
             altitude = data.altitude;
             kmThisFlight = data.km_this_flight;
             totalKmFlown = data.total_km_flown;
@@ -231,9 +241,9 @@ public partial class WingDigitalTwin : MonoBehaviour
             if (stepsSliderLabel != null)
                 stepsSliderLabel.text = $"Steps: {data.stepper_position}";
             if (angleSliderLabel != null)
-                angleSliderLabel.text = $"<color={desiredHex}>Desired Angle: {planeAngleSlider.value:F1}</color> | <color={allowedHex}>Allowed Angle: {targetAngleOfAttack:F1}{'\u00b0'}</color>";
+                angleSliderLabel.text = $"<color={desiredHex}>Desired Angle: {desiredAngleOfAttack:F1}</color> | <color={allowedHex}>Allowed Angle: {targetAngleOfAttack:F1}{'\u00b0'}</color>";
             if (speedSliderLabel != null)
-                speedSliderLabel.text = $"<color={desiredHex}>Desired Speed: {speedSlider.value:F1}</color> | <color={allowedHex}>Allowed Speed: {targetPlaneSpeed:F1} km/h</color>";
+                speedSliderLabel.text = $"<color={desiredHex}>Desired Speed: {desiredPlaneSpeed:F1}</color> | <color={allowedHex}>Allowed Speed: {targetPlaneSpeed:F1} km/h</color>";
 
             if (stepsSlider != null)
                 stepsSlider.SetValueWithoutNotify(data.stepper_position);

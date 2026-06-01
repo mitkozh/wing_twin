@@ -87,8 +87,11 @@ class EngineConfig:
     reference_speed: float = 120.0
     air_density: float = 1.225
 
+    lift_ref_N: float = 1.8
+    climb_rate_gain: float = 3.0
+
     min_airspeed: float = 40.0
-    stress_limit: float = 100_000_000.0
+    stress_limit: float = 110_000_000.0
     max_stepper_steps: int = 2720
     max_aoa: float = 15.0
 

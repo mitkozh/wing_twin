@@ -77,16 +77,15 @@ def init_neuralfoil(model_size: str = "xlarge") -> NeuralFoilModel:
     return _NF_MODEL
 
 
-def compute_aero_force(
+def _compute_CL_CD(
     angle_deg: float,
     airspeed_kmh: float,
     model: Optional[NeuralFoilModel] = None,
-) -> float:
+) -> tuple[float, float]:
     if model is None:
         model = _NF_MODEL
 
     V = airspeed_kmh / 3.6
-    q = 0.5 * AIR_DENSITY * V ** 2
     Re = AIR_DENSITY * V * PROTO_CHORD / AIR_VISCOSITY
 
     if model is not None:
@@ -97,6 +96,30 @@ def compute_aero_force(
         CL = 2 * math.pi / (1 + 2 / PROTO_AR) * alpha
         CD = 0.015 + CL ** 2 / (math.pi * OSWALD_E * PROTO_AR)
 
+    return CL, CD
+
+
+def compute_aero_forces(
+    angle_deg: float,
+    airspeed_kmh: float,
+    model: Optional[NeuralFoilModel] = None,
+) -> tuple[float, float, float, float]:
+    CL, CD = _compute_CL_CD(angle_deg, airspeed_kmh, model)
+    V = airspeed_kmh / 3.6
+    q = 0.5 * AIR_DENSITY * V ** 2
+    L = q * PROTO_WING_AREA * CL
+    D = q * PROTO_WING_AREA * CD
+    return L, D, CL, CD
+
+
+def compute_aero_force(
+    angle_deg: float,
+    airspeed_kmh: float,
+    model: Optional[NeuralFoilModel] = None,
+) -> float:
+    CL, CD = _compute_CL_CD(angle_deg, airspeed_kmh, model)
+    V = airspeed_kmh / 3.6
+    q = 0.5 * AIR_DENSITY * V ** 2
     L = q * PROTO_WING_AREA * CL
     D = q * PROTO_WING_AREA * CD
     return math.sqrt(L ** 2 + D ** 2)

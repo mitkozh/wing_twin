@@ -14,6 +14,7 @@ from wing_twin.fea.field_compute import compute_stress_field, compute_deformatio
 from wing_twin.fatigue.fatigue import FatigueState, set_random_seed
 from wing_twin.physics.aero import (
     compute_aero_force,
+    compute_aero_forces,
     force_to_steps,
     init_neuralfoil,
     NeuralFoilModel,
@@ -239,6 +240,9 @@ class DigitalTwinEngine:
             target_speed = V_takeoff + (self.config.reference_speed - V_takeoff) * frac
             target_angle = climb_angle
 
+        target_angle = max(-self.config.max_aoa, min(self.config.max_aoa, target_angle))
+        target_speed = max(0.0, min(self.config.reference_speed, target_speed))
+
         self.state.target_angle_of_attack = target_angle
         self.state.target_airspeed = target_speed
 
@@ -278,10 +282,16 @@ class DigitalTwinEngine:
             target_angle = 0.0
             self.state.altitude = max(0.0, self.state.altitude - 0.5 * dt)
 
+        target_angle = max(-self.config.max_aoa, min(self.config.max_aoa, target_angle))
+        target_speed = max(0.0, target_speed)
+
         self.state.target_angle_of_attack = target_angle
         self.state.target_airspeed = target_speed
 
         self.dynamics.update(self.state, dt)
+
+        self.state.desired_angle_of_attack = target_angle
+        self.state.desired_airspeed = target_speed
 
         self._update_stepper()
 
@@ -310,9 +320,22 @@ class DigitalTwinEngine:
             F_aero, self.config.steps_per_newton
         )
 
+    # this is a synthetic altitude, used for simulating the different transitions. Don't treat it too seriously!
     def _update_altitude_km(self, dt: float) -> None:
         V_ms = self.state.airspeed / 3.6
-        climb_rate = V_ms * math.sin(math.radians(self.state.angle_of_attack))
+        if V_ms < 0.1:
+            climb_rate = 0.0
+        elif self._flight_phase == FlightPhase.LANDING:
+            climb_rate = V_ms * math.sin(math.radians(self.state.angle_of_attack))
+        else:
+            L, _D, _CL, _CD = compute_aero_forces(
+                self.state.angle_of_attack,
+                self.state.airspeed,
+                model=self._aero_model,
+            )
+            climb_rate = self.config.climb_rate_gain * (L / self.config.lift_ref_N - 1.0)
+            climb_rate = max(-V_ms, min(V_ms, climb_rate))
+
         self.state.altitude = max(0.0, self.state.altitude + climb_rate * dt)
         self._km_this_flight += (self.state.airspeed / 3600.0) * dt
         self.state.km_this_flight = self._km_this_flight
