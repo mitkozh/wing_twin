@@ -34,10 +34,12 @@ def decide_control(
     return led, speed
 
 
-def decide_control_stress(stress_max_pa: float, speed_pct: int = 100) -> tuple[str, int]:
-    stress_mpa = stress_max_pa / 1e6
-    if stress_mpa >= 0.8:
-        return "red", max(0, speed_pct)
-    elif stress_mpa >= 0.3:
-        return "yellow", speed_pct
-    return "green", speed_pct
+def decide_control_stress(
+    stress_max_pa: float,
+    yield_point_pa: float = 80_000_000.0,
+) -> str:
+    if stress_max_pa >= 0.8 * yield_point_pa:
+        return "red"
+    elif stress_max_pa >= 0.3 * yield_point_pa:
+        return "yellow"
+    return "green"

@@ -86,7 +86,9 @@ public partial class WingDigitalTwin : MonoBehaviour
 
         chartPanel.PushStrain(data.strain);
         chartPanel.PushDamage(data.damage);
-        chartPanel.PushStress(data.stress_max, data.yield_point_pa > 0 ? data.yield_point_pa : yieldPointPa);
+        chartPanel.PushStress(data.stress_max,
+            data.yield_point_pa > 0 ? data.yield_point_pa : yieldPointPa,
+            data.stress_limit_pa > 0 ? data.stress_limit_pa : 0);
 
         if (data.cycles_binned != null && data.cycles_binned.Count > 0)
         {
@@ -111,7 +113,6 @@ public partial class WingDigitalTwin : MonoBehaviour
                     {
                         var status = JsonConvert.DeserializeObject<StatusResponse>(json);
                         currentDamage = status.damage;
-                        currentSpeed = status.speed;
                         currentState = status.led_state;
                         currentConfidence = status.confidence;
                         Enqueue(UpdateUI);
@@ -188,7 +189,6 @@ public partial class WingDigitalTwin : MonoBehaviour
 
             currentDamage = data.damage;
             currentAvgDamage = data.avg_damage;
-            currentSpeed = data.speed;
             currentState = data.led_state;
             currentConfidence = data.confidence;
             stressMin = data.stress_min;

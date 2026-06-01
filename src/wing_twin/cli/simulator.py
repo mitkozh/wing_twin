@@ -38,7 +38,7 @@ class SimulatorMqttClient(MqttClientBase):
             if "position" in payload:
                 self._simulator.state.airspeed = float(payload.get("speed", self._simulator.state.airspeed))
             elif "servo" in payload:
-                self._simulator.set_speed(int(payload["servo"]))
+                self._simulator.set_airspeed(float(payload.get("speed", 0)))
         except Exception:
             pass
 

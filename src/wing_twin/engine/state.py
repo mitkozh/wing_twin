@@ -52,7 +52,6 @@ class TwinState:
     damage: float = 0.0
     avg_damage: float = 0.0
     confidence: float = 100.0
-    speed_pct: int = 100
     led_state: str = "green"
     node_damages: dict = field(default_factory=dict)
 
@@ -65,9 +64,10 @@ class TwinState:
     angle_of_attack: float = 0.0
     airspeed: float = 0.0
 
-    yield_point_pa: float = 100_000_000.0
+    yield_point_pa: float = 80_000_000.0
+    stress_limit_pa: float = 65_000_000.0
     max_angle_deg: float = 12.0
-    max_speed_kmh: float = 80.0
+    max_speed_kmh: float = 110.0
     max_stepper_steps: int = 2720
 
     flight_allowed: bool = True
@@ -163,7 +163,6 @@ class TwinState:
             "avg_damage": round(self.avg_damage, 4),
             "node_damages": surface_damage,
             "confidence": round(self.confidence, 2),
-            "speed": self.speed_pct,
             "led_state": self.led_state,
             "notifications": list(self.notifications),
             "new_angle_of_attack": self.angle_of_attack,
@@ -175,6 +174,7 @@ class TwinState:
             "stepper_position": self.stepper_position,
             "heatmap_mode": self.heatmap_mode,
             "yield_point_pa": self.yield_point_pa,
+            "stress_limit_pa": self.stress_limit_pa,
             "max_angle_deg": self.max_angle_deg,
             "max_speed_kmh": self.max_speed_kmh,
             "max_stepper_steps": self.max_stepper_steps,
@@ -205,7 +205,7 @@ class TwinState:
 
     def to_snapshot_dict(self) -> dict:
         fields_to_save = [
-            "damage", "avg_damage", "confidence", "speed_pct", "led_state",
+            "damage", "avg_damage", "confidence", "led_state",
             "desired_angle_of_attack", "desired_airspeed",
             "target_angle_of_attack", "target_airspeed",
             "angle_of_attack", "airspeed",

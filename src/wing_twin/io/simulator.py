@@ -21,7 +21,6 @@ from wing_twin.physics.aero import compute_aero_force, NeuralFoilModel
 class SimulatorState:
     """Runtime state for the simulator."""
     time_elapsed: float = 0.0
-    speed_pct: int = 100
     num_gauges: int = 1
     airspeed: float = 0.0
     angle_of_attack: float = 0.0
@@ -45,10 +44,6 @@ class SimulatorSource(DataSource):
     @property
     def state(self) -> SimulatorState:
         return self._state
-
-    def set_speed(self, speed_pct: int) -> None:
-        with self._lock:
-            self._state.speed_pct = max(0, min(100, speed_pct))
 
     def set_airspeed(self, airspeed: float) -> None:
         with self._lock:

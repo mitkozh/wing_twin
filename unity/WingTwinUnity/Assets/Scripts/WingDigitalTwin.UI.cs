@@ -241,7 +241,6 @@ public partial class WingDigitalTwin : MonoBehaviour
         UpdateDamageSlider(damageSliderFill, damageLabel, currentDamage, "Max Damage");
         UpdateDamageSlider(avgDamageSliderFill, avgDamageLabel, currentAvgDamage, "Avg Damage");
 
-        if (speedLabel != null) speedLabel.text = $"Vmax: {currentSpeed}%";
         if (confidenceLabel != null) confidenceLabel.text = $"Confidence: {currentConfidence:F1}%";
 
         UpdateFlightMetrics();

@@ -143,8 +143,8 @@ def _display_thread(engine, stop_event):
         phase = engine.state.flight_phase.upper()
         alt = engine.state.altitude
         km = engine.state.km_this_flight
-        logger.info("[%4ds] |%s| %5.1f%%  %7s  Vmax=%3d%%  [%s]  alt=%.1fm  km=%.3f",
-                    tick, bar, engine.state.damage*100, state_sym, engine.state.speed_pct,
+        logger.info("[%4ds] |%s| %5.1f%%  %7s  [%s]  alt=%.1fm  km=%.3f",
+                    tick, bar, engine.state.damage*100, state_sym,
                     phase, alt, km)
         import time
         time.sleep(1)

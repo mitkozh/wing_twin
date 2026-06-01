@@ -242,5 +242,4 @@ class EngineCommandHandler:
             "damage": self._engine.state.damage,
             "confidence": self._engine.state.confidence,
             "led_state": self._engine.state.led_state,
-            "speed": self._engine.state.speed_pct,
         }

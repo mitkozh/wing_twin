@@ -93,6 +93,5 @@ class FlightDynamics:
 
         if (pos - target) * error > 0.0:
             pos = target
-            vel = 0.0
 
         return pos, vel

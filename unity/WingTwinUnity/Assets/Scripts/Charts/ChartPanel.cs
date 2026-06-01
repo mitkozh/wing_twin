@@ -19,7 +19,8 @@ public class ChartPanel : MonoBehaviour
     private int strainHead, damageHead, stressHead;
     private int strainCount, damageCount, stressCount;
 
-    private float currentYield = 100_000_000f;
+    private float currentYield = 80_000_000f;
+    private float currentStressLimit = 65_000_000f;
     private float maxStrain = 1f, maxDamage = 1f, maxStress = 1f;
     private Font defaultFont;
     private GameObject chartContainer;
@@ -169,9 +170,12 @@ public class ChartPanel : MonoBehaviour
         stressChart = CreateChart<LineChart>("StressChart", "Stress Over Time");
         stressChart.AddSerie<Line>("Stress");
         stressChart.AddSerie<Line>("Yield");
+        stressChart.AddSerie<Line>("Stress Limit");
         InitChartData(stressChart);
         for (int i = 0; i < chartCapacity; i++)
             stressChart.AddData(1, currentYield);
+        for (int i = 0; i < chartCapacity; i++)
+            stressChart.AddData(2, currentStressLimit);
         var stressY = stressChart.EnsureChartComponent<YAxis>();
         stressY.axisName.show = true;
         stressY.axisName.name = "Stress (Pa)";
@@ -230,19 +234,22 @@ public class ChartPanel : MonoBehaviour
         try { damageChart.RefreshChart(); } catch { }
     }
 
-    public void PushStress(float value, float yieldPoint)
+    public void PushStress(float value, float yieldPoint, float stressLimit)
     {
         if (!initialized) return;
         float newYield = yieldPoint > 0 ? yieldPoint : currentYield;
+        float newStressLimit = stressLimit > 0 ? stressLimit : currentStressLimit;
         bool yieldChanged = !Mathf.Approximately(newYield, currentYield);
+        bool limitChanged = !Mathf.Approximately(newStressLimit, currentStressLimit);
         currentYield = newYield;
+        currentStressLimit = newStressLimit;
 
         stressBuffer[stressHead] = value;
         stressHead = (stressHead + 1) % chartCapacity;
         if (stressCount < chartCapacity) stressCount++;
         if (Mathf.Abs(value) > maxStress) maxStress = Mathf.Abs(value);
 
-        float axisMax = Mathf.Max(maxStress, currentYield) * 1.1f;
+        float axisMax = Mathf.Max(maxStress, currentYield, currentStressLimit) * 1.1f;
         var stressYAxis = stressChart.EnsureChartComponent<YAxis>();
         stressYAxis.min = 0f;
         stressYAxis.max = axisMax;
@@ -261,6 +268,16 @@ public class ChartPanel : MonoBehaviour
             else
             {
                 stressChart.UpdateData(1, idx, currentYield);
+            }
+
+            if (limitChanged)
+            {
+                for (int i = 0; i < chartCapacity; i++)
+                    stressChart.UpdateData(2, i, currentStressLimit);
+            }
+            else
+            {
+                stressChart.UpdateData(2, idx, currentStressLimit);
             }
 
             stressChart.RefreshChart();

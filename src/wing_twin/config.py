@@ -30,7 +30,7 @@ class WebSocketConfig:
 @dataclass
 class SimulationConfig:
     sample_rate: int = 50
-    reference_speed: float = 120.0
+    reference_speed: float = 110.0
 
 
 @dataclass
@@ -84,16 +84,17 @@ class EngineConfig:
     steps_per_newton: float = 204.0
     F_max_newtons: float = 13.3
 
-    reference_speed: float = 120.0
+    reference_speed: float = 110.0
     air_density: float = 1.225
 
     lift_ref_N: float = 1.8
     climb_rate_gain: float = 3.0
 
     min_airspeed: float = 40.0
-    stress_limit: float = 110_000_000.0
+    yield_point: float = 80_000_000.0
+    stress_limit: float = 65_000_000.0
     max_stepper_steps: int = 2720
-    max_aoa: float = 15.0
+    max_aoa: float = 12.0
 
     neuralfoil_model_size: str = "xlarge"
 
@@ -101,10 +102,10 @@ class EngineConfig:
     speed_accel: float = 60.0
 
     # Flight lifecycle parameters
-    takeoff_speed: float = 72.0
-    takeoff_climb_angle: float = 10.0
+    takeoff_speed: float = 65.0
+    takeoff_climb_angle: float = 8.0
     takeoff_altitude_threshold: float = 8.0
-    landing_approach_speed: float = 65.0
+    landing_approach_speed: float = 55.0
     landing_touchdown_speed: float = 5.0
     landing_altitude_threshold: float = 0.5
     max_landing_altitude: float = 50.0

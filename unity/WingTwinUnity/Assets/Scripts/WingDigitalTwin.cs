@@ -39,7 +39,7 @@ public partial class WingDigitalTwin : MonoBehaviour
     [SerializeField] Color allowedColor = new Color(0.75f, 0.20f, 0.30f);
 
     float maxAngleDeg = 12f;
-    float maxSpeedKmh = 80f;
+    float maxSpeedKmh = 110f;
     float maxStepperSteps = 2720f;
 
     [Header("LED Colors")]
@@ -72,7 +72,6 @@ public partial class WingDigitalTwin : MonoBehaviour
     private float desiredPlaneSpeed = 0f;
     private float currentDamage = 0f;
     private float currentAvgDamage = 0f;
-    private int currentSpeed = 100;
     private string currentState = "green";
     private float currentConfidence = 100f;
     private float[] stressField = Array.Empty<float>();
@@ -141,7 +140,7 @@ public partial class WingDigitalTwin : MonoBehaviour
     private Vector3[] deformedVertices;
     private float stressMin;
     private float stressMax;
-    private float yieldPointPa = 100_000_000f;
+    private float yieldPointPa = 80_000_000f;
 
     private Color[] vertexColors;
     private float[] meshStressValues;
@@ -317,7 +316,6 @@ public partial class WingDigitalTwin : MonoBehaviour
         public float damage;
         public float confidence;
         public string led_state;
-        public int speed;
     }
 
     [Serializable]
@@ -331,12 +329,12 @@ public partial class WingDigitalTwin : MonoBehaviour
         public float avg_damage;
         public List<float> node_damages;
         public float confidence;
-        public int speed;
         public string led_state;
         public List<NotificationData> notifications;
         public float stress_min;
         public float stress_max;
         public float yield_point_pa;
+        public float stress_limit_pa;
         public float max_angle_deg;
         public float max_speed_kmh;
         public float max_stepper_steps;
