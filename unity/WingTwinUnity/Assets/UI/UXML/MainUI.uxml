@@ -12,33 +12,38 @@
         <ui:VisualElement name="view-group-2" class="view-group" style="display: none;" />
         <ui:VisualElement name="view-group-3" class="view-group" style="display: none;" />
 
-        <ui:VisualElement name="left-panel">
-            <ui:VisualElement name="max-damage-group">
-                <ui:VisualElement name="damage-slider" class="custom-slider">
-                    <ui:VisualElement name="damage-slider-track" class="custom-slider-track">
-                        <ui:VisualElement name="damage-slider-fill" class="custom-slider-fill" />
+        <ui:VisualElement name="left-container">
+            <ui:VisualElement name="left-panel">
+                <ui:VisualElement name="max-damage-group">
+                    <ui:VisualElement name="damage-slider" class="custom-slider">
+                        <ui:VisualElement name="damage-slider-track" class="custom-slider-track">
+                            <ui:VisualElement name="damage-slider-fill" class="custom-slider-fill" />
+                        </ui:VisualElement>
                     </ui:VisualElement>
+                    <ui:Label name="damage-label" class="damage-label" text="Max Damage: 0.0%" />
                 </ui:VisualElement>
-                <ui:Label name="damage-label" class="damage-label" text="Max Damage: 0.0%" />
-            </ui:VisualElement>
-            <ui:VisualElement name="avg-damage-group">
-                <ui:VisualElement name="avg-damage-slider" class="custom-slider">
-                    <ui:VisualElement name="avg-damage-slider-track" class="custom-slider-track">
-                        <ui:VisualElement name="avg-damage-slider-fill" class="custom-slider-fill" />
+                <ui:VisualElement name="avg-damage-group">
+                    <ui:VisualElement name="avg-damage-slider" class="custom-slider">
+                        <ui:VisualElement name="avg-damage-slider-track" class="custom-slider-track">
+                            <ui:VisualElement name="avg-damage-slider-fill" class="custom-slider-fill" />
+                        </ui:VisualElement>
                     </ui:VisualElement>
+                    <ui:Label name="avg-damage-label" class="damage-label" text="Avg Damage: 0.0%" />
                 </ui:VisualElement>
-                <ui:Label name="avg-damage-label" class="damage-label" text="Avg Damage: 0.0%" />
+                <ui:Label name="confidence-label" class="conf-label" text="Confidence: 100.0%" />
+                <ui:Toggle name="heatmap-toggle" class="heatmap-toggle" label="Stress" />
             </ui:VisualElement>
-            <ui:Label name="confidence-label" class="conf-label" text="Confidence: 100.0%" />
-            <ui:Toggle name="heatmap-toggle" class="heatmap-toggle" label="Stress" />
-        </ui:VisualElement>
 
-        <ui:VisualElement name="flight-metrics-panel">
-            <ui:Label name="metric-altitude" class="metric-label" text="Alt: 0.0 m" />
-            <ui:Label name="metric-distance" class="metric-label" text="Dist: 0.000 km" />
-            <ui:Label name="metric-total" class="metric-label" text="Total: 0.0 km" />
-            <ui:Label name="metric-flights" class="metric-label" text="Flights: 0" />
-            <ui:Label name="metric-remaining" class="metric-label" text="Remaining: -- km" />
+            <ui:VisualElement name="flight-metrics-panel">
+                <ui:Label name="metric-altitude" class="metric-label" text="Alt: 0.0 m" />
+                <ui:Label name="metric-distance" class="metric-label" text="Dist: 0.000 km" />
+                <ui:Label name="metric-total" class="metric-label" text="Total: 0.0 km" />
+                <ui:Label name="metric-flights" class="metric-label" text="Flights: 0" />
+                <ui:Label name="metric-remaining" class="metric-label" text="Remaining: -- km" />
+            </ui:VisualElement>
+
+            <ui:Button name="takeoff-btn" class="phase-btn" text="TAKE OFF" style="display: none;" />
+            <ui:Button name="land-btn" class="phase-btn" text="LAND" style="display: none;" />
         </ui:VisualElement>
 
         <ui:VisualElement name="view-switch-panel">
@@ -59,9 +64,6 @@
             </ui:VisualElement>
         </ui:VisualElement>
         <ui:VisualElement name="notification-container" />
-
-        <ui:Button name="takeoff-btn" class="phase-btn" text="TAKE OFF" style="display: none;" />
-        <ui:Button name="land-btn" class="phase-btn" text="LAND" style="display: none;" />
     </ui:VisualElement>
 
     <ui:VisualElement name="control-panel">

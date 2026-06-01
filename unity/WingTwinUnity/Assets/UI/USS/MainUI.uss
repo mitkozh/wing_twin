@@ -57,15 +57,27 @@
 
 
 
-/* --- LEFT PANEL (Damage / Stats) --- */
-#left-panel {
+/* --- LEFT CONTAINER --- */
+#left-container {
     position: absolute;
     top: 16px;
     left: 16px;
+    bottom: 16px;
+    width: 180px;
+    flex-direction: column;
+    picking-mode: ignore;
+}
+
+#left-container > * {
+    picking-mode: position;
+}
+
+/* --- LEFT PANEL (Damage / Stats) --- */
+#left-panel {
     padding: 12px;
     background-color: rgba(0, 0, 0, 0.12);
     border-radius: 6px;
-    width: 180px;
+    margin-bottom: 16px;
 }
 
 #max-damage-group, #avg-damage-group {
@@ -168,8 +180,7 @@
     max-width: 360px;
     max-height: 360px;
     flex-direction: column-reverse;
-    overflow-y: auto;
-    z-index: 10;
+    overflow: hidden;
 }
 
 .toast {
@@ -411,14 +422,11 @@
 
 /* --- FLIGHT METRICS PANEL (below left-panel, same styling) --- */
 #flight-metrics-panel {
-    position: absolute;
-    top: 245px;
-    left: 16px;
     padding: 12px;
     background-color: rgba(0, 0, 0, 0.12);
     border-radius: 6px;
-    width: 180px;
     flex-direction: column;
+    margin-bottom: 16px;
 }
 
 .metric-label {
@@ -434,8 +442,6 @@
 
 /* --- PHASE BUTTONS (Take Off / Land) --- */
 .phase-btn {
-    position: absolute;
-    bottom: 0;
     height: 40px;
     font-size: 16px;
     -unity-font-style: bold;
@@ -444,11 +450,11 @@
     border-radius: 6px;
     padding: 6px 20px;
     -unity-text-align: middle-center;
-    min-width: 110px;
+    width: 100%;
+    margin-top: auto;
 }
 
 #takeoff-btn {
-    left: 16px;
     background-color: rgba(40, 155, 40, 0.88);
     border-color: rgba(30, 130, 30, 0.9);
 }
@@ -468,7 +474,6 @@
 }
 
 #land-btn {
-    left: 16px;
     background-color: rgba(180, 45, 45, 0.88);
     border-color: rgba(150, 35, 35, 0.9);
 }
