@@ -162,48 +162,56 @@
 /* --- NOTIFICATIONS --- */
 #notification-container {
     position: absolute;
-    top: 0;
-    right: 310px;
-    width: 320px;
+    top: 4px;
+    right: 8px;
+    min-width: 260px;
+    max-width: 360px;
     max-height: 360px;
     flex-direction: column-reverse;
-    padding: 4px;
+    overflow-y: auto;
+    z-index: 10;
 }
 
 .toast {
-    flex-direction: row;
-    align-items: flex-start;
-    padding: 8px 12px;
-    margin-bottom: 4px;
+    flex-direction: column;
+    padding: 6px 8px;
+    margin-bottom: 3px;
     border-radius: 4px;
-    opacity: 1;
-    transition: opacity 0.3s;
+}
+
+.toast-header {
+    flex-direction: row;
+    align-items: center;
 }
 
 .toast-title {
-    font-size: 13px;
+    font-size: 11px;
     color: white;
     -unity-font-style: bold;
-    min-width: 70px;
-    margin-right: 6px;
+    white-space: nowrap;
+    flex-grow: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .toast-message {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.9);
-    flex-grow: 1;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: normal;
+    margin-top: 3px;
 }
 
 .toast-close-btn {
-    width: 20px;
-    height: 20px;
-    font-size: 10px;
+    width: 16px;
+    height: 16px;
+    font-size: 8px;
     background-color: rgba(255, 255, 255, 0.15);
     color: white;
     border-width: 0;
-    border-radius: 10px;
-    margin-left: 6px;
+    border-radius: 8px;
     flex-shrink: 0;
+    margin-left: 6px;
 }
 
 .toast-close-btn:hover {

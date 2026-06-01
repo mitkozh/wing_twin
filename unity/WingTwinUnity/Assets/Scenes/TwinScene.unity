@@ -10012,7 +10012,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 518518248}
-  - component: {fileID: 518518247}
   - component: {fileID: 518518246}
   m_Layer: 5
   m_Name: ToastManager
@@ -10033,35 +10032,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 53b35f8bc3f29e94f8d02c7be8b4222a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ToastManager
-  uiDocument: {fileID: 518518247}
+  uiDocument: {fileID: 1002338386}
   autoDismissTime: 12
   fadeDuration: 0.3
   infoColor: {r: 0.15, g: 0.35, b: 0.75, a: 0.95}
   warningColor: {r: 0.75, g: 0.55, b: 0.05, a: 0.95}
   errorColor: {r: 0.75, g: 0.15, b: 0.15, a: 0.95}
---- !u!114 &518518247
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 518518245}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
-  m_PanelSettings: {fileID: 11400000, guid: aa1a30fcc4c9c11468de277f0e1e5ebf, type: 2}
-  m_ParentUI: {fileID: 0}
-  sourceAsset: {fileID: 0}
-  m_SortingOrder: 0
-  m_Position: 0
-  m_WorldSpaceSizeMode: 1
-  m_WorldSpaceWidth: 1920
-  m_WorldSpaceHeight: 1080
-  m_PivotReferenceSize: 0
-  m_Pivot: 0
-  m_WorldSpaceCollider: {fileID: 0}
 --- !u!4 &518518248
 Transform:
   m_ObjectHideFlags: 0

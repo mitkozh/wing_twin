@@ -39,8 +39,6 @@
             <ui:Button name="view-btn-3" class="view-switch-btn" text="View 3" />
         </ui:VisualElement>
 
-        <ui:ScrollView name="notification-container" />
-
         <ui:VisualElement name="stress-legend">
             <ui:VisualElement name="stress-bar" />
             <ui:VisualElement name="stress-labels">
@@ -52,6 +50,7 @@
                 <ui:Label name="stress-label-5" class="stress-label" />
             </ui:VisualElement>
         </ui:VisualElement>
+        <ui:VisualElement name="notification-container" />
     </ui:VisualElement>
 
     <ui:VisualElement name="control-panel">

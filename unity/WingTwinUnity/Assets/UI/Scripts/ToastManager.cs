@@ -40,6 +40,7 @@ public class ToastManager : MonoBehaviour
         Color bgColor = type switch
         {
             "error" => errorColor,
+            "critical" => errorColor,
             "warning" => warningColor,
             _ => infoColor,
         };
@@ -49,19 +50,24 @@ public class ToastManager : MonoBehaviour
         toast.AddToClassList("toast");
         toast.style.backgroundColor = bgColor;
 
+        var headerRow = new VisualElement();
+        headerRow.AddToClassList("toast-header");
+
         var titleLabel = new Label(title);
         titleLabel.AddToClassList("toast-title");
-
-        var msgLabel = new Label(message);
-        msgLabel.AddToClassList("toast-message");
 
         var closeBtn = new Button(() => { if (onDismiss != null) StartCoroutine(FadeOutToast(id, onDismiss)); });
         closeBtn.text = "X";
         closeBtn.AddToClassList("toast-close-btn");
 
-        toast.Add(titleLabel);
+        headerRow.Add(titleLabel);
+        headerRow.Add(closeBtn);
+
+        var msgLabel = new Label(message);
+        msgLabel.AddToClassList("toast-message");
+
+        toast.Add(headerRow);
         toast.Add(msgLabel);
-        toast.Add(closeBtn);
 
         notificationContainer.Add(toast);
         activeToasts[id] = toast;
