@@ -85,13 +85,14 @@ class EngineConfig:
     F_max_newtons: float = 13.3
 
     reference_speed: float = 120.0
-    Cmq: float = -1.5
     air_density: float = 1.225
 
     min_airspeed: float = 40.0
     stress_limit: float = 100_000_000.0
     max_stepper_steps: int = 2720
     max_aoa: float = 15.0
+
+    neuralfoil_model_size: str = "xlarge"
 
     angle_accel: float = 15.0
     speed_accel: float = 60.0

@@ -14,8 +14,9 @@ from wing_twin.fea.field_compute import compute_stress_field, compute_deformatio
 from wing_twin.fatigue.fatigue import FatigueState, set_random_seed
 from wing_twin.physics.aero import (
     compute_aero_force,
-    compute_pitch_damping_force,
     force_to_steps,
+    init_neuralfoil,
+    NeuralFoilModel,
 )
 from wing_twin.control.control import decide_control, decide_control_stress
 from wing_twin.config import EngineConfig
@@ -76,6 +77,11 @@ class DigitalTwinEngine:
         # Process aborted flight data from previous run
         if initial_flight_state:
             self._resolve_aborted_flight(initial_flight_state)
+
+        # Initialise NeuralFoil aerodynamic model
+        self._aero_model: NeuralFoilModel = init_neuralfoil(
+            model_size=self.config.neuralfoil_model_size,
+        )
 
         # Sync TwinState from LifePredictionState
         self._sync_twin_from_life_prediction()
@@ -298,19 +304,10 @@ class DigitalTwinEngine:
         F_aero = compute_aero_force(
             self.state.angle_of_attack,
             self.state.airspeed,
-        )
-        d_alpha_dt = self.dynamics.d_alpha_dt(
-            self.state.angle_of_attack, self.config.sample_rate
-        )
-        F_damping = compute_pitch_damping_force(
-            self.state.angle_of_attack,
-            self.state.airspeed,
-            d_alpha_dt,
-            chord=self.config.chord,
-            Cmq=self.config.Cmq,
+            model=self._aero_model,
         )
         self.state.stepper_position = force_to_steps(
-            F_aero + F_damping, self.config.steps_per_newton
+            F_aero, self.config.steps_per_newton
         )
 
     def _update_altitude_km(self, dt: float) -> None:
@@ -430,9 +427,12 @@ class DigitalTwinEngine:
 
             if F_current_mag > 1e-12:
                 F_aero_current = compute_aero_force(
-                    self.state.angle_of_attack, self.state.airspeed
+                    self.state.angle_of_attack, self.state.airspeed,
+                    model=self._aero_model,
                 )
-                F_aero_target = compute_aero_force(target_angle, target_speed)
+                F_aero_target = compute_aero_force(
+                    target_angle, target_speed, model=self._aero_model,
+                )
 
                 min_aero = max(0.01 * F_aero_target, 1e-9)
                 stress_scale = F_aero_target / max(F_aero_current, min_aero)

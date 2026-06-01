@@ -23,13 +23,14 @@ classifiers = [
 
 dependencies = [
     "paho-mqtt>=2.0.0",
-    "numpy>=1.24.0",
+    "numpy>=1.24.0,<2",
     "scipy>=1.10.0",
     "websockets>=11.0.0",
     "py_fatigue>=2.0.0",
     "matplotlib",
     "h5py>=3.8.0",
     "vtk",
+    "neuralfoil>=0.3.2",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +45,7 @@ wing-real-run = "wing_twin.cli.run:main"
 wing-demo-run = "wing_twin.cli.demo:main"
 wing-simulator = "wing_twin.cli.simulator:main"
 wing-mesh-export = "wing_twin.cli.mesh_export:main"
+wing-neuralfoil-export = "wing_twin.cli.neuralfoil_export:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

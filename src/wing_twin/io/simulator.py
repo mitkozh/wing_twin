@@ -14,7 +14,7 @@ import numpy as np
 from wing_twin.config import SimulationConfig
 from wing_twin.types import DataSource, SensorReading
 from wing_twin.fea.matrices import TransferMatrices
-from wing_twin.physics.aero import compute_aero_force
+from wing_twin.physics.aero import compute_aero_force, NeuralFoilModel
 
 
 @dataclass
@@ -33,12 +33,14 @@ class SimulatorSource(DataSource):
     def __init__(
         self,
         config: Optional[SimulationConfig] = None,
+        aero_model: Optional[NeuralFoilModel] = None,
     ):
         self.config = config or SimulationConfig()
         self._state = SimulatorState()
         self._running = False
         self._lock = threading.Lock()
         self._matrices: Optional[TransferMatrices] = None
+        self._aero_model: Optional[NeuralFoilModel] = aero_model
 
     @property
     def state(self) -> SimulatorState:
@@ -78,7 +80,7 @@ class SimulatorSource(DataSource):
         return self._running
 
     def _generate_force(self, t: float, airspeed: float, angle_deg: float) -> float:
-        steady = compute_aero_force(angle_deg, airspeed)
+        steady = compute_aero_force(angle_deg, airspeed, model=self._aero_model)
         bending = 0.0
         torsion = 0.0
         turbulence = 0.0
