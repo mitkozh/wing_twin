@@ -1,0 +1,106 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:Style src="../USS/MainUI.uss" />
+
+    <ui:VisualElement name="top-bar">
+        <ui:Label name="connection-label" text="DISCONNECTED" />
+        <ui:VisualElement name="top-bar-spacer" />
+        <ui:Button name="help-button" text="[?] Help" />
+    </ui:VisualElement>
+
+    <ui:VisualElement name="main-area">
+        <ui:VisualElement name="view-group-1" class="view-group" />
+        <ui:VisualElement name="view-group-2" class="view-group" style="display: none;" />
+        <ui:VisualElement name="view-group-3" class="view-group" style="display: none;" />
+
+        <ui:VisualElement name="left-panel">
+            <ui:VisualElement name="max-damage-group">
+                <ui:VisualElement name="damage-slider" class="custom-slider">
+                    <ui:VisualElement name="damage-slider-track" class="custom-slider-track">
+                        <ui:VisualElement name="damage-slider-fill" class="custom-slider-fill" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:Label name="damage-label" class="damage-label" text="Max Damage: 0.0%" />
+            </ui:VisualElement>
+            <ui:VisualElement name="avg-damage-group">
+                <ui:VisualElement name="avg-damage-slider" class="custom-slider">
+                    <ui:VisualElement name="avg-damage-slider-track" class="custom-slider-track">
+                        <ui:VisualElement name="avg-damage-slider-fill" class="custom-slider-fill" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:Label name="avg-damage-label" class="damage-label" text="Avg Damage: 0.0%" />
+            </ui:VisualElement>
+            <ui:Label name="confidence-label" class="conf-label" text="Confidence: 100.0%" />
+            <ui:Toggle name="heatmap-toggle" class="heatmap-toggle" label="Stress" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="view-switch-panel">
+            <ui:Button name="view-btn-1" class="view-switch-btn" text="View 1" />
+            <ui:Button name="view-btn-2" class="view-switch-btn" text="View 2" />
+            <ui:Button name="view-btn-3" class="view-switch-btn" text="View 3" />
+        </ui:VisualElement>
+
+        <ui:ScrollView name="notification-container" />
+
+        <ui:VisualElement name="stress-legend">
+            <ui:VisualElement name="stress-bar" />
+            <ui:VisualElement name="stress-labels">
+                <ui:Label name="stress-label-0" class="stress-label" />
+                <ui:Label name="stress-label-1" class="stress-label" />
+                <ui:Label name="stress-label-2" class="stress-label" />
+                <ui:Label name="stress-label-3" class="stress-label" />
+                <ui:Label name="stress-label-4" class="stress-label" />
+                <ui:Label name="stress-label-5" class="stress-label" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+
+    <ui:VisualElement name="control-panel">
+        <ui:VisualElement name="angle-group" class="slider-group">
+            <ui:Label name="angle-slider-label" class="slider-label" text="Desired Angle: 0.0° | Allowed: 0.0°" />
+            <ui:Slider name="angle-slider" class="control-slider" direction="horizontal" />
+            <ui:VisualElement name="allowed-angle-slider" class="custom-slider compact">
+                <ui:VisualElement name="allowed-angle-track" class="custom-slider-track">
+                    <ui:VisualElement name="allowed-angle-fill" class="custom-slider-fill" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="speed-group" class="slider-group">
+            <ui:Label name="speed-slider-label" class="slider-label" text="Desired Speed: 0.0 | Allowed: 0.0 km/h" />
+            <ui:Slider name="speed-slider" class="control-slider" direction="horizontal" />
+            <ui:VisualElement name="allowed-speed-slider" class="custom-slider compact">
+                <ui:VisualElement name="allowed-speed-track" class="custom-slider-track">
+                    <ui:VisualElement name="allowed-speed-fill" class="custom-slider-fill" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="steps-group" class="slider-group">
+            <ui:Label name="steps-slider-label" class="slider-label" text="Steps: 0" />
+            <ui:Slider name="steps-slider" class="control-slider" direction="horizontal" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+
+    <ui:Label name="plane-speed-label" class="plane-label" text="Current Plane Speed: 0.0" />
+    <ui:Label name="plane-angle-label" class="plane-label" text="Current Plane Angle: 0.0" />
+
+    <ui:VisualElement name="help-panel" style="display: none;">
+        <ui:VisualElement name="help-content">
+            <ui:Label class="help-title" text="Help - Keyboard Controls" />
+            <ui:Label class="help-line" text="M - Toggle Stress/Damage View" />
+            <ui:Label class="help-line" text="F - Apply Force +10 N" />
+            <ui:Label class="help-line" text="G - Apply Force -10 N" />
+            <ui:Label class="help-line" text="P - Pause simulation" />
+            <ui:Label class="help-line" text="R - Reset damage" />
+            <ui:Label class="help-line" text="S - Request status" />
+            <ui:Label class="help-line" text="Space - Reconnect WS" />
+            <ui:Label class="help-line" text="Escape - Disconnect WS" />
+            <ui:Label class="help-line" text="H - Toggle this help" />
+            <ui:Label class="help-line" text="C - Toggle Charts" />
+            <ui:Label class="help-spacer" />
+            <ui:Label class="help-section" text="Camera Controls" />
+            <ui:Label class="help-line" text="RMB + drag - Rotate" />
+            <ui:Label class="help-line" text="Scroll - Zoom" />
+            <ui:Label class="help-line" text="Middle drag - Pan" />
+            <ui:Button name="help-close-btn" class="help-close-btn" text="Close" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

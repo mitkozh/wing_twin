@@ -1,42 +1,28 @@
-/*
- * Wing Digital Twin Unity WebSocket Client
- */
 using NativeWebSocket;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.UI;
+using UnityEngine.UIElements;
 
 public class WingDigitalTwin : MonoBehaviour
 {
+    [Header("UI Document")]
+    [SerializeField] private UIDocument uiDocument;
+
     [Header("Connection")]
     [SerializeField] private string serverUrl = "ws://localhost:8765";
     [SerializeField] private float reconnectDelay = 2f;
     [SerializeField] private float maxReconnectDelay = 10f;
     [SerializeField] private float heartbeatInterval = 10f;
 
-    [Header("HUD")]
-    [SerializeField] private Slider damageSlider;
-    [SerializeField] private TextMeshProUGUI damageLabel;
-    [SerializeField] private Slider avgDamageSlider;
-    [SerializeField] private TextMeshProUGUI avgDamageLabel;
-    [SerializeField] private TextMeshProUGUI speedLabel;
-    [SerializeField] private TextMeshProUGUI confidenceLabel;
-    [SerializeField] private TextMeshProUGUI connectionLabel;
-    [SerializeField] private Toggle heatmapModeToggle;
-    [SerializeField] private Text heatmapToggleLabel;
-    [SerializeField] private Image stressBar;
-
     [Header("Notifications")]
-    [SerializeField] private ToastNotification toastPrefab;
-    [SerializeField] private Transform notificationPanel;
-    public int stressBarHeight = 256;
-    public int stressBarWidth = 16;
+    [SerializeField] private ToastManager toastManager;
+    public int stressBarHeight = 150;
+    public int stressBarWidth = 14;
 
     [Header("Wing Visualization")]
     [SerializeField] private Renderer wingRenderer;
@@ -45,19 +31,7 @@ public class WingDigitalTwin : MonoBehaviour
 
     [Header("PlaneVisualization")]
     [SerializeField] GameObject rotationalPivot;
-    [SerializeField] Slider planeAngleSlider;
-    [SerializeField] Slider stepsSlider;
-    [SerializeField] Slider speedSlider;
-    [SerializeField] Slider allowedAngleSlider;
-    [SerializeField] Slider allowedSpeedSlider;
-    [SerializeField] TextMeshProUGUI angleSliderLabel;
-    [SerializeField] TextMeshProUGUI stepsSliderLabel;
-    [SerializeField] TextMeshProUGUI speedSliderLabel;
     [SerializeField] GameObject planeScene;
-    [SerializeField] TextMeshProUGUI planeCurrentSpeedLabel;
-    //[SerializeField] TextMeshProUGUI planeTargetSpeedLabel;
-    //[SerializeField] TextMeshProUGUI planeTargetAngleLabel;
-    [SerializeField] TextMeshProUGUI planeCurrentAngleLabel;
     [SerializeField] List<ParticleSystem> windParticles = new List<ParticleSystem>();
     [SerializeField] float commonPlaneSpeed = 40f;
     [SerializeField] float windExaggeration = 1f;
@@ -72,9 +46,6 @@ public class WingDigitalTwin : MonoBehaviour
     [SerializeField] private Color greenColor = new Color(0.1f, 1.0f, 0.1f);
     [SerializeField] private Color yellowColor = new Color(1.0f, 0.9f, 0.1f);
     [SerializeField] private Color redColor = new Color(1.0f, 0.1f, 0.1f);
-
-    [Header("Help Panel")]
-    [SerializeField] GameObject helpPanel;
 
     [Header("Simulation Parameters")]
     [SerializeField] float scaling = 1f;
@@ -106,16 +77,42 @@ public class WingDigitalTwin : MonoBehaviour
     private float[] deformationField = Array.Empty<float>();
     private float[] nodeDamages = Array.Empty<float>();
     private bool showDamageHeatmap = false;
-    private bool suppressSliderCallback = false;
 
-    public RectTransform stressBarRect;
-    public TMP_Text labelPrefab;
-    public Transform labelParent;
+    // UI Toolkit element references
+    private VisualElement damageSliderFill;
+    private Label damageLabel;
+    private VisualElement avgDamageSliderFill;
+    private Label avgDamageLabel;
+    private Label speedLabel;
+    private Label confidenceLabel;
+    private Label connectionLabel;
+    private Toggle heatmapToggle;
+    private VisualElement stressBar;
 
-    private readonly List<TMP_Text> stressLabels = new();
+    private Slider planeAngleSlider;
+    private Slider stepsSlider;
+    private Slider speedSlider;
+    private VisualElement allowedAngleFill;
+    private VisualElement allowedSpeedFill;
+    private Label angleSliderLabel;
+    private Label stepsSliderLabel;
+    private Label speedSliderLabel;
 
-    private readonly HashSet<string> shownNotifications = new();
-    private readonly List<ToastNotification> activeToasts = new();
+
+    private VisualElement helpPanel;
+    private VisualElement[] viewGroups;
+
+    private Label[] stressLabels;
+    private Label planeSpeedLabel;
+    private Label planeAngleLabel;
+
+    private VisualElement leftPanel;
+    private VisualElement stressLegend;
+    private VisualElement notificationContainer;
+
+    private GameObject view3Axes;
+    private GameObject axisXObj;
+    private GameObject axisYObj;
 
     private Mesh mesh;
     private Vector3[] originalVertices;
@@ -128,14 +125,19 @@ public class WingDigitalTwin : MonoBehaviour
     private float[] meshStressValues;
     private System.Collections.Generic.Dictionary<string, System.Action<string>> pendingCommands =
         new System.Collections.Generic.Dictionary<string, System.Action<string>>();
-    public float correctionValue;
     private readonly System.Collections.Generic.Queue<Action> mainThreadQueue =
         new System.Collections.Generic.Queue<Action>();
 
     async void Start()
-    {   
+    {
+        if (!QueryUIElements())
+        {
+            Debug.LogError("UI Toolkit initialization failed. UI will not be available.");
+            return;
+        }
         CreateStressBar();
-        BuildStressLegendLabels();
+        CreateAxes();
+
         string meshPath = System.IO.Path.Combine(
             Application.streamingAssetsPath, "FinalMesh_surface.json");
         LoadMeshFromJson(meshPath);
@@ -149,46 +151,132 @@ public class WingDigitalTwin : MonoBehaviour
         lastMessageTime = Time.time;
         lastHeartbeatTime = Time.time;
 
-        if (heatmapModeToggle != null)
+        if (heatmapToggle != null)
         {
-            heatmapModeToggle.onValueChanged.AddListener(OnHeatmapModeChanged);
-            heatmapModeToggle.SetIsOnWithoutNotify(false);
+            heatmapToggle.RegisterValueChangedCallback(evt => OnHeatmapModeChanged(evt.newValue));
+            heatmapToggle.SetValueWithoutNotify(false);
         }
         UpdateHeatmapToggleLabel(false);
 
-        planeAngleSlider.onValueChanged.AddListener(OnAngleSliderChanged);
+        planeAngleSlider.RegisterValueChangedCallback(evt => OnAngleSliderChanged(evt.newValue));
         if (speedSlider != null)
-            speedSlider.onValueChanged.AddListener(OnSpeedSliderChanged);
+            speedSlider.RegisterValueChangedCallback(evt => OnSpeedSliderChanged(evt.newValue));
 
-        planeAngleSlider.minValue = -maxAngleDeg;
-        planeAngleSlider.maxValue = maxAngleDeg;
-
-        allowedAngleSlider.minValue = -maxAngleDeg;
-        allowedAngleSlider.maxValue = maxAngleDeg;
+        planeAngleSlider.lowValue = -maxAngleDeg;
+        planeAngleSlider.highValue = maxAngleDeg;
 
         if (stepsSlider != null)
         {
-            stepsSlider.minValue = 0f;
-            stepsSlider.maxValue = maxStepperSteps;
+            stepsSlider.lowValue = 0f;
+            stepsSlider.highValue = maxStepperSteps;
         }
         if (speedSlider != null)
         {
-            speedSlider.minValue = 0f;
-            speedSlider.maxValue = maxSpeedKmh;
-
-            allowedSpeedSlider.minValue = 0;
-            allowedSpeedSlider.maxValue = maxSpeedKmh;
+            speedSlider.lowValue = 0f;
+            speedSlider.highValue = maxSpeedKmh;
         }
 
         await ConnectAsync();
     }
-    
+
+    private bool QueryUIElements()
+    {
+        if (uiDocument == null)
+            uiDocument = GetComponent<UIDocument>();
+        if (uiDocument == null || uiDocument.rootVisualElement == null)
+        {
+            Debug.LogError("UIDocument not found or not initialized. Add UIDocument component to this GameObject.");
+            return false;
+        }
+
+        var root = uiDocument.rootVisualElement;
+
+        damageSliderFill = root.Q("damage-slider-fill");
+        damageLabel = root.Q<Label>("damage-label");
+        avgDamageSliderFill = root.Q("avg-damage-slider-fill");
+        avgDamageLabel = root.Q<Label>("avg-damage-label");
+        speedLabel = root.Q<Label>("speed-label");
+        confidenceLabel = root.Q<Label>("confidence-label");
+        connectionLabel = root.Q<Label>("connection-label");
+        heatmapToggle = root.Q<Toggle>("heatmap-toggle");
+        if (heatmapToggle != null)
+        {
+            var checkmark = heatmapToggle.Q(null, "unity-toggle__checkmark");
+            if (checkmark != null)
+            {
+                checkmark.style.borderTopWidth = 1;
+                checkmark.style.borderBottomWidth = 1;
+                checkmark.style.borderLeftWidth = 1;
+                checkmark.style.borderRightWidth = 1;
+                var bColor = new Color(0, 0, 0, 0.35f);
+                checkmark.style.borderTopColor = bColor;
+                checkmark.style.borderRightColor = bColor;
+                checkmark.style.borderBottomColor = bColor;
+                checkmark.style.borderLeftColor = bColor;
+                checkmark.style.borderTopLeftRadius = 3;
+                checkmark.style.borderTopRightRadius = 3;
+                checkmark.style.borderBottomLeftRadius = 3;
+                checkmark.style.borderBottomRightRadius = 3;
+            }
+        }
+        stressBar = root.Q("stress-bar");
+
+        planeAngleSlider = root.Q<Slider>("angle-slider");
+        stepsSlider = root.Q<Slider>("steps-slider");
+        speedSlider = root.Q<Slider>("speed-slider");
+        allowedAngleFill = root.Q("allowed-angle-fill");
+        allowedSpeedFill = root.Q("allowed-speed-fill");
+        angleSliderLabel = root.Q<Label>("angle-slider-label");
+        stepsSliderLabel = root.Q<Label>("steps-slider-label");
+        speedSliderLabel = root.Q<Label>("speed-slider-label");
+
+        helpPanel = root.Q("help-panel");
+
+        Button helpBtn = root.Q<Button>("help-button");
+        if (helpBtn != null)
+            helpBtn.clicked += () => ToggleHelp();
+        Button helpCloseBtn = root.Q<Button>("help-close-btn");
+        if (helpCloseBtn != null)
+            helpCloseBtn.clicked += () => ToggleHelp();
+
+        Button viewBtn1 = root.Q<Button>("view-btn-1");
+        Button viewBtn2 = root.Q<Button>("view-btn-2");
+        Button viewBtn3 = root.Q<Button>("view-btn-3");
+        if (viewBtn1 != null) viewBtn1.clicked += () => SwitchViewButton(1);
+        if (viewBtn2 != null) viewBtn2.clicked += () => SwitchViewButton(2);
+        if (viewBtn3 != null) viewBtn3.clicked += () => SwitchViewButton(3);
+
+        viewGroups = new VisualElement[3];
+        viewGroups[0] = root.Q("view-group-1");
+        viewGroups[1] = root.Q("view-group-2");
+        viewGroups[2] = root.Q("view-group-3");
+
+        leftPanel = root.Q("left-panel");
+        stressLegend = root.Q("stress-legend");
+        notificationContainer = root.Q("notification-container");
+
+        stressLabels = new Label[6];
+        for (int i = 0; i < 6; i++)
+            stressLabels[i] = root.Q<Label>($"stress-label-{i}");
+
+        planeSpeedLabel = root.Q<Label>("plane-speed-label");
+        planeAngleLabel = root.Q<Label>("plane-angle-label");
+
+        Color allowedFillColor = new Color(0f, 0.86f, 0.31f, 0.55f);
+        if (allowedAngleFill != null)
+            allowedAngleFill.style.backgroundColor = allowedFillColor;
+        if (allowedSpeedFill != null)
+            allowedSpeedFill.style.backgroundColor = allowedFillColor;
+
+        UpdateLegendValues();
+        return true;
+    }
+
     private void UpdatePlaneSpeed()
     {
-        planeCurrentSpeedLabel.text = $"Current Plane Speed: {currentPlaneSpeed:F1}";
-        //planeTargetSpeedLabel.text = $"Allowed Plane Speed: {targetPlaneSpeed:F1}";
+        if (planeSpeedLabel != null)
+            planeSpeedLabel.text = $"Current Plane Speed: {currentPlaneSpeed:F1}";
 
-        //Debug.Log($"currentPlaneSpeed={currentPlaneSpeed}, common={commonPlaneSpeed}, exaggeration={windExaggeration}");
         foreach (ParticleSystem ps in windParticles)
         {
             float change = currentPlaneSpeed / commonPlaneSpeed;
@@ -198,154 +286,190 @@ public class WingDigitalTwin : MonoBehaviour
             main.startLifetime = 10f / speed;
         }
     }
+
     private void UpdatePlaneAngle()
     {
-        rotationalPivot.transform.localRotation = Quaternion.Euler(currentPlaneAngle, 0, 0);
+        if (rotationalPivot != null)
+            rotationalPivot.transform.localRotation = Quaternion.Euler(currentPlaneAngle, 0, 0);
 
-        planeCurrentAngleLabel.text = $"Current Plane Angle: {currentPlaneAngle:F1}";
-        //planeTargetAngleLabel.text = $"Allowed Plane Angle: {targetAngleOfAttack:F1}";
+        if (planeAngleLabel != null)
+            planeAngleLabel.text = $"Current Plane Angle: {currentPlaneAngle:F1}";
+    }
+
+    private Camera GetActiveCamera()
+    {
+        foreach (Camera cam in Camera.allCameras)
+            if (cam.isActiveAndEnabled) return cam;
+        return null;
+    }
+
+    private void UpdatePlaneLabelPositions()
+    {
+        Camera cam = GetActiveCamera();
+        if (cam == null || rotationalPivot == null)
+            return;
+
+        Vector3 screenPos = cam.WorldToScreenPoint(rotationalPivot.transform.position);
+
+        if (screenPos.z < 0f)
+        {
+            if (planeSpeedLabel != null) planeSpeedLabel.style.display = DisplayStyle.None;
+            if (planeAngleLabel != null) planeAngleLabel.style.display = DisplayStyle.None;
+            return;
+        }
+
+        float x = screenPos.x;
+        float y = Screen.height - screenPos.y;
+
+        if (planeSpeedLabel != null)
+        {
+            planeSpeedLabel.style.display = DisplayStyle.Flex;
+            planeSpeedLabel.style.left = x - 80;
+            planeSpeedLabel.style.top = y - 50;
+        }
+        if (planeAngleLabel != null)
+        {
+            planeAngleLabel.style.display = DisplayStyle.Flex;
+            planeAngleLabel.style.left = x - 80;
+            planeAngleLabel.style.top = y - 28;
+        }
     }
 
     public void SwitchViewButton(int camera)
     {
-        if (camera > UIViewGroups.Count)
-        {
-            return;
-        }
-
         SwitchView(camera);
     }
 
     private void SwitchView(int camera)
     {
         int index = camera - 1;
-         bool planeSceneNeeded = false;
+        bool planeSceneNeeded = false;
 
         for (int i = 0; i < UIViewGroups.Count; i++)
         {
-            GameObject uiGroup = UIViewGroups[i].uiViewGroup;
             GameObject viewCamera = UIViewGroups[i].viewCamera;
             GameObject worldUIGroup = UIViewGroups[i].worldUIViewGroup;
-            
 
             bool active = i == index;
 
-            if (uiGroup != null)
-                uiGroup.SetActive(active);
-
             if (worldUIGroup != null)
                 worldUIGroup.SetActive(active);
-
             if (viewCamera != null)
                 viewCamera.SetActive(active);
-
             if (active && UIViewGroups[i].needPlaneScene)
-            {
                 planeSceneNeeded = true;
-            }
         }
 
+        for (int i = 0; i < viewGroups.Length; i++)
+        {
+            if (viewGroups[i] != null)
+                viewGroups[i].style.display = i == index ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        bool isView1 = index == 0;
+        if (leftPanel != null)
+            leftPanel.style.display = isView1 ? DisplayStyle.Flex : DisplayStyle.None;
+        if (stressLegend != null)
+            stressLegend.style.display = isView1 ? DisplayStyle.Flex : DisplayStyle.None;
+        if (notificationContainer != null)
+            notificationContainer.style.display = isView1 ? DisplayStyle.Flex : DisplayStyle.None;
+
         planeScene.SetActive(planeSceneNeeded);
+
+        if (view3Axes != null)
+            view3Axes.SetActive(index == 2);
     }
 
     void CreateStressBar()
     {
         Texture2D tex = MakeGradientTexture(stressGradient);
+        if (stressBar != null)
+        {
+            stressBar.style.backgroundImage = new StyleBackground(Background.FromTexture2D(tex));
+        }
+    }
 
-        stressBar.sprite = Sprite.Create(
-            tex,
-            new Rect(0, 0, tex.width, tex.height),
-            new Vector2(0.5f, 0.5f)
-        );
+    void CreateAxes()
+    {
+        view3Axes = new GameObject("View3Axes");
+        Transform parent = planeScene != null ? planeScene.transform : null;
+        if (parent != null)
+            view3Axes.transform.SetParent(parent);
+        view3Axes.transform.localPosition = Vector3.zero;
+        view3Axes.transform.localRotation = Quaternion.identity;
+        view3Axes.transform.localScale = Vector3.one;
+        view3Axes.SetActive(false);
 
-        stressBar.type = Image.Type.Simple;
-        stressBar.preserveAspect = false;
+        float length = 100f;
+        float thickness = 0.3f;
 
-        RectTransform rt = stressBar.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(stressBarWidth, stressBarHeight);
+        axisXObj = CreateAxisBar(view3Axes.transform, "AxisX", Vector3.right, length, thickness, Color.red);
+        axisYObj = CreateAxisBar(view3Axes.transform, "AxisY", Vector3.up, length, thickness, Color.red);
+    }
+
+    GameObject CreateAxisBar(Transform parent, string name, Vector3 dir, float length, float thickness, Color color)
+    {
+        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        go.name = name;
+        go.transform.SetParent(parent);
+        go.transform.localPosition = Vector3.zero;
+        go.transform.localRotation = Quaternion.FromToRotation(Vector3.up, dir);
+        go.transform.localScale = new Vector3(thickness, length * 2, thickness);
+
+        UnityEngine.Object.Destroy(go.GetComponent<BoxCollider>());
+
+        Shader shader = Shader.Find("Unlit/Color");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+        if (shader != null)
+        {
+            Material mat = new Material(shader);
+            mat.color = color;
+            go.GetComponent<MeshRenderer>().material = mat;
+        }
+        return go;
     }
 
     Texture2D MakeGradientTexture(Gradient gradient)
     {
         Texture2D tex = new Texture2D(stressBarWidth, stressBarHeight);
-
         for (int y = 0; y < stressBarHeight; y++)
         {
             float t = y / (float)(stressBarHeight - 1);
             Color c = gradient.Evaluate(t);
-
             for (int x = 0; x < stressBarWidth; x++)
                 tex.SetPixel(x, y, c);
         }
-
         tex.Apply();
         return tex;
     }
 
-    void BuildStressLegendLabels()
-    {
-        float h = stressBarRect.rect.height - correctionValue;
-        float halfH = h * 0.5f;
-
-        int labelCount = stressGradient.colorKeys.Length + 1;
-
-        for (int i = 0; i < labelCount; i++)
-        {
-            float t = i / (float)(labelCount - 1);
-
-            TMP_Text label = Instantiate(labelPrefab, stressBarRect);
-            stressLabels.Add(label);
-
-            RectTransform rt = label.GetComponent<RectTransform>();
-
-            rt.anchorMin = new Vector2(0.5f, 0.5f);
-            rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(1f, 0.5f);
-
-            float y = Mathf.Lerp(-halfH, halfH, t);
-            float x = -10f;
-
-            rt.localPosition = new Vector3(x, y, 0f);
-        }
-    }
-
     void UpdateLegendValues()
     {
-        if (stressLabels == null || stressLabels.Count == 0)
+        if (stressLabels == null)
             return;
 
-        int labelCount = stressLabels.Count;
+        int labelCount = stressLabels.Length;
 
         if (showDamageHeatmap)
         {
             for (int i = 0; i < labelCount; i++)
             {
-                float t = i / (float)(labelCount - 1);
+                float t = 1f - (float)i / (labelCount - 1);
                 float value = Mathf.Lerp(0f, 1f, t);
-
-                string suffix = "";
-                if (i == labelCount - 1)
-                    suffix = " Max";
-                else if (i == 0)
-                    suffix = " Min";
-
-                stressLabels[i].text = $"{value:P0}{suffix}";
+                string suffix = i == 0 ? " Max" : i == labelCount - 1 ? " Min" : "";
+                if (stressLabels[i] != null)
+                    stressLabels[i].text = $"{value:P0}{suffix}";
             }
         }
         else
         {
             for (int i = 0; i < labelCount; i++)
             {
-                float t = i / (float)(labelCount - 1);
+                float t = 1f - (float)i / (labelCount - 1);
                 float value = Mathf.Lerp(0f, yieldPointPa, t);
-
-                string suffix = "";
-                if (i == labelCount - 1)
-                    suffix = " Max";
-                else if (i == 0)
-                    suffix = " Min";
-
-                stressLabels[i].text = $"{value:E3}{suffix}";
+                string suffix = i == 0 ? " Max" : i == labelCount - 1 ? " Min" : "";
+                if (stressLabels[i] != null)
+                    stressLabels[i].text = $"{value:E3}{suffix}";
             }
         }
     }
@@ -418,9 +542,7 @@ public class WingDigitalTwin : MonoBehaviour
     private void SendHeartbeat()
     {
         if (ws != null && ws.State == WebSocketState.Open)
-        {
             ws.SendText("{\"cmd\":\"ping\"}");
-        }
     }
 
     void PushChartData(TwinState data)
@@ -475,21 +597,17 @@ public class WingDigitalTwin : MonoBehaviour
             yieldPointPa = data.yield_point_pa > 0 ? data.yield_point_pa : yieldPointPa;
             if (data.max_angle_deg > 0) {
                 maxAngleDeg = data.max_angle_deg;
-                planeAngleSlider.minValue = -maxAngleDeg;
-                planeAngleSlider.maxValue = maxAngleDeg;
+                planeAngleSlider.lowValue = -maxAngleDeg;
+                planeAngleSlider.highValue = maxAngleDeg;
 
-                allowedAngleSlider.minValue = -maxAngleDeg;
-                allowedAngleSlider.maxValue = maxAngleDeg;
             }
             if (data.max_speed_kmh > 0) {
                 maxSpeedKmh = data.max_speed_kmh;
-                speedSlider.maxValue = maxSpeedKmh;
-
-                allowedSpeedSlider.maxValue = maxSpeedKmh;
+                speedSlider.highValue = maxSpeedKmh;
             }
             if (data.max_stepper_steps > 0) {
                 maxStepperSteps = data.max_stepper_steps;
-                stepsSlider.maxValue = maxStepperSteps;
+                stepsSlider.highValue = maxStepperSteps;
             }
 
             currentPlaneAngle = data.new_angle_of_attack;
@@ -503,18 +621,22 @@ public class WingDigitalTwin : MonoBehaviour
             if (stepsSliderLabel != null)
                 stepsSliderLabel.text = $"Steps: {data.stepper_position}";
             if (angleSliderLabel != null)
-                angleSliderLabel.text = $"<color={desiredHex}>Desired Angle: {planeAngleSlider.value:F1}</color> | <color={allowedHex}>Allowed Angle: {targetAngleOfAttack:F1}°</color>";
+                angleSliderLabel.text = $"<color={desiredHex}>Desired Angle: {planeAngleSlider.value:F1}</color> | <color={allowedHex}>Allowed Angle: {targetAngleOfAttack:F1}{'\u00b0'}</color>";
             if (speedSliderLabel != null)
                 speedSliderLabel.text = $"<color={desiredHex}>Desired Speed: {speedSlider.value:F1}</color> | <color={allowedHex}>Allowed Speed: {targetPlaneSpeed:F1} km/h</color>";
 
-            //suppressSliderCallback = true;
             if (stepsSlider != null)
-                stepsSlider.value = data.stepper_position;
-            if (allowedAngleSlider != null)
-                allowedAngleSlider.value = targetAngleOfAttack;
-            if (allowedSpeedSlider != null)
-                allowedSpeedSlider.value = targetPlaneSpeed;
-            //suppressSliderCallback = false;
+                stepsSlider.SetValueWithoutNotify(data.stepper_position);
+            if (allowedAngleFill != null && maxAngleDeg > 0f)
+            {
+                float pct = (targetAngleOfAttack + maxAngleDeg) / (2f * maxAngleDeg) * 100f;
+                allowedAngleFill.style.width = Length.Percent(Mathf.Clamp(pct, 0f, 100f));
+            }
+            if (allowedSpeedFill != null && maxSpeedKmh > 0f)
+            {
+                float pct = targetPlaneSpeed / maxSpeedKmh * 100f;
+                allowedSpeedFill.style.width = Length.Percent(Mathf.Clamp(pct, 0f, 100f));
+            }
 
             if (data.stress_field != null && data.stress_field.Count > 0)
                 stressField = data.stress_field.ToArray();
@@ -553,55 +675,47 @@ public class WingDigitalTwin : MonoBehaviour
 
     void UpdateUI()
     {
-        UpdateDamageSlider(damageSlider, damageLabel, currentDamage, "Max Damage");
-        UpdateDamageSlider(avgDamageSlider, avgDamageLabel, currentAvgDamage, "Avg Damage");
-        
+        UpdateDamageSlider(damageSliderFill, damageLabel, currentDamage, "Max Damage");
+        UpdateDamageSlider(avgDamageSliderFill, avgDamageLabel, currentAvgDamage, "Avg Damage");
+
         if (speedLabel != null) speedLabel.text = $"Vmax: {currentSpeed}%";
         if (confidenceLabel != null) confidenceLabel.text = $"Confidence: {currentConfidence:F1}%";
-
     }
 
     void ProcessNotifications(List<NotificationData> notifications)
     {
-        if (notifications == null || notificationPanel == null)
+        if (notifications == null || toastManager == null)
             return;
 
         foreach (var notif in notifications)
         {
-            if (string.IsNullOrEmpty(notif.id) || shownNotifications.Contains(notif.id))
+            if (string.IsNullOrEmpty(notif.id))
                 continue;
 
-            shownNotifications.Add(notif.id);
-
-            ToastNotification toast = ToastNotification.Create(
-                notif.id, notif.type, notif.title, notif.message,
-                notificationPanel, toastPrefab, OnNotificationDismissed);
-            if (toast != null)
-                activeToasts.Add(toast);
+            toastManager.Show(notif.id, notif.type, notif.title, notif.message, OnNotificationDismissed);
         }
     }
 
     void OnNotificationDismissed(string notificationId)
     {
-        activeToasts.RemoveAll(t => t == null);
         SendCommand("dismiss_notification", new Dictionary<string, object>
         {
             { "notification_id", notificationId }
         });
     }
 
-    void UpdateDamageSlider(Slider slider, TextMeshProUGUI label, float value, string title)
+    void UpdateDamageSlider(VisualElement fill, Label label, float value, string title)
     {
-        if (slider != null)
+        if (fill != null)
         {
-            slider.value = value;
+            fill.style.width = Length.Percent(value * 100f);
             Color sliderColor = value switch
             {
                 >= 0.8f => redColor,
                 >= 0.3f => yellowColor,
                 _ => greenColor,
             };
-            slider.fillRect.GetComponent<Image>().color = sliderColor;
+            fill.style.backgroundColor = sliderColor;
         }
         if (label != null)
             label.text = $"{title}: {value * 100:F1}%";
@@ -614,13 +728,9 @@ public class WingDigitalTwin : MonoBehaviour
         if (usePerVertexHeatmap && mesh != null)
         {
             if (showDamageHeatmap && nodeDamages.Length > 0)
-            {
                 UpdateDamageHeatmap();
-            }
             else if (stressField.Length > 0)
-            {
                 UpdateHeatmap();
-            }
         }
         else
         {
@@ -630,9 +740,7 @@ public class WingDigitalTwin : MonoBehaviour
         }
 
         if (deformationField.Length > 0)
-        {
             UpdateDeformation();
-        }
 
         if (currentState == "red")
         {
@@ -662,7 +770,6 @@ public class WingDigitalTwin : MonoBehaviour
         for (int i = 0; i < originalVertices.Length; i++)
         {
             float updatedY = originalVertices[i].y + deformationField[i] * scaling;
-
             deformedVertices[i] = new Vector3(originalVertices[i].x,
                 updatedY,
                 originalVertices[i].z
@@ -672,7 +779,6 @@ public class WingDigitalTwin : MonoBehaviour
         mesh.vertices = deformedVertices;
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
-
     }
 
     void UpdateHeatmap()
@@ -688,9 +794,6 @@ public class WingDigitalTwin : MonoBehaviour
 
         if (vertexColors == null || vertexColors.Length != vertexCount)
             vertexColors = new Color[vertexCount];
-
-        // float minS = 0f;
-        //float maxS = 1000000f;
 
         for (int i = 0; i < vertexCount; i++)
         {
@@ -810,7 +913,6 @@ public class WingDigitalTwin : MonoBehaviour
 
     void Update()
     {
-        // Connection health monitoring
         if (connected)
         {
             float timeSinceLastMsg = Time.time - lastMessageTime;
@@ -835,58 +937,43 @@ public class WingDigitalTwin : MonoBehaviour
         if (connected)
         {
             if (Keyboard.current.pKey.wasPressedThisFrame)
-            {
                 UI_Pause();
-            }
             if (Keyboard.current.rKey.wasPressedThisFrame)
-            {
                 UI_Reset();
-            }
             if (Keyboard.current.sKey.wasPressedThisFrame)
-            {
                 UI_Status();
-            }
             if (Keyboard.current.fKey.wasPressedThisFrame)
-            {
                 SendFlightState(planeAngleSlider.value, speedSlider != null ? speedSlider.value : currentPlaneSpeed);
-            }
             if (Keyboard.current.hKey.wasPressedThisFrame)
-            {
                 ToggleHelp();
-            }
             if (Keyboard.current.mKey.wasPressedThisFrame)
-            {
                 ToggleHeatmapMode();
-            }
             if (Keyboard.current.cKey.wasPressedThisFrame && chartPanel != null)
-            {
                 chartPanel.gameObject.SetActive(!chartPanel.gameObject.activeSelf);
-            }
         }
 
-        // Update connection label
         if (connectionLabel != null)
         {
-            float latency = (Time.time - lastMessageTime) * 1000;
-            connectionLabel.text = connected ? $"CONNECTED" : "DISCONNECTED";
-            connectionLabel.color = connected ? Color.green : Color.red;
+            connectionLabel.text = connected ? "CONNECTED" : "DISCONNECTED";
+            connectionLabel.style.color = connected ? Color.green : Color.red;
         }
 
         UpdatePlaneAngle();
         UpdatePlaneSpeed();
+        UpdatePlaneLabelPositions();
     }
 
     public void ToggleHelp()
     {
         if (helpPanel != null)
-            helpPanel.SetActive(!helpPanel.activeSelf);
+            helpPanel.style.display = helpPanel.style.display == DisplayStyle.None ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
     public void ToggleHeatmapMode()
     {
         showDamageHeatmap = !showDamageHeatmap;
-        if (heatmapModeToggle != null)
-            heatmapModeToggle.SetIsOnWithoutNotify(showDamageHeatmap);
+        if (heatmapToggle != null)
+            heatmapToggle.SetValueWithoutNotify(showDamageHeatmap);
         UpdateHeatmapToggleLabel(showDamageHeatmap);
         SendCommand("set_heatmap_mode", new Dictionary<string, object> { { "mode", showDamageHeatmap ? "damage" : "stress" } });
         Debug.Log($"[HEATMAP] Mode: {(showDamageHeatmap ? "DAMAGE" : "STRESS")}");
@@ -902,8 +989,8 @@ public class WingDigitalTwin : MonoBehaviour
 
     void UpdateHeatmapToggleLabel(bool isDamageMode)
     {
-        if (heatmapToggleLabel != null)
-            heatmapToggleLabel.text = isDamageMode ? "Damage" : "Stress";
+        if (heatmapToggle != null)
+            heatmapToggle.label = isDamageMode ? "Damage" : "Stress";
     }
 
     public void UI_Pause()  => SendCommand("pause");
@@ -913,15 +1000,10 @@ public class WingDigitalTwin : MonoBehaviour
 
     void OnAngleSliderChanged(float angle)
     {
-        if (suppressSliderCallback) return;
-        suppressSliderCallback = true;
-
         string desiredHex = "#" + ColorUtility.ToHtmlStringRGB(desiredColor);
         string allowedHex = "#" + ColorUtility.ToHtmlStringRGB(allowedColor);
 
-        UpdateSliderLabel(angleSliderLabel, $"<color={desiredHex}>Desired Angle: {planeAngleSlider.value:F1}</color> | <color={allowedHex}>Allowed Angle: {targetAngleOfAttack:F1}°</color>");
-
-        suppressSliderCallback = false;
+        UpdateSliderLabel(angleSliderLabel, $"<color={desiredHex}>Desired Angle: {planeAngleSlider.value:F1}</color> | <color={allowedHex}>Allowed Angle: {targetAngleOfAttack:F1}{'\u00b0'}</color>");
 
         float speed = speedSlider != null ? speedSlider.value : currentPlaneSpeed;
         SendFlightState(angle, speed);
@@ -929,8 +1011,6 @@ public class WingDigitalTwin : MonoBehaviour
 
     void OnSpeedSliderChanged(float speed)
     {
-        if (suppressSliderCallback) return;
-
         string desiredHex = "#" + ColorUtility.ToHtmlStringRGB(desiredColor);
         string allowedHex = "#" + ColorUtility.ToHtmlStringRGB(allowedColor);
 
@@ -940,7 +1020,7 @@ public class WingDigitalTwin : MonoBehaviour
         SendFlightState(angle, speed);
     }
 
-    void UpdateSliderLabel(TextMeshProUGUI label, string text)
+    void UpdateSliderLabel(Label label, string text)
     {
         if (label != null) label.text = text;
     }
@@ -1003,5 +1083,4 @@ public class WingDigitalTwin : MonoBehaviour
         public GameObject worldUIViewGroup;
         public bool needPlaneScene;
     }
-
 }
