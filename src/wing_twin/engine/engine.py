@@ -19,7 +19,6 @@ from wing_twin.physics.aero import (
     init_neuralfoil,
     NeuralFoilModel,
 )
-from wing_twin.control.control import decide_control, decide_control_stress
 from wing_twin.config import EngineConfig
 from wing_twin.engine.state import TwinState, EngineSnapshot
 from wing_twin.engine.dynamics import FlightDynamics
@@ -482,19 +481,6 @@ class DigitalTwinEngine:
             nd = self.fatigue.state.node_damages
             self.state.damage = max(nd.values()) if nd else self.fatigue.state.damage
             self.state.confidence = self.fatigue.state.confidence
-
-        if self.state.heatmap_mode == "stress" and self.state.stress_field:
-            max_stress_pa = max(abs(s) for s in self.state.stress_field)
-            self.state.led_state = decide_control_stress(
-                max_stress_pa,
-                yield_point_pa=self.config.yield_point,
-            )
-        else:
-            self.state.led_state, _ = decide_control(
-                self.state.damage,
-                self.state.confidence,
-                config=self.config.fatigue,
-            )
 
     def _update_safe_targets(self) -> None:
         """Convert desired angle/speed into safe targets."""

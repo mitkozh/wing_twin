@@ -139,12 +139,11 @@ def _display_thread(engine, stop_event):
         bar_len = 30
         filled = int(engine.state.damage * bar_len)
         bar = "#" * filled + "-" * (bar_len - filled)
-        state_sym = {"green": "GREEN", "yellow": "YELLOW", "red": "RED"}.get(engine.state.led_state, "UNKNOWN")
         phase = engine.state.flight_phase.upper()
         alt = engine.state.altitude
         km = engine.state.km_this_flight
-        logger.info("[%4ds] |%s| %5.1f%%  %7s  [%s]  alt=%.1fm  km=%.3f",
-                    tick, bar, engine.state.damage*100, state_sym,
+        logger.info("[%4ds] |%s| %5.1f%%  [%s]  alt=%.1fm  km=%.3f",
+                    tick, bar, engine.state.damage*100,
                     phase, alt, km)
         import time
         time.sleep(1)

@@ -110,20 +110,13 @@
         <ui:VisualElement name="help-content">
             <ui:Label class="help-title" text="Help - Keyboard Controls" />
             <ui:Label class="help-line" text="M - Toggle Stress/Damage View" />
-            <ui:Label class="help-line" text="F - Apply Force +10 N" />
-            <ui:Label class="help-line" text="G - Apply Force -10 N" />
-            <ui:Label class="help-line" text="P - Pause simulation" />
-            <ui:Label class="help-line" text="R - Reset damage" />
-            <ui:Label class="help-line" text="S - Request status" />
-            <ui:Label class="help-line" text="Space - Reconnect WS" />
-            <ui:Label class="help-line" text="Escape - Disconnect WS" />
             <ui:Label class="help-line" text="H - Toggle this help" />
             <ui:Label class="help-line" text="C - Toggle Charts" />
             <ui:Label class="help-spacer" />
             <ui:Label class="help-section" text="Camera Controls" />
-            <ui:Label class="help-line" text="RMB + drag - Rotate" />
-            <ui:Label class="help-line" text="Scroll - Zoom" />
-            <ui:Label class="help-line" text="Middle drag - Pan" />
+            <ui:Label class="help-line" text="WASD - Move" />
+            <ui:Label class="help-line" text="E - Move Up" />
+            <ui:Label class="help-line" text="Q - Move Down" />
             <ui:Button name="help-close-btn" class="help-close-btn" text="Close" />
         </ui:VisualElement>
     </ui:VisualElement>

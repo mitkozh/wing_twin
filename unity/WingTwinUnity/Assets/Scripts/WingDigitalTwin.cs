@@ -72,7 +72,6 @@ public partial class WingDigitalTwin : MonoBehaviour
     private float desiredPlaneSpeed = 0f;
     private float currentDamage = 0f;
     private float currentAvgDamage = 0f;
-    private string currentState = "green";
     private float currentConfidence = 100f;
     private float[] stressField = Array.Empty<float>();
     private float[] deformationField = Array.Empty<float>();
@@ -276,21 +275,8 @@ public partial class WingDigitalTwin : MonoBehaviour
             }
         }
 
-        if (!connected && Keyboard.current.spaceKey.wasPressedThisFrame)
-            _ = ConnectAsync();
-        if (Keyboard.current.escapeKey.wasPressedThisFrame && ws != null)
-            _ = ws.Close();
-
         if (connected)
         {
-            if (Keyboard.current.pKey.wasPressedThisFrame)
-                UI_Pause();
-            if (Keyboard.current.rKey.wasPressedThisFrame)
-                UI_Reset();
-            if (Keyboard.current.sKey.wasPressedThisFrame)
-                UI_Status();
-            if (Keyboard.current.fKey.wasPressedThisFrame)
-                SendFlightState(planeAngleSlider.value, speedSlider != null ? speedSlider.value : currentPlaneSpeed);
             if (Keyboard.current.hKey.wasPressedThisFrame)
                 ToggleHelp();
             if (Keyboard.current.mKey.wasPressedThisFrame)
@@ -311,22 +297,6 @@ public partial class WingDigitalTwin : MonoBehaviour
     }
 
     [Serializable]
-    public class CommandResponse
-    {
-        public string cmd;
-    }
-
-    [Serializable]
-    public class StatusResponse
-    {
-        public string cmd;
-        public bool running;
-        public float damage;
-        public float confidence;
-        public string led_state;
-    }
-
-    [Serializable]
     public class TwinState
     {
         public float strain;
@@ -337,7 +307,6 @@ public partial class WingDigitalTwin : MonoBehaviour
         public float avg_damage;
         public List<float> node_damages;
         public float confidence;
-        public string led_state;
         public List<NotificationData> notifications;
         public float stress_min;
         public float stress_max;

@@ -94,15 +94,10 @@ class EngineCommandHandler:
         self._engine = engine
         self._handlers: dict[str, Callable] = {
             "ping": self._cmd_ping,
-            "play": self._cmd_play,
-            "pause": self._cmd_pause,
-            "reset": self._cmd_reset,
-            "set_param": self._cmd_set_param,
             "set_steps": self._cmd_set_steps,
             "set_flight_state": self._cmd_set_flight_state,
             "set_heatmap_mode": self._cmd_set_heatmap_mode,
             "set_maintenance_assist": self._cmd_set_maintenance_assist,
-            "status": self._cmd_status,
             "dismiss_notification": self._cmd_dismiss_notification,
             "plan_flight": self._cmd_plan_flight,
             "takeoff": self._cmd_takeoff,
@@ -129,20 +124,6 @@ class EngineCommandHandler:
 
     def _cmd_ping(self, cmd: dict) -> dict:
         return {"cmd": "pong", "time": time.time()}
-
-    def _cmd_play(self, cmd: dict) -> dict:
-        return {"cmd": "ack", "action": "play"}
-
-    def _cmd_pause(self, cmd: dict) -> dict:
-        return {"cmd": "ack", "action": "pause"}
-
-    def _cmd_reset(self, cmd: dict) -> dict:
-        target = cmd.get("target", "damage")
-        self._engine.reset(target)
-        return {"cmd": "ack", "action": "reset", "target": target}
-
-    def _cmd_set_param(self, cmd: dict) -> dict:
-        return {"cmd": "ack", "action": "set_param"}
 
     def _cmd_set_steps(self, cmd: dict) -> dict:
         steps = cmd.get("steps")
@@ -241,11 +222,4 @@ class EngineCommandHandler:
         self._engine.state.dismiss_notification(nid)
         return {"cmd": "ack", "action": "dismiss_notification", "notification_id": nid}
 
-    def _cmd_status(self, cmd: dict) -> dict:
-        return {
-            "cmd": "status",
-            "running": True,
-            "damage": self._engine.state.damage,
-            "confidence": self._engine.state.confidence,
-            "led_state": self._engine.state.led_state,
-        }
+

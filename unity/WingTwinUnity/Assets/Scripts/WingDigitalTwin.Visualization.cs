@@ -81,18 +81,6 @@ public partial class WingDigitalTwin : MonoBehaviour
         if (deformationField.Length > 0)
             UpdateDeformation();
 
-        if (currentState == "red")
-        {
-            wingRenderer.material.EnableKeyword("_EMISSION");
-            wingRenderer.material.SetColor("_EmissionColor", redColor * 2f);
-        }
-        else
-        {
-            wingRenderer.material.DisableKeyword("_EMISSION");
-            float em = Mathf.Lerp(0.3f, 0.0f, currentDamage);
-            wingRenderer.material.SetColor("_EmissionColor", new Color(em, em, em));
-        }
-
         UpdateLegendValues();
     }
 

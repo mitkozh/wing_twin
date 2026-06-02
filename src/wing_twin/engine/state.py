@@ -52,7 +52,6 @@ class TwinState:
     damage: float = 0.0
     avg_damage: float = 0.0
     confidence: float = 100.0
-    led_state: str = "green"
     node_damages: dict = field(default_factory=dict)
 
     desired_angle_of_attack: float = 0.0
@@ -166,7 +165,6 @@ class TwinState:
             "avg_damage": round(self.avg_damage, 4),
             "node_damages": surface_damage,
             "confidence": round(self.confidence, 2),
-            "led_state": self.led_state,
             "notifications": list(self.notifications),
             "new_angle_of_attack": self.angle_of_attack,
             "target_angle_of_attack": self.target_angle_of_attack,
@@ -205,12 +203,11 @@ class TwinState:
         """Format state for ESP32 control."""
         return {
             "position": self.stepper_position,
-            "led": self.led_state,
         }
 
     def to_snapshot_dict(self) -> dict:
         fields_to_save = [
-            "damage", "avg_damage", "confidence", "led_state",
+            "damage", "avg_damage", "confidence",
             "desired_angle_of_attack", "desired_airspeed",
             "target_angle_of_attack", "target_airspeed",
             "angle_of_attack", "airspeed",

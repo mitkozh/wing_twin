@@ -380,11 +380,6 @@ public partial class WingDigitalTwin : MonoBehaviour
         SendCommand("land");
     }
 
-    public void UI_Pause()  => SendCommand("pause");
-    public void UI_Reset()  => SendCommand("reset",
-        new Dictionary<string, object> { { "target", "damage" } });
-    public void UI_Status() => SendCommand("status");
-
     void OnAngleSliderChanged(float angle)
     {
         string desiredHex = "#" + ColorUtility.ToHtmlStringRGB(desiredColor);

@@ -15,11 +15,6 @@ public partial class WingDigitalTwin : MonoBehaviour
 
         try
         {
-            if (ws != null)
-            {
-                try { _ = ws.Close(); } catch { }
-            }
-
             ws = new WebSocket(serverUrl);
             ws.OnOpen += () =>
             {
@@ -106,18 +101,10 @@ public partial class WingDigitalTwin : MonoBehaviour
             {
                 CheckPendingCallbacks(json);
 
-                var cmdResponse = JsonConvert.DeserializeObject<CommandResponse>(json);
-                switch (cmdResponse.cmd)
+                var cmdDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                string cmdType = cmdDict?.ContainsKey("cmd") == true ? cmdDict["cmd"]?.ToString() : "";
+                switch (cmdType)
                 {
-                    case "status":
-                    {
-                        var status = JsonConvert.DeserializeObject<StatusResponse>(json);
-                        currentDamage = status.damage;
-                        currentState = status.led_state;
-                        currentConfidence = status.confidence;
-                        Enqueue(UpdateUI);
-                        break;
-                    }
                     case "pong":
                         Debug.Log("[WS] Heartbeat received");
                         break;
@@ -189,7 +176,6 @@ public partial class WingDigitalTwin : MonoBehaviour
 
             currentDamage = data.damage;
             currentAvgDamage = data.avg_damage;
-            currentState = data.led_state;
             currentConfidence = data.confidence;
             stressMin = data.stress_min;
             stressMax = data.stress_max;
