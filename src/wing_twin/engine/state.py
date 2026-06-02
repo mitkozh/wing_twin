@@ -12,9 +12,12 @@ from typing import Optional
 
 import numpy as np
 
+from wing_twin.control.control import decide_control, decide_control_stress
+
 
 # Lazy-loaded node ID mapping for surface mesh
 _surface_node_ids = None
+_section_nodes = None
 
 
 def _get_surface_node_ids():
@@ -40,6 +43,53 @@ def _get_surface_node_ids():
         _surface_node_ids = node_ids
 
     return _surface_node_ids
+
+
+def _get_section_nodes():
+    global _section_nodes
+    if _section_nodes is not None:
+        return _section_nodes
+
+    import json
+    from pathlib import Path
+    mesh_path = Path(__file__).resolve().parent.parent.parent.parent / "mesh" / "FinalMesh_surface.json"
+
+    if not mesh_path.exists():
+        _section_nodes = {"root": [], "middle": [], "tip": []}
+        return _section_nodes
+
+    with open(mesh_path) as f:
+        data = json.load(f)
+
+    vertices = data.get("vertices", [])
+    node_ids = data.get("node_ids", [])
+
+    if not vertices or not node_ids or len(vertices) != len(node_ids):
+        _section_nodes = {"root": [], "middle": [], "tip": []}
+        return _section_nodes
+
+    span_min = min(v[0] for v in vertices)
+    span_max = max(v[0] for v in vertices)
+    span_range = span_max - span_min
+
+    if span_range <= 0:
+        _section_nodes = {"root": [], "middle": [], "tip": []}
+        return _section_nodes
+
+    third = span_range / 3.0
+    sections = {"root": [], "middle": [], "tip": []}
+    for i, v in enumerate(vertices):
+        nid = node_ids[i]
+        pos = v[0] - span_min
+        if pos < third:
+            sections["root"].append(nid)
+        elif pos < 2 * third:
+            sections["middle"].append(nid)
+        else:
+            sections["tip"].append(nid)
+
+    _section_nodes = sections
+    return _section_nodes
 
 
 @dataclass
@@ -199,10 +249,41 @@ class TwinState:
             "pre_flight_warning": self.pre_flight_warning,
         }
 
+    def _compute_led_colors(self) -> list:
+        sections = _get_section_nodes()
+        colors = []
+        for section_name in ["root", "middle", "tip"]:
+            node_ids = sections[section_name]
+            if not node_ids:
+                colors.append("green")
+                continue
+
+            if self.heatmap_mode == "damage":
+                damages = [self.node_damages.get(nid, 0.0) for nid in node_ids]
+                max_damage = max(damages)
+                color, _ = decide_control(max_damage, self.confidence)
+            else:
+                sf = self.stress_field
+                if not sf or len(sf) == 0:
+                    colors.append("green")
+                    continue
+                max_stress = 0.0
+                for nid in node_ids:
+                    if nid < len(sf):
+                        stress_val = abs(sf[nid])
+                        if stress_val > max_stress:
+                            max_stress = stress_val
+                color = decide_control_stress(max_stress, self.yield_point_pa)
+
+            colors.append(color)
+
+        return colors
+
     def for_esp32(self) -> dict:
         """Format state for ESP32 control."""
         return {
             "position": self.stepper_position,
+            "leds": self._compute_led_colors(),
         }
 
     def to_snapshot_dict(self) -> dict:
