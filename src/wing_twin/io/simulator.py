@@ -11,10 +11,10 @@ from typing import Optional
 
 import numpy as np
 
-from wing_twin.config import SimulationConfig
+from wing_twin.config import SimulationConfig, WindConfig
 from wing_twin.types import DataSource, SensorReading
 from wing_twin.fea.matrices import TransferMatrices
-from wing_twin.physics.aero import compute_aero_force, NeuralFoilModel
+from wing_twin.physics.aero import compute_aero_force, compute_wind_force, NeuralFoilModel
 
 
 @dataclass
@@ -33,8 +33,10 @@ class SimulatorSource(DataSource):
         self,
         config: Optional[SimulationConfig] = None,
         aero_model: Optional[NeuralFoilModel] = None,
+        wind_config: Optional[WindConfig] = None,
     ):
         self.config = config or SimulationConfig()
+        self.wind_config = wind_config or WindConfig(enabled=False)
         self._state = SimulatorState()
         self._running = False
         self._lock = threading.Lock()
@@ -75,20 +77,15 @@ class SimulatorSource(DataSource):
         return self._running
 
     def _generate_force(self, t: float, airspeed: float, angle_deg: float) -> float:
-        steady = compute_aero_force(angle_deg, airspeed, model=self._aero_model)
-        bending = 0.0
-        torsion = 0.0
-        turbulence = 0.0
-        noise = 0.0
-        gust = 0.0
-        if np.random.random() < 1 / (60 * self.config.sample_rate):
-            self._gust_remaining = int(0.5 * self.config.sample_rate)
-        if getattr(self, "_gust_remaining", 0) > 0:
-            gust = 0.04 * steady * math.sin(
-                math.pi * (1 - self._gust_remaining / (0.5 * self.config.sample_rate))
-            )
-            self._gust_remaining -= 1
-        return steady + bending + torsion + turbulence + gust + noise
+        w = self.wind_config
+        wind = compute_wind_force(
+            t, w.amplification,
+            w.base_freq_hz, w.mid_freq_hz, w.high_freq_hz,
+            w.base_power, w.mid_power, w.high_power,
+            w.mid_sharpness, w.high_sharpness,
+        ) if w.enabled else 0.0
+
+        return compute_aero_force(angle_deg, airspeed, model=self._aero_model) + wind
 
     def _read(self, t: float, airspeed: float, angle_deg: float) -> tuple[np.ndarray, float]:
         base_force = self._generate_force(t, airspeed, angle_deg)

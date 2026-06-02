@@ -377,18 +377,18 @@ class DigitalTwinEngine:
             calibration=self.config.calibration,
         )
         
-        if (self.config.wind_enabled):
+        if (self.config.wind.enabled):
             F_wind = compute_wind_force(
                 self._time_elapsed,
-                self.config.wind_amplification,
-                self.config.wind_base_freq_hz,
-                self.config.wind_mid_freq_hz,
-                self.config.wind_high_freq_hz,
-                self.config.wind_base_power,
-                self.config.wind_mid_power,
-                self.config.wind_high_power,
-                self.config.wind_mid_sharpness,
-                self.config.wind_high_sharpness
+                self.config.wind.amplification,
+                self.config.wind.base_freq_hz,
+                self.config.wind.mid_freq_hz,
+                self.config.wind.high_freq_hz,
+                self.config.wind.base_power,
+                self.config.wind.mid_power,
+                self.config.wind.high_power,
+                self.config.wind.mid_sharpness,
+                self.config.wind.high_sharpness
             )
         else:
             F_wind = 0.0
@@ -407,8 +407,6 @@ class DigitalTwinEngine:
         V_ms = self.state.airspeed / 3.6
         if V_ms < 0.1:
             climb_rate = 0.0
-        elif self._flight_phase == FlightPhase.LANDING:
-            climb_rate = V_ms * math.sin(math.radians(self.state.angle_of_attack))
         else:
             L, _D, _CL, _CD = compute_aero_forces(
                 self.state.angle_of_attack,
@@ -416,6 +414,23 @@ class DigitalTwinEngine:
                 model=self._aero_model,
                 calibration=self.config.calibration,
             )
+
+            if self.config.wind.enabled:
+                F_wind = compute_wind_force(
+                    self._time_elapsed,
+                    self.config.wind.amplification,
+                    self.config.wind.base_freq_hz,
+                    self.config.wind.mid_freq_hz,
+                    self.config.wind.high_freq_hz,
+                    self.config.wind.base_power,
+                    self.config.wind.mid_power,
+                    self.config.wind.high_power,
+                    self.config.wind.mid_sharpness,
+                    self.config.wind.high_sharpness
+                )
+                aoa_rad = math.radians(self.state.angle_of_attack)
+                L += F_wind * math.cos(aoa_rad)
+
             climb_rate = self.config.climb_rate_gain * (L / self.config.lift_ref_N - 1.0)
             climb_rate = max(-V_ms, min(V_ms, climb_rate))
 
@@ -567,8 +582,27 @@ class DigitalTwinEngine:
                     calibration=self.config.calibration,
                 )
 
-                min_aero = max(0.01 * F_aero_target, 1e-9)
-                stress_scale = F_aero_target / max(F_aero_current, min_aero)
+                if self.config.wind.enabled:
+                    F_wind = compute_wind_force(
+                        self._time_elapsed,
+                        self.config.wind.amplification,
+                        self.config.wind.base_freq_hz,
+                        self.config.wind.mid_freq_hz,
+                        self.config.wind.high_freq_hz,
+                        self.config.wind.base_power,
+                        self.config.wind.mid_power,
+                        self.config.wind.high_power,
+                        self.config.wind.mid_sharpness,
+                        self.config.wind.high_sharpness
+                    )
+                else:
+                    F_wind = 0.0
+
+                F_total_current = F_aero_current + F_wind
+                F_total_target = F_aero_target + F_wind
+
+                min_total = max(0.01 * F_total_target, 1e-9)
+                stress_scale = F_total_target / max(F_total_current, min_total)
                 F_predicted = F_current * stress_scale
                 stress_predicted = compute_stress_field(self._matrices.S, F_predicted)
                 max_stress_pred = float(np.max(np.abs(stress_predicted)))

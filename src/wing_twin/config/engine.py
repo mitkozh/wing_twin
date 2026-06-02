@@ -8,6 +8,7 @@ from typing import Optional
 from wing_twin.config.types import check_gt, check_ge, check_range
 from wing_twin.config.fatigue import FatigueConfig
 from wing_twin.config.calibration import CalibrationConfig
+from wing_twin.config.wind import WindConfig
 
 
 @dataclass
@@ -41,22 +42,7 @@ class EngineConfig:
     max_landing_altitude: float = 50.0
     min_safe_altitude: float = 25.0
 
-    # Wind simulation
-    # See Desmos: https://www.desmos.com/calculator/tt9d5etwya
-
-    wind_enabled: bool = True
-    wind_amplification: float = 1 # l
-
-    wind_base_freq_hz: float = 0.4 # u
-    wind_mid_freq_hz: float = 1.9 # a
-    wind_high_freq_hz: float = 3 # c
-
-    wind_mid_sharpness: int = 3 # b
-    wind_high_sharpness: int = 23 # d
-
-    wind_base_power: float = 1 # h
-    wind_mid_power: float = 1 # j
-    wind_high_power: float = 1 # f
+    wind: WindConfig = field(default_factory=WindConfig)
 
 
     def __post_init__(self) -> None:
@@ -77,3 +63,6 @@ class EngineConfig:
         check_gt(self.landing_approach_speed, "EngineConfig.landing_approach_speed", 0)
         check_ge(self.landing_touchdown_speed, "EngineConfig.landing_touchdown_speed", 0)
         check_ge(self.min_safe_altitude, "EngineConfig.min_safe_altitude", 0)
+
+
+

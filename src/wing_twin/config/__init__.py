@@ -10,6 +10,7 @@ from wing_twin.config.simulation import SimulationConfig
 from wing_twin.config.fatigue import FatigueConfig
 from wing_twin.config.calibration import CalibrationConfig
 from wing_twin.config.engine import EngineConfig
+from wing_twin.config.wind import WindConfig
 
 
 @dataclass
@@ -21,7 +22,7 @@ class Config:
 __all__ = [
     "PROJECT_ROOT",
     "MqttConfig", "WebSocketConfig", "SimulationConfig",
-    "FatigueConfig", "CalibrationConfig", "EngineConfig",
+    "FatigueConfig", "CalibrationConfig", "EngineConfig", "WindConfig",
     "Config",
     "DEFAULT_LOG_LEVEL",
 ]
