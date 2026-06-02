@@ -15,6 +15,7 @@ from wing_twin.fatigue.fatigue import FatigueState, set_random_seed
 from wing_twin.physics.aero import (
     compute_aero_force,
     compute_aero_forces,
+    compute_wind_force,
     force_to_steps,
     init_neuralfoil,
     NeuralFoilModel,
@@ -108,6 +109,7 @@ class DigitalTwinEngine:
             self._takeoff_timer: float = 0.0
             self._landing_timer: float = 0.0
             self._km_this_flight: float = 0.0
+            self._time_elapsed: float = 0.0
             self._last_flight_damage: float = 0.0
             self._prev_altitude: float = 0.0
             self._altitude_recovery_active: bool = False
@@ -374,8 +376,27 @@ class DigitalTwinEngine:
             model=self._aero_model,
             calibration=self.config.calibration,
         )
+        
+        if (self.config.wind_enabled):
+            F_wind = compute_wind_force(
+                self._time_elapsed,
+                self.config.wind_amplification,
+                self.config.wind_base_freq_hz,
+                self.config.wind_mid_freq_hz,
+                self.config.wind_high_freq_hz,
+                self.config.wind_base_power,
+                self.config.wind_mid_power,
+                self.config.wind_high_power,
+                self.config.wind_mid_sharpness,
+                self.config.wind_high_sharpness
+            )
+        else:
+            F_wind = 0.0
+
+        F_total = F_aero + F_wind   
+
         self.state.stepper_position = force_to_steps(
-            F_aero,
+            F_total,
             self.config.calibration.steps_per_newton,
             max_steps=self.config.calibration.stepper_max_steps,
         )
@@ -408,6 +429,7 @@ class DigitalTwinEngine:
             return False
 
         dt = 1.0 / self.config.sample_rate
+        self._time_elapsed += dt
 
         if self._flight_phase == FlightPhase.ON_GROUND:
             self._step_ground(dt)

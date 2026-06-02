@@ -75,7 +75,7 @@ public partial class WingDigitalTwin : MonoBehaviour
         {
             float t = Mathf.Clamp01(currentDamage);
             Color stressColor = stressGradient.Evaluate(t);
-            wingRenderer.material.color = stressColor;
+            wingRenderer.material.color = stressColor;    
         }
 
         if (deformationField.Length > 0)
@@ -189,6 +189,7 @@ public partial class WingDigitalTwin : MonoBehaviour
         mesh.RecalculateBounds();
 
         wingRenderer.GetComponent<MeshFilter>().mesh = mesh;
+        wingRenderer.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         meshStressValues = new float[originalVertices.Length];
 
         Debug.Log($"Loaded mesh: {originalVertices.Length} vertices, {triangles.Length / 3} triangles");

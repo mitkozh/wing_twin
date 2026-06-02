@@ -132,6 +132,29 @@ def compute_aero_force(
 
     return math.sqrt(L ** 2 + D ** 2)
 
+def compute_wind_force(
+    t: float,
+    amplification: float,
+    base_freq_hz: float,
+    mid_freq_hz: float,
+    high_freq_hz: float,
+    base_power: float,
+    mid_power: float,
+    high_power: float,
+    mid_sharpness: int,
+    high_sharpness: int,
+) -> float:
+    return amplification * (
+        base_power 
+        * math.sin(2 * math.pi * base_freq_hz * t)
+
+        + mid_power
+        * math.sin(2 * math.pi * mid_freq_hz * t) ** mid_sharpness
+        
+        + high_power 
+        * math.sin(2 * math.pi * high_freq_hz * t) ** high_sharpness
+            )
+
 
 def force_to_steps(
     F_newtons: float,

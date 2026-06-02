@@ -41,6 +41,24 @@ class EngineConfig:
     max_landing_altitude: float = 50.0
     min_safe_altitude: float = 25.0
 
+    # Wind simulation
+    # See Desmos: https://www.desmos.com/calculator/tt9d5etwya
+
+    wind_enabled: bool = True
+    wind_amplification: float = 1 # l
+
+    wind_base_freq_hz: float = 0.4 # u
+    wind_mid_freq_hz: float = 1.9 # a
+    wind_high_freq_hz: float = 3 # c
+
+    wind_mid_sharpness: int = 3 # b
+    wind_high_sharpness: int = 23 # d
+
+    wind_base_power: float = 1 # h
+    wind_mid_power: float = 1 # j
+    wind_high_power: float = 1 # f
+
+
     def __post_init__(self) -> None:
         check_gt(self.sample_rate, "EngineConfig.sample_rate", 0)
         check_gt(self.reference_speed, "EngineConfig.reference_speed", 0)
