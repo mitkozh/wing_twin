@@ -53,6 +53,7 @@ async def run_production(
 
     broadcaster = WebSocketBroadcaster(port=config.websocket.port)
     command_handler = EngineCommandHandler(engine)
+    broadcaster.set_command_handler(command_handler)
     broadcaster.set_state_provider(engine.state.for_unity)
 
     recorder, rec_dir = setup_recorder(record, record_figures)

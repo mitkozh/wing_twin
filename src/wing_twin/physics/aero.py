@@ -9,17 +9,12 @@ from typing import Optional
 
 import numpy as np
 
-AIR_DENSITY = 1.225
-AIR_VISCOSITY = 1.789e-5
+from wing_twin.constants import (
+    AIR_DENSITY, AIR_VISCOSITY, WING_AREA, CHORD,
+    ASPECT_RATIO, OSWALD_E, MAX_STEPPER_STEPS,
+)
+from wing_twin.config.calibration import CalibrationConfig
 
-PROTO_WING_AREA = 0.012375
-PROTO_CHORD = 0.0491
-PROTO_SPAN = 0.300
-PROTO_AR = 7.27
-OSWALD_E = 0.85
-
-F_MAX_NEWTONS = 40.0
-MAX_STEPPER_STEPS = 2720
 
 _LUT_DIR = Path(
     os.environ.get(
@@ -81,20 +76,21 @@ def _compute_CL_CD(
     angle_deg: float,
     airspeed_kmh: float,
     model: Optional[NeuralFoilModel] = None,
+    calibration: Optional[CalibrationConfig] = None,
 ) -> tuple[float, float]:
     if model is None:
         model = _NF_MODEL
 
     V = airspeed_kmh / 3.6
-    Re = AIR_DENSITY * V * PROTO_CHORD / AIR_VISCOSITY
+    Re = AIR_DENSITY * V * CHORD / AIR_VISCOSITY
 
     if model is not None:
         CL = model.get_CL(angle_deg, Re)
         CD = model.get_CD(angle_deg, Re)
     else:
         alpha = math.radians(angle_deg)
-        CL = 2 * math.pi / (1 + 2 / PROTO_AR) * alpha
-        CD = 0.015 + CL ** 2 / (math.pi * OSWALD_E * PROTO_AR)
+        CL = 2 * math.pi / (1 + 2 / ASPECT_RATIO) * alpha
+        CD = 0.015 + CL ** 2 / (math.pi * OSWALD_E * ASPECT_RATIO)
 
     return CL, CD
 
@@ -103,12 +99,18 @@ def compute_aero_forces(
     angle_deg: float,
     airspeed_kmh: float,
     model: Optional[NeuralFoilModel] = None,
+    calibration: Optional[CalibrationConfig] = None,
 ) -> tuple[float, float, float, float]:
     CL, CD = _compute_CL_CD(angle_deg, airspeed_kmh, model)
     V = airspeed_kmh / 3.6
     q = 0.5 * AIR_DENSITY * V ** 2
-    L = q * PROTO_WING_AREA * CL
-    D = q * PROTO_WING_AREA * CD
+    L = q * WING_AREA * CL
+    D = q * WING_AREA * CD
+
+    if calibration is not None:
+        L += calibration.lift_bias
+        D += calibration.drag_bias
+
     return L, D, CL, CD
 
 
@@ -116,19 +118,27 @@ def compute_aero_force(
     angle_deg: float,
     airspeed_kmh: float,
     model: Optional[NeuralFoilModel] = None,
+    calibration: Optional[CalibrationConfig] = None,
 ) -> float:
     CL, CD = _compute_CL_CD(angle_deg, airspeed_kmh, model)
     V = airspeed_kmh / 3.6
     q = 0.5 * AIR_DENSITY * V ** 2
-    L = q * PROTO_WING_AREA * CL
-    D = q * PROTO_WING_AREA * CD
-    return math.sqrt(L ** 2 + D ** 2)
+    L = q * WING_AREA * CL
+    D = q * WING_AREA * CD
 
+    if calibration is not None:
+        L += calibration.lift_bias
+        D += calibration.drag_bias
+
+    return math.sqrt(L ** 2 + D ** 2)
 
 
 def force_to_steps(
     F_newtons: float,
     steps_per_newton: float = 204.0,
+    max_steps: Optional[int] = None,
 ) -> int:
+    if max_steps is None:
+        max_steps = MAX_STEPPER_STEPS
     raw = int(round(abs(F_newtons) * steps_per_newton))
-    return min(raw, MAX_STEPPER_STEPS)
+    return min(raw, max_steps)

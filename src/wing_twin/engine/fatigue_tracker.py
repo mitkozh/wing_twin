@@ -3,17 +3,17 @@ FatigueTracker - Manages fatigue state accumulation, confidence monitoring,
 and lifecycle notifications.
 """
 
-import math
 from collections import deque
 from typing import Optional
 
 import numpy as np
 
 from wing_twin.fatigue.fatigue import (
-    FatigueConfig, FatigueState,
+    FatigueState,
     accumulate_damage, accumulate_damage_at_nodes,
     update_confidence, sn_curve_for_material,
 )
+from wing_twin.config.fatigue import FatigueConfig
 from wing_twin.fatigue.life_prediction import LifePredictionState
 from wing_twin.engine.state import TwinState
 

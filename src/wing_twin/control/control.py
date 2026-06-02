@@ -4,7 +4,7 @@ Control module for digital twin decision making based on damage state.
 
 from typing import Optional
 
-from wing_twin.fatigue.fatigue import FatigueConfig
+from wing_twin.config.fatigue import FatigueConfig
 
 
 def decide_control(

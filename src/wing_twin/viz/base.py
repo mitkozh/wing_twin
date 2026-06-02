@@ -4,7 +4,7 @@ Base plotter class - abstract base for all visualization plotters.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any
 import numpy as np
 
 

@@ -4,7 +4,7 @@ Mesh exporter - exports VTK meshes to JSON for Unity.
 
 import json
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
 import numpy as np
 import vtk

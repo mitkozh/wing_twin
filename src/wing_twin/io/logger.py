@@ -10,7 +10,8 @@ import os
 import sys
 from typing import Optional
 
-_DEFAULT_LOG_LEVEL = os.getenv("WING_TWIN_LOG_LEVEL", "INFO").upper()
+_DEFAULT_LOG_LEVEL = os.getenv("WING_LOG_LEVEL") or os.getenv("WING_TWIN_LOG_LEVEL", "INFO")
+_DEFAULT_LOG_LEVEL = _DEFAULT_LOG_LEVEL.upper()
 
 _FORMATTER = logging.Formatter(
     "%(asctime)s [%(levelname)s] %(name)s: %(message)s",

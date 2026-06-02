@@ -21,24 +21,7 @@ from py_fatigue import CycleCount
 from py_fatigue.material.sn_curve import SNCurve
 from py_fatigue.damage.stress_life import calc_pm
 
-
-@dataclass
-class FatigueConfig:
-    min_buffer_size: int = 50
-    strain_buffer_size: int = 3000
-    strain_to_stress: float = 70_000.0
-    rainflow_range_bin_width: float = 2.0
-    critical_stress_threshold: float = 50.0
-    critical_node_percentile: float = 90.0
-    max_critical_nodes: int = 200
-    node_buffer_size: int = 500
-    ema_alpha: float = 0.1
-    confidence_threshold: float = 50.0
-    confidence_frames_threshold: int = 10
-    damage_warning: float = 0.3
-    damage_critical: float = 0.8
-    material: str = "demo"
-    initial_remaining_km: float = 500.0
+from wing_twin.config.fatigue import FatigueConfig
 
 
 @dataclass

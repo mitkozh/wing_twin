@@ -4,7 +4,6 @@ EngineSnapshot - Unified save/restore container for full engine state.
 """
 
 import json
-import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path

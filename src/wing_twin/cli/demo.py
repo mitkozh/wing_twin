@@ -8,9 +8,8 @@ import threading
 from typing import Optional
 
 from pathlib import Path
-from typing import Optional
 
-from wing_twin.fatigue.fatigue import FatigueConfig
+from wing_twin.config import FatigueConfig
 
 from ._lifecycle import cancel_task, finalize_recorder, setup_recorder, setup_signal_handler
 

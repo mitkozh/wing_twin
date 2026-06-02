@@ -6,7 +6,6 @@ based on accumulated fatigue damage across flights.
 """
 
 from dataclasses import dataclass, asdict
-import math
 
 
 @dataclass

@@ -10,21 +10,17 @@ from pathlib import Path
 import neuralfoil as nf
 import numpy as np
 
+from wing_twin.constants import (
+    ASPECT_RATIO, OSWALD_E,
+)
+
+
 _LUT_DIR = Path(
     os.environ.get(
         "WING_LUT_DIR",
         str(Path(__file__).resolve().parent.parent.parent.parent / "transfer_matrices" / "neuralfoil_lut"),
     )
 )
-
-AIR_DENSITY = 1.225
-AIR_VISCOSITY = 1.789e-5
-
-PROTO_WING_AREA = 0.012375
-PROTO_CHORD = 0.0491
-PROTO_SPAN = 0.300
-PROTO_AR = 7.27
-OSWALD_E = 0.85
 
 
 def _naca_0002_coords(n_pts: int = 200) -> np.ndarray:
@@ -113,7 +109,7 @@ def main():
     cd_2d_raw = np.asarray(raw["CD"]).reshape(len(alpha_2d_mesh), len(Re_mesh))
 
     CL, CD = _lifting_line_correction(
-        alpha_3d_mesh, Re_mesh, cl_2d_raw, cd_2d_raw, alpha_2d_mesh, PROTO_AR, OSWALD_E
+        alpha_3d_mesh, Re_mesh, cl_2d_raw, cd_2d_raw, alpha_2d_mesh, ASPECT_RATIO, OSWALD_E
     )
 
     stem = args.model_size

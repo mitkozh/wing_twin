@@ -5,7 +5,7 @@ Damage progress plotter.
 from pathlib import Path
 import numpy as np
 
-from wing_twin.fatigue.fatigue import FatigueConfig
+from wing_twin.config.fatigue import FatigueConfig
 from wing_twin.io.logger import get_logger
 from .base import BasePlotter
 

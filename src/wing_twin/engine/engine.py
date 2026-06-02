@@ -85,11 +85,12 @@ class DigitalTwinEngine:
             tracker_snapshot=tracker_snap,
         )
 
+        self.config.fatigue.strain_to_stress = self.config.calibration.strain_to_stress
         self.state.yield_point_pa = self.config.yield_point
         self.state.stress_limit_pa = self.config.stress_limit
         self.state.max_angle_deg = self.config.max_aoa
         self.state.max_speed_kmh = self.config.reference_speed
-        self.state.max_stepper_steps = self.config.max_stepper_steps
+        self.state.max_stepper_steps = self.config.calibration.stepper_max_steps
         self.state.max_landing_altitude = self.config.max_landing_altitude
 
         # Flight state machine
@@ -371,9 +372,12 @@ class DigitalTwinEngine:
             self.state.angle_of_attack,
             self.state.airspeed,
             model=self._aero_model,
+            calibration=self.config.calibration,
         )
         self.state.stepper_position = force_to_steps(
-            F_aero, self.config.steps_per_newton
+            F_aero,
+            self.config.calibration.steps_per_newton,
+            max_steps=self.config.calibration.stepper_max_steps,
         )
 
     # this is a synthetic altitude, used for simulating the different transitions. Don't treat it too seriously!
@@ -389,6 +393,7 @@ class DigitalTwinEngine:
                 self.state.angle_of_attack,
                 self.state.airspeed,
                 model=self._aero_model,
+                calibration=self.config.calibration,
             )
             climb_rate = self.config.climb_rate_gain * (L / self.config.lift_ref_N - 1.0)
             climb_rate = max(-V_ms, min(V_ms, climb_rate))
@@ -449,15 +454,25 @@ class DigitalTwinEngine:
             raise RuntimeError("Call load_matrices() before processing readings")
 
         if reading.strain_vector is not None:
-            strain_vec = reading.strain_vector
+            strain_vec = np.array(reading.strain_vector, dtype=np.float64)
         else:
             strain_vec = np.array(
                 [reading.strain] * self._num_gauges, dtype=np.float64
             )
 
+        cal = self.config.calibration
+        if cal.sensor_zero_offsets:
+            offsets = np.array(cal.sensor_zero_offsets[:len(strain_vec)])
+            strain_vec -= offsets
+        if cal.sensor_gain_factors:
+            gains = np.array(cal.sensor_gain_factors[:len(strain_vec)])
+            strain_vec *= gains
+        strain_vec *= cal.adc_to_strain_scale
+
         self.state.strain_vector = strain_vec.tolist()
 
         F = solve_forces(self._matrices.H_inv, strain_vec)
+        F *= cal.H_matrix_scale
         stress = compute_stress_field(self._matrices.S, F)
         deformation = compute_deformation_field(self._matrices.U, F)
 
@@ -523,9 +538,11 @@ class DigitalTwinEngine:
                 F_aero_current = compute_aero_force(
                     self.state.angle_of_attack, self.state.airspeed,
                     model=self._aero_model,
+                    calibration=self.config.calibration,
                 )
                 F_aero_target = compute_aero_force(
                     target_angle, target_speed, model=self._aero_model,
+                    calibration=self.config.calibration,
                 )
 
                 min_aero = max(0.01 * F_aero_target, 1e-9)
