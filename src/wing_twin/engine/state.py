@@ -90,6 +90,9 @@ class TwinState:
     # Remaining safe flight distance (from life prediction)
     remaining_km: float = float('inf')
 
+    # Maintenance assist toggle
+    maintenance_assist: bool = True
+
     # Pre-flight planning state
     planned_km: float = 0.0
     pre_flight_safe: bool = True
@@ -190,6 +193,8 @@ class TwinState:
             "max_landing_altitude": self.max_landing_altitude,
             # Remaining distance (from life prediction)
             "remaining_km": round(self.remaining_km, 1),
+            # Maintenance assist
+            "maintenance_assist": self.maintenance_assist,
             # Pre-flight planning
             "planned_km": round(self.planned_km, 1),
             "pre_flight_safe": self.pre_flight_safe,
@@ -209,7 +214,7 @@ class TwinState:
             "desired_angle_of_attack", "desired_airspeed",
             "target_angle_of_attack", "target_airspeed",
             "angle_of_attack", "airspeed",
-            "flight_allowed", "stepper_position", "heatmap_mode",
+            "flight_allowed", "stepper_position", "heatmap_mode", "maintenance_assist",
             "flight_phase", "altitude", "km_this_flight",
             "total_km_flown", "flight_number",
             "remaining_km", "planned_km", "pre_flight_safe", "pre_flight_warning",

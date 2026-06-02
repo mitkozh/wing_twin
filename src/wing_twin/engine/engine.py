@@ -516,6 +516,19 @@ class DigitalTwinEngine:
             target_speed = max(target_speed, self.config.reference_speed)
             target_angle = max(target_angle, 4.0)
 
+        # When maintenance assist is off, bypass all stress limiting
+        if not self.state.maintenance_assist:
+            self.state.target_angle_of_attack = target_angle
+            self.state.target_airspeed = target_speed
+            return
+
+        # Damage-based stress limit reduction: 5% at damage=0.3, 15% at damage=1.0
+        stress_limit = self.config.stress_limit
+        if self.state.damage > 0.3:
+            t = min((self.state.damage - 0.3) / 0.7, 1.0)
+            reduction_pct = 0.05 + 0.10 * t
+            stress_limit *= (1.0 - reduction_pct)
+
         if self._matrices is not None and self.state.forces:
             F_current = np.array(self.state.forces, dtype=np.float64)
             F_current_mag = float(np.linalg.norm(F_current))
@@ -535,11 +548,11 @@ class DigitalTwinEngine:
                 stress_predicted = compute_stress_field(self._matrices.S, F_predicted)
                 max_stress_pred = float(np.max(np.abs(stress_predicted)))
 
-                if max_stress_pred > self.config.stress_limit and max_stress_pred > 0.0:
-                    reduction = (self.config.stress_limit / max_stress_pred) ** 0.5
+                if max_stress_pred > stress_limit and max_stress_pred > 0.0:
+                    reduction = (stress_limit / max_stress_pred) ** 0.5
                     target_speed = max(self.config.min_airspeed, target_speed * reduction)
                     if target_speed == self.config.min_airspeed:
-                        target_angle *= self.config.stress_limit / max_stress_pred
+                        target_angle *= stress_limit / max_stress_pred
 
         self.state.target_angle_of_attack = target_angle
         self.state.target_airspeed = target_speed

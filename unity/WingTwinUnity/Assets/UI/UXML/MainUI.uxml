@@ -77,6 +77,7 @@
             <ui:Label name="preflight-slider-value" class="preflight-slider-value" text="-- km" />
         </ui:VisualElement>
         <ui:VisualElement name="inflight-controls">
+            <ui:Toggle name="maintenance-toggle" class="maintenance-toggle" label="Assist" value="true" />
             <ui:VisualElement name="angle-group" class="slider-group">
                 <ui:Label name="angle-slider-label" class="slider-label" text="Desired Angle: 0.0° | Allowed: 0.0°" />
                 <ui:Slider name="angle-slider" class="control-slider" direction="horizontal" />

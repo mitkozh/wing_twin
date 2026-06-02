@@ -101,6 +101,7 @@ class EngineCommandHandler:
             "set_steps": self._cmd_set_steps,
             "set_flight_state": self._cmd_set_flight_state,
             "set_heatmap_mode": self._cmd_set_heatmap_mode,
+            "set_maintenance_assist": self._cmd_set_maintenance_assist,
             "status": self._cmd_status,
             "dismiss_notification": self._cmd_dismiss_notification,
             "plan_flight": self._cmd_plan_flight,
@@ -227,6 +228,11 @@ class EngineCommandHandler:
             return {"cmd": "error", "message": f"Invalid mode: {mode}. Use 'stress' or 'damage'"}
         self._engine.state.heatmap_mode = mode
         return {"cmd": "ack", "action": "set_heatmap_mode", "mode": mode}
+
+    def _cmd_set_maintenance_assist(self, cmd: dict) -> dict:
+        enabled = cmd.get("enabled", True)
+        self._engine.state.maintenance_assist = bool(enabled)
+        return {"cmd": "ack", "action": "set_maintenance_assist", "enabled": bool(enabled)}
 
     def _cmd_dismiss_notification(self, cmd: dict) -> dict:
         nid = cmd.get("notification_id")

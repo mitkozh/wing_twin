@@ -234,6 +234,9 @@ public partial class WingDigitalTwin : MonoBehaviour
             maxLandingAltitude = data.max_landing_altitude;
             plannedKm = data.planned_km;
             preFlightSafe = data.pre_flight_safe;
+            maintenanceAssist = data.maintenance_assist;
+            if (maintenanceToggle != null)
+                maintenanceToggle.SetValueWithoutNotify(maintenanceAssist);
 
             string desiredHex = "#" + ColorUtility.ToHtmlStringRGB(desiredColor);
             string allowedHex = "#" + ColorUtility.ToHtmlStringRGB(allowedColor);

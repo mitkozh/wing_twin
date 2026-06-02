@@ -78,6 +78,7 @@ public partial class WingDigitalTwin : MonoBehaviour
     private float[] deformationField = Array.Empty<float>();
     private float[] nodeDamages = Array.Empty<float>();
     private bool showDamageHeatmap = false;
+    private bool maintenanceAssist = true;
 
     private VisualElement damageSliderFill;
     private Label damageLabel;
@@ -87,6 +88,7 @@ public partial class WingDigitalTwin : MonoBehaviour
     private Label confidenceLabel;
     private Label connectionLabel;
     private Toggle heatmapToggle;
+    private Toggle maintenanceToggle;
     private VisualElement stressBar;
 
     private Slider planeAngleSlider;
@@ -177,6 +179,12 @@ public partial class WingDigitalTwin : MonoBehaviour
             heatmapToggle.SetValueWithoutNotify(false);
         }
         UpdateHeatmapToggleLabel(false);
+
+        if (maintenanceToggle != null)
+        {
+            maintenanceToggle.RegisterValueChangedCallback(evt => OnMaintenanceAssistChanged(evt.newValue));
+            maintenanceToggle.SetValueWithoutNotify(true);
+        }
 
         planeAngleSlider.RegisterValueChangedCallback(evt => OnAngleSliderChanged(evt.newValue));
         if (speedSlider != null)
@@ -357,6 +365,7 @@ public partial class WingDigitalTwin : MonoBehaviour
         public float planned_km;
         public bool pre_flight_safe;
         public string pre_flight_warning;
+        public bool maintenance_assist;
     }
 
     [Serializable]

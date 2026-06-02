@@ -96,7 +96,7 @@ def sn_curve_for_material(material: str = "aluminum") -> SNCurve:
     curves = {
         "aluminum": SNCurve(slope=4.5, intercept=14.9, endurance=1e7),
         "steel": SNCurve(slope=5.0, intercept=17.0, endurance=1e7),
-        "demo": SNCurve(slope=3.0, intercept=10.0, endurance=1e6),
+        "demo": SNCurve(slope=3.0, intercept=8.0, endurance=1e6),
     }
     return curves.get(material.lower(), curves["aluminum"])
 

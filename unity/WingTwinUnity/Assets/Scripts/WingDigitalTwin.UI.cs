@@ -45,6 +45,7 @@ public partial class WingDigitalTwin : MonoBehaviour
                 checkmark.style.borderBottomRightRadius = 3;
             }
         }
+        maintenanceToggle = root.Q<Toggle>("maintenance-toggle");
         stressBar = root.Q("stress-bar");
 
         planeAngleSlider = root.Q<Slider>("angle-slider");
@@ -292,6 +293,13 @@ public partial class WingDigitalTwin : MonoBehaviour
     {
         if (heatmapToggle != null)
             heatmapToggle.label = isDamageMode ? "Damage" : "Stress";
+    }
+
+    void OnMaintenanceAssistChanged(bool isOn)
+    {
+        maintenanceAssist = isOn;
+        SendCommand("set_maintenance_assist", new Dictionary<string, object> { { "enabled", isOn } });
+        Debug.Log($"[MAINT] Maintenance Assist: {(isOn ? "ON" : "OFF")}");
     }
 
     void UpdateFlightMetrics()

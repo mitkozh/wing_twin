@@ -65,11 +65,9 @@
     bottom: 16px;
     width: 180px;
     flex-direction: column;
-    picking-mode: ignore;
 }
 
 #left-container > * {
-    picking-mode: position;
 }
 
 /* --- LEFT PANEL (Damage / Stats) --- */
@@ -137,6 +135,7 @@
 .heatmap-toggle .unity-base-field__label {
     color: black;
     font-size: 12px;
+    min-width: auto;
 }
 
 /* --- STRESS LEGEND (Heatmap) --- */
@@ -592,7 +591,39 @@
 
 
 
-/* --- IN-FLIGHT CONTROLS (same as before, but wrapped) --- */
+/* --- MAINTENANCE ASSIST TOGGLE --- */
+.maintenance-toggle {
+    font-size: 11px;
+    color: black;
+    margin: 0 8px;
+    flex-direction: row;
+    align-items: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.maintenance-toggle .unity-toggle__checkmark {
+    width: 16px;
+    height: 16px;
+    background-color: rgba(0, 0, 0, 0.12);
+    border-color: rgba(0, 0, 0, 0.35);
+    border-width: 1px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.maintenance-toggle .unity-toggle__checkmark:checked {
+    background-color: rgb(0, 150, 50);
+    border-color: rgb(0, 100, 30);
+}
+
+.maintenance-toggle .unity-base-field__label {
+    color: black;
+    font-size: 11px;
+    min-width: auto;
+}
+
+/* --- IN-FLIGHT CONTROLS --- */
 #inflight-controls {
     flex-direction: row;
     flex: 1;
