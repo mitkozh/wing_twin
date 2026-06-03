@@ -104,6 +104,7 @@ class DigitalTwinEngine:
             self._landing_timer = engine_snapshot.flight.get("landing_timer", 0.0)
             self._prev_altitude = self.state.altitude
             self._altitude_recovery_active = self.state.altitude < self.config.min_safe_altitude
+            self._time_elapsed = engine_snapshot.flight.get("time_elapsed", 0.0)
         else:
             self._flight_phase: FlightPhase = FlightPhase.ON_GROUND
             self._takeoff_timer: float = 0.0
@@ -262,6 +263,7 @@ class DigitalTwinEngine:
                 "flight_phase": self._flight_phase.value,
                 "takeoff_timer": self._takeoff_timer,
                 "landing_timer": self._landing_timer,
+                "time_elapsed": self._time_elapsed,
             },
             dynamics=self.dynamics.to_dict(),
             strain_buffer=ts["strain_buffer"],

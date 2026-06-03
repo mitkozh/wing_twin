@@ -22,6 +22,8 @@ from wing_twin.engine.state import TwinState
 class FatigueTracker:
     """Tracks fatigue accumulation, confidence, and notifications."""
 
+    _strain_buffer: deque
+
     def __init__(
         self,
         config: FatigueConfig,
@@ -33,12 +35,12 @@ class FatigueTracker:
         self.state = initial_state or FatigueState()
         if tracker_snapshot:
             buf = tracker_snapshot.get("strain_buffer", [])
-            self._strain_buffer: deque = deque(buf, maxlen=config.strain_buffer_size)
+            self._strain_buffer = deque(buf, maxlen=config.strain_buffer_size)
             self._cycles: list = list(tracker_snapshot.get("cycles", []))
             self._prev_low_confidence = tracker_snapshot.get("prev_low_confidence", False)
             self._prev_flight_blocked = tracker_snapshot.get("prev_flight_blocked", False)
         else:
-            self._strain_buffer: deque = deque(maxlen=config.strain_buffer_size)
+            self._strain_buffer = deque(maxlen=config.strain_buffer_size)
             self._cycles: list = []
             self._prev_low_confidence = False
             self._prev_flight_blocked = False
