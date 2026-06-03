@@ -131,7 +131,10 @@ def compute_aero_force(
         D += calibration.drag_bias
 
     #return math.sqrt(L ** 2 + D ** 2)
-    return L # No point in simulating drag, our stepper models purely lift.
+    
+    # Basically the projection on the perpendicular to chord surface of the wing. 
+    # The surface at which we apply the servo force.
+    return L * math.cos(angle_deg) + D * math.sin(angle_deg)  
 
 
 def force_to_steps(
