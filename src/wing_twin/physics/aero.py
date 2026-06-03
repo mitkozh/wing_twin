@@ -130,7 +130,8 @@ def compute_aero_force(
         L += calibration.lift_bias
         D += calibration.drag_bias
 
-    return math.sqrt(L ** 2 + D ** 2)
+    #return math.sqrt(L ** 2 + D ** 2)
+    return L # No point in simulating drag, our stepper models purely lift.
 
 
 def force_to_steps(
