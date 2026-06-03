@@ -146,6 +146,14 @@ class TwinState:
     pre_flight_safe: bool = True
     pre_flight_warning: str = ""
 
+    # Apparent (wind-corrected) flight state
+    wind_horizontal_ms: float = 0.0
+    wind_vertical_ms: float = 0.0
+    wind_horizontal_smoothed_ms: float = 0.0
+    wind_vertical_smoothed_ms: float = 0.0
+    effective_airspeed_kmh: float = 0.0
+    effective_aoa_deg: float = 0.0
+
     def add_notification(self, nid: str, ntype: str, title: str, message: str) -> None:
         if any(n["id"] == nid for n in self.notifications):
             return
@@ -246,6 +254,13 @@ class TwinState:
             "planned_km": round(self.planned_km, 1),
             "pre_flight_safe": self.pre_flight_safe,
             "pre_flight_warning": self.pre_flight_warning,
+            # Apparent (wind-corrected) flow
+            "wind_horizontal_ms": round(self.wind_horizontal_ms, 3),
+            "wind_vertical_ms": round(self.wind_vertical_ms, 3),
+            "wind_horizontal_smoothed_ms": round(self.wind_horizontal_smoothed_ms, 3),
+            "wind_vertical_smoothed_ms": round(self.wind_vertical_smoothed_ms, 3),
+            "effective_airspeed_kmh": round(self.effective_airspeed_kmh, 3),
+            "effective_aoa_deg": round(self.effective_aoa_deg, 3),
         }
 
     def _compute_led_colors(self) -> list:
@@ -298,6 +313,9 @@ class TwinState:
             "cycles_histogram", "notifications",
             "strain_vector", "forces", "stress_field", "deformation_field",
             "node_damages",
+            "wind_horizontal_ms", "wind_vertical_ms",
+            "wind_horizontal_smoothed_ms", "wind_vertical_smoothed_ms",
+            "effective_airspeed_kmh", "effective_aoa_deg",
         ]
         return {k: getattr(self, k) for k in fields_to_save}
 
@@ -327,6 +345,7 @@ class EngineSnapshot:
     tracker_cycles: Optional[list] = None
     prev_low_confidence: bool = False
     prev_flight_blocked: bool = False
+    wind: Optional[dict] = None
 
     def to_file(self, path: Path) -> None:
         path = Path(path)
@@ -342,6 +361,7 @@ class EngineSnapshot:
             "tracker_cycles": self.tracker_cycles,
             "prev_low_confidence": self.prev_low_confidence,
             "prev_flight_blocked": self.prev_flight_blocked,
+            "wind": self.wind,
         }
         tmp = path.with_suffix(".tmp")
         with open(tmp, "w") as f:
@@ -360,6 +380,19 @@ class EngineSnapshot:
             raise ValueError(
                 f"Snapshot version {version} is newer than supported {SNAPSHOT_VERSION}"
             )
+        return EngineSnapshot(
+            version=version,
+            twin=data.get("twin"),
+            fatigue=data.get("fatigue"),
+            life=data.get("life"),
+            flight=data.get("flight"),
+            dynamics=data.get("dynamics"),
+            strain_buffer=data.get("strain_buffer"),
+            tracker_cycles=data.get("tracker_cycles"),
+            prev_low_confidence=data.get("prev_low_confidence", False),
+            prev_flight_blocked=data.get("prev_flight_blocked", False),
+            wind=data.get("wind"),
+        )
         return EngineSnapshot(
             version=version,
             twin=data["twin"],

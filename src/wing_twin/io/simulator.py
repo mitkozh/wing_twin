@@ -11,10 +11,11 @@ from typing import Optional
 
 import numpy as np
 
-from wing_twin.config import SimulationConfig, WindConfig
+from wing_twin.config import SimulationConfig
 from wing_twin.types import DataSource, SensorReading
 from wing_twin.fea.matrices import TransferMatrices
-from wing_twin.physics.aero import compute_aero_force, compute_wind_force, NeuralFoilModel
+from wing_twin.physics.aero import compute_aero_force, NeuralFoilModel
+from wing_twin.physics.wind import WindModel, apparent_wind
 
 
 @dataclass
@@ -33,15 +34,15 @@ class SimulatorSource(DataSource):
         self,
         config: Optional[SimulationConfig] = None,
         aero_model: Optional[NeuralFoilModel] = None,
-        wind_config: Optional[WindConfig] = None,
+        wind_model: Optional[WindModel] = None,
     ):
         self.config = config or SimulationConfig()
-        self.wind_config = wind_config or WindConfig(enabled=False)
         self._state = SimulatorState()
         self._running = False
         self._lock = threading.Lock()
         self._matrices: Optional[TransferMatrices] = None
         self._aero_model: Optional[NeuralFoilModel] = aero_model
+        self._wind: Optional[WindModel] = wind_model
 
     @property
     def state(self) -> SimulatorState:
@@ -64,6 +65,9 @@ class SimulatorSource(DataSource):
             self._matrices = matrices
             self._state.num_gauges = matrices.n_gauges
 
+    def set_wind_model(self, wind_model: WindModel) -> None:
+        self._wind = wind_model
+
     def connect(self) -> bool:
         if self._matrices is None:
             raise RuntimeError("TransferMatrices required before connecting")
@@ -77,15 +81,12 @@ class SimulatorSource(DataSource):
         return self._running
 
     def _generate_force(self, t: float, airspeed: float, angle_deg: float) -> float:
-        w = self.wind_config
-        wind = compute_wind_force(
-            t, w.amplification,
-            w.base_freq_hz, w.mid_freq_hz, w.high_freq_hz,
-            w.base_power, w.mid_power, w.high_power,
-            w.mid_sharpness, w.high_sharpness,
-        ) if w.enabled else 0.0
+        u_w, w_w = 0.0, 0.0
+        if self._wind is not None:
+            u_w, w_w = self._wind.sample(t, dt=0.0)
 
-        return compute_aero_force(angle_deg, airspeed, model=self._aero_model) + wind
+        v_eff, alpha_eff = apparent_wind(airspeed, angle_deg, u_w, w_w)
+        return compute_aero_force(alpha_eff, v_eff, model=self._aero_model)
 
     def _read(self, t: float, airspeed: float, angle_deg: float) -> tuple[np.ndarray, float]:
         base_force = self._generate_force(t, airspeed, angle_deg)

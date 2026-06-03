@@ -50,7 +50,7 @@ async def run_demo_async(
         raise
 
     sim_config = SimulationConfig()
-    simulator = SimulatorSource(sim_config, wind_config=config.wind)
+    simulator = SimulatorSource(sim_config, wind_model=engine._wind)
     simulator.set_matrices(engine.matrices)
     engine.data_source = simulator
 

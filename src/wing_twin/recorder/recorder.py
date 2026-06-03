@@ -15,11 +15,14 @@ from wing_twin.io.logger import get_logger
 
 logger = get_logger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCALAR_NAMES = [
     "strain_mean", "damage", "confidence",
     "angle_of_attack", "airspeed", "stepper_position",
+    "wind_horizontal_ms", "wind_vertical_ms",
+    "wind_horizontal_smoothed_ms", "wind_vertical_smoothed_ms",
+    "effective_airspeed_kmh", "effective_aoa_deg",
 ]
 
 
@@ -72,6 +75,12 @@ class DataRecorder:
                 state.angle_of_attack,
                 state.airspeed,
                 state.stepper_position,
+                state.wind_horizontal_ms,
+                state.wind_vertical_ms,
+                state.wind_horizontal_smoothed_ms,
+                state.wind_vertical_smoothed_ms,
+                state.effective_airspeed_kmh,
+                state.effective_aoa_deg,
             ])
 
         if self._frame % self.field_interval == 0 and state.stress_field:

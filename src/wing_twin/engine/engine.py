@@ -15,11 +15,11 @@ from wing_twin.fatigue.fatigue import FatigueState, set_random_seed
 from wing_twin.physics.aero import (
     compute_aero_force,
     compute_aero_forces,
-    compute_wind_force,
     force_to_steps,
     init_neuralfoil,
     NeuralFoilModel,
 )
+from wing_twin.physics.wind import WindModel, apparent_wind
 from wing_twin.config import EngineConfig
 from wing_twin.engine.state import TwinState, EngineSnapshot
 from wing_twin.engine.dynamics import FlightDynamics
@@ -123,6 +123,25 @@ class DigitalTwinEngine:
             model_size=self.config.neuralfoil_model_size,
         )
 
+        self._wind = WindModel(self.config.wind, seed=self.config.seed)
+        self._u_ema: float = 0.0
+        self._w_ema: float = 0.0
+        self._u_var: float = 0.0
+        self._w_var: float = 0.0
+        self._wind_ema_initialised: bool = False
+        self._prev_step_t: float = -1.0
+
+        if engine_snapshot and engine_snapshot.wind:
+            w_snap = engine_snapshot.wind
+            self._u_ema = float(w_snap.get("u_ema", 0.0))
+            self._w_ema = float(w_snap.get("w_ema", 0.0))
+            self._u_var = float(w_snap.get("u_var", 0.0))
+            self._w_var = float(w_snap.get("w_var", 0.0))
+            self._wind_ema_initialised = bool(w_snap.get("initialised", False))
+            self._prev_step_t = float(w_snap.get("prev_step_t", -1.0))
+            self.state.wind_horizontal_smoothed_ms = self._u_ema
+            self.state.wind_vertical_smoothed_ms = self._w_ema
+
         # Sync TwinState from LifePredictionState
         self._sync_twin_from_life_prediction()
 
@@ -196,6 +215,19 @@ class DigitalTwinEngine:
             self.state.altitude = 0.0
             self.state.km_this_flight = 0.0
             self.flight_phase = FlightPhase.ON_GROUND
+            self._wind.reset()
+            self._u_ema = 0.0
+            self._w_ema = 0.0
+            self._u_var = 0.0
+            self._w_var = 0.0
+            self._wind_ema_initialised = False
+            self._prev_step_t = -1.0
+            self.state.wind_horizontal_ms = 0.0
+            self.state.wind_vertical_ms = 0.0
+            self.state.wind_horizontal_smoothed_ms = 0.0
+            self.state.wind_vertical_smoothed_ms = 0.0
+            self.state.effective_airspeed_kmh = 0.0
+            self.state.effective_aoa_deg = 0.0
 
     def _sync_twin_from_life_prediction(self) -> None:
         self.state.total_km_flown = self.life_prediction_state.total_km_flown
@@ -235,6 +267,14 @@ class DigitalTwinEngine:
             tracker_cycles=ts["cycles"],
             prev_low_confidence=ts["prev_low_confidence"],
             prev_flight_blocked=ts["prev_flight_blocked"],
+            wind={
+                "u_ema": self._u_ema,
+                "w_ema": self._w_ema,
+                "u_var": self._u_var,
+                "w_var": self._w_var,
+                "initialised": self._wind_ema_initialised,
+                "prev_step_t": self._prev_step_t,
+            },
         )
 
     def request_takeoff(self) -> bool:
@@ -255,6 +295,21 @@ class DigitalTwinEngine:
         self.state.desired_airspeed = 0.0
         self.state.target_angle_of_attack = 0.0
         self.state.target_airspeed = 0.0
+        # Reset wind smoother for a fresh flight - the previous stats
+        # came from ground behaviour and don't represent in-flight gusts.
+        self._wind.reset()
+        self._u_ema = 0.0
+        self._w_ema = 0.0
+        self._u_var = 0.0
+        self._w_var = 0.0
+        self._wind_ema_initialised = False
+        self._prev_step_t = -1.0
+        self.state.wind_horizontal_ms = 0.0
+        self.state.wind_vertical_ms = 0.0
+        self.state.wind_horizontal_smoothed_ms = 0.0
+        self.state.wind_vertical_smoothed_ms = 0.0
+        self.state.effective_airspeed_kmh = 0.0
+        self.state.effective_aoa_deg = 0.0
         self.flight_phase = FlightPhase.TAKING_OFF
         return True
 
@@ -370,36 +425,102 @@ class DigitalTwinEngine:
             self.flight_phase = FlightPhase.ON_GROUND
 
     def _update_stepper(self) -> None:
-        F_aero = compute_aero_force(
-            self.state.angle_of_attack,
+        u_w, w_w = self._sample_wind(self.state.airspeed)
+        v_eff, alpha_eff = apparent_wind(
             self.state.airspeed,
+            self.state.angle_of_attack,
+            u_w,
+            w_w,
+        )
+
+        self.state.wind_horizontal_ms = u_w
+        self.state.wind_vertical_ms = w_w
+        self.state.effective_airspeed_kmh = v_eff
+        self.state.effective_aoa_deg = alpha_eff
+
+        F_aero = compute_aero_force(
+            alpha_eff,
+            v_eff,
             model=self._aero_model,
             calibration=self.config.calibration,
         )
-        
-        if (self.config.wind.enabled):
-            F_wind = compute_wind_force(
-                self._time_elapsed,
-                self.config.wind.amplification,
-                self.config.wind.base_freq_hz,
-                self.config.wind.mid_freq_hz,
-                self.config.wind.high_freq_hz,
-                self.config.wind.base_power,
-                self.config.wind.mid_power,
-                self.config.wind.high_power,
-                self.config.wind.mid_sharpness,
-                self.config.wind.high_sharpness
-            )
-        else:
-            F_wind = 0.0
-
-        F_total = F_aero + F_wind   
 
         self.state.stepper_position = force_to_steps(
-            F_total,
+            F_aero,
             self.config.calibration.steps_per_newton,
             max_steps=self.config.calibration.stepper_max_steps,
         )
+
+    def _sample_wind(self, current_airspeed_kmh: float) -> tuple[float, float]:
+        """Sample wind, apply ground/takeoff ramp-in, and update EMA/variance.
+
+        The EMA is updated on the *unramped* wind so its statistics track
+        the true turbulence intensity.  Returns the ramped wind used to
+        perturb the flight state this tick.
+        """
+        t = self._time_elapsed
+        dt = 0.0 if self._prev_step_t < 0.0 else max(0.0, t - self._prev_step_t)
+        self._prev_step_t = t
+
+        u_raw, w_raw = self._wind.sample(t, dt)
+        self._update_wind_ema(u_raw, w_raw, dt)
+
+        # Ground / takeoff gating
+        if not self.config.wind.enabled:
+            return 0.0, 0.0
+        if self._flight_phase == FlightPhase.ON_GROUND:
+            return 0.0, 0.0
+
+        ramp_denom = max(self.config.takeoff_speed * 0.5, 1.0)
+        if self._flight_phase == FlightPhase.TAKING_OFF:
+            r = max(0.0, min(1.0, current_airspeed_kmh / ramp_denom))
+        else:
+            r = 1.0
+        return u_raw * r, w_raw * r
+
+    def _update_wind_ema(self, u: float, w: float, dt: float) -> None:
+        tau = self.config.wind.tau_smooth_s
+        if dt <= 0.0 or tau <= 0.0:
+            # Fall back to plain assignment on the first sample.
+            if not self._wind_ema_initialised:
+                self._u_ema, self._w_ema = u, w
+                self._u_var = self._w_var = 0.0
+                self._wind_ema_initialised = True
+            return
+
+        if not self._wind_ema_initialised:
+            self._u_ema, self._w_ema = u, w
+            self._u_var = self._w_var = 0.0
+            self._wind_ema_initialised = True
+            self.state.wind_horizontal_smoothed_ms = u
+            self.state.wind_vertical_smoothed_ms = w
+            return
+
+        alpha = 1.0 - math.exp(-dt / tau)
+        du = u - self._u_ema
+        dw = w - self._w_ema
+        self._u_ema += alpha * du
+        self._w_ema += alpha * dw
+        # EMA of squared deviation from the mean
+        self._u_var = (1.0 - alpha) * self._u_var + alpha * du * du
+        self._w_var = (1.0 - alpha) * self._w_var + alpha * dw * dw
+        self.state.wind_horizontal_smoothed_ms = self._u_ema
+        self.state.wind_vertical_smoothed_ms = self._w_ema
+
+    def _safe_apparent(
+        self, target_airspeed_kmh: float, target_angle_deg: float
+    ) -> tuple[float, float]:
+        """Conservative apparent state for the safe-target predictor.
+
+        Biases the smoothed wind toward the more stressful direction:
+        stronger headwind (u - k*sigma) and stronger updraft (w + k*sigma).
+        """
+        if not self._wind_ema_initialised:
+            return target_airspeed_kmh, target_angle_deg
+        k = self.config.wind.gust_margin_k
+        u_safe = self._u_ema - k * math.sqrt(max(self._u_var, 0.0))
+        w_safe = self._w_ema + k * math.sqrt(max(self._w_var, 0.0))
+        return apparent_wind(target_airspeed_kmh, target_angle_deg, u_safe, w_safe)
 
     # this is a synthetic altitude, used for simulating the different transitions. Don't treat it too seriously!
     def _update_altitude_km(self, dt: float) -> None:
@@ -408,28 +529,14 @@ class DigitalTwinEngine:
         if V_ms < 0.1:
             climb_rate = 0.0
         else:
+            v_eff = self.state.effective_airspeed_kmh or self.state.airspeed
+            alpha_eff = self.state.effective_aoa_deg or self.state.angle_of_attack
             L, _D, _CL, _CD = compute_aero_forces(
-                self.state.angle_of_attack,
-                self.state.airspeed,
+                alpha_eff,
+                v_eff,
                 model=self._aero_model,
                 calibration=self.config.calibration,
             )
-
-            if self.config.wind.enabled:
-                F_wind = compute_wind_force(
-                    self._time_elapsed,
-                    self.config.wind.amplification,
-                    self.config.wind.base_freq_hz,
-                    self.config.wind.mid_freq_hz,
-                    self.config.wind.high_freq_hz,
-                    self.config.wind.base_power,
-                    self.config.wind.mid_power,
-                    self.config.wind.high_power,
-                    self.config.wind.mid_sharpness,
-                    self.config.wind.high_sharpness
-                )
-                aoa_rad = math.radians(self.state.angle_of_attack)
-                L += F_wind * math.cos(aoa_rad)
 
             climb_rate = self.config.climb_rate_gain * (L / self.config.lift_ref_N - 1.0)
             climb_rate = max(-V_ms, min(V_ms, climb_rate))
@@ -471,6 +578,12 @@ class DigitalTwinEngine:
         self.state.desired_airspeed = 0.0
         self.state.altitude = 0.0
         self.state.km_this_flight = 0.0
+        # Wind is gated off in ON_GROUND; clear apparent fields so the
+        # HUD doesn't show stale numbers from a previous flight.
+        self.state.wind_horizontal_ms = 0.0
+        self.state.wind_vertical_ms = 0.0
+        self.state.effective_airspeed_kmh = 0.0
+        self.state.effective_aoa_deg = 0.0
 
     def _step_flight(self, dt: float) -> None:
         self._update_safe_targets()
@@ -572,34 +685,22 @@ class DigitalTwinEngine:
             F_current_mag = float(np.linalg.norm(F_current))
 
             if F_current_mag > 1e-12:
+                v_eff_cur = self.state.effective_airspeed_kmh or self.state.airspeed
+                alpha_eff_cur = self.state.effective_aoa_deg or self.state.angle_of_attack
                 F_aero_current = compute_aero_force(
-                    self.state.angle_of_attack, self.state.airspeed,
+                    alpha_eff_cur, v_eff_cur,
                     model=self._aero_model,
                     calibration=self.config.calibration,
                 )
+                v_eff_safe, alpha_eff_safe = self._safe_apparent(target_speed, target_angle)
                 F_aero_target = compute_aero_force(
-                    target_angle, target_speed, model=self._aero_model,
+                    alpha_eff_safe, v_eff_safe,
+                    model=self._aero_model,
                     calibration=self.config.calibration,
                 )
 
-                if self.config.wind.enabled:
-                    F_wind = compute_wind_force(
-                        self._time_elapsed,
-                        self.config.wind.amplification,
-                        self.config.wind.base_freq_hz,
-                        self.config.wind.mid_freq_hz,
-                        self.config.wind.high_freq_hz,
-                        self.config.wind.base_power,
-                        self.config.wind.mid_power,
-                        self.config.wind.high_power,
-                        self.config.wind.mid_sharpness,
-                        self.config.wind.high_sharpness
-                    )
-                else:
-                    F_wind = 0.0
-
-                F_total_current = F_aero_current + F_wind
-                F_total_target = F_aero_target + F_wind
+                F_total_current = F_aero_current
+                F_total_target = F_aero_target
 
                 min_total = max(0.01 * F_total_target, 1e-9)
                 stress_scale = F_total_target / max(F_total_current, min_total)
