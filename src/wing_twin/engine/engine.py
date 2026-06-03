@@ -215,6 +215,7 @@ class DigitalTwinEngine:
             self.state.altitude = 0.0
             self.state.km_this_flight = 0.0
             self.flight_phase = FlightPhase.ON_GROUND
+            self._altitude_recovery_active = False
             self._wind.reset()
             self._u_ema = 0.0
             self._w_ema = 0.0
@@ -295,8 +296,7 @@ class DigitalTwinEngine:
         self.state.desired_airspeed = 0.0
         self.state.target_angle_of_attack = 0.0
         self.state.target_airspeed = 0.0
-        # Reset wind smoother for a fresh flight - the previous stats
-        # came from ground behaviour and don't represent in-flight gusts.
+        self._altitude_recovery_active = False
         self._wind.reset()
         self._u_ema = 0.0
         self._w_ema = 0.0
@@ -332,6 +332,7 @@ class DigitalTwinEngine:
             )
         self._km_this_flight = 0.0
         self._last_flight_damage = self.state.damage
+        self._altitude_recovery_active = False
         self._sync_twin_from_life_prediction()
 
     def _update_takeoff(self, dt: float) -> None:
@@ -343,27 +344,25 @@ class DigitalTwinEngine:
 
         if t < 3.0:
             frac = t / 3.0
-            target_speed = V_takeoff * frac
-            target_angle = 0.0
+            desired_speed = V_takeoff * frac
+            desired_angle = 0.0
         elif t < 5.0:
             frac = (t - 3.0) / 2.0
-            target_speed = V_takeoff
-            target_angle = climb_angle * frac
+            desired_speed = V_takeoff
+            desired_angle = climb_angle * frac
         else:
             frac = min((t - 5.0) / 5.0, 1.0)
-            target_speed = V_takeoff + (self.config.reference_speed - V_takeoff) * frac
-            target_angle = climb_angle * (1.0 - frac * 0.5)
+            desired_speed = V_takeoff + (self.config.reference_speed - V_takeoff) * frac
+            desired_angle = climb_angle
 
-        target_angle = max(-self.config.max_aoa, min(self.config.max_aoa, target_angle))
-        target_speed = max(0.0, min(self.config.reference_speed, target_speed))
+        desired_angle = max(-self.config.max_aoa, min(self.config.max_aoa, desired_angle))
+        desired_speed = max(0.0, min(self.config.reference_speed, desired_speed))
 
-        self.state.target_angle_of_attack = target_angle
-        self.state.target_airspeed = target_speed
+        self.state.desired_angle_of_attack = desired_angle
+        self.state.desired_airspeed = desired_speed
+        self._update_safe_targets()
 
         self.dynamics.update(self.state, dt)
-
-        self.state.desired_angle_of_attack = target_angle
-        self.state.desired_airspeed = target_speed
 
         self._update_stepper()
 
@@ -379,33 +378,41 @@ class DigitalTwinEngine:
 
     def _update_landing(self, dt: float) -> None:
         self._landing_timer += dt
-        t = self._landing_timer
         alt = self.state.altitude
 
         touchdown_alt = 0.3
         flare_alt = self.config.landing_altitude_threshold
-        if alt > flare_alt * 6:
-            frac = min(t / 5.0, 1.0)
-            target_speed = self.state.airspeed + (self.config.landing_approach_speed - self.state.airspeed) * frac * 0.1
-            target_angle = -2.0
+        approach_end = flare_alt * 6.0  # ~3 m
+
+        V_approach = self.config.landing_approach_speed
+        V_touchdown = self.config.landing_touchdown_speed
+        aoa_approach = self.config.landing_approach_aoa_deg
+        aoa_flare = self.config.landing_flare_aoa_deg
+
+        if alt > approach_end:
+            t = self._landing_timer
+            speed_ramp = min(t / 10.0, 1.0)
+            desired_speed = self.state.airspeed + (V_approach - self.state.airspeed) * speed_ramp
+            desired_angle = aoa_approach
         elif alt > touchdown_alt:
-            target_speed = max(self.config.landing_touchdown_speed, self.state.airspeed - 5.0 * dt)
-            target_angle = -1.0
+            flare_frac = (approach_end - alt) / (approach_end - touchdown_alt)
+            flare_frac = max(0.0, min(1.0, flare_frac))
+            desired_speed = V_approach + (V_touchdown - V_approach) * flare_frac
+            desired_angle = aoa_approach + (aoa_flare - aoa_approach) * flare_frac
         else:
-            target_speed = max(0.0, self.state.airspeed - 10.0 * dt)
-            target_angle = 0.0
-            self.state.altitude = max(0.0, self.state.altitude - 0.5 * dt)
+            touchdown_frac = (touchdown_alt - alt) / touchdown_alt
+            touchdown_frac = max(0.0, min(1.0, touchdown_frac))
+            desired_speed = V_touchdown * (1.0 - touchdown_frac)
+            desired_angle = aoa_flare * (1.0 - touchdown_frac)
 
-        target_angle = max(-self.config.max_aoa, min(self.config.max_aoa, target_angle))
-        target_speed = max(0.0, target_speed)
+        desired_angle = max(-self.config.max_aoa, min(self.config.max_aoa, desired_angle))
+        desired_speed = max(0.0, min(self.config.reference_speed, desired_speed))
 
-        self.state.target_angle_of_attack = target_angle
-        self.state.target_airspeed = target_speed
+        self.state.desired_angle_of_attack = desired_angle
+        self.state.desired_airspeed = desired_speed
+        self._update_safe_targets()
 
         self.dynamics.update(self.state, dt)
-
-        self.state.desired_angle_of_attack = target_angle
-        self.state.desired_airspeed = target_speed
 
         self._update_stepper()
 
@@ -414,7 +421,10 @@ class DigitalTwinEngine:
         if hasattr(self._data_source, 'set_angle_of_attack'):
             self._data_source.set_angle_of_attack(self.state.angle_of_attack)
 
-        self._update_altitude_km(dt)
+        if alt <= touchdown_alt:
+            self.state.altitude = max(0.0, self.state.altitude - 0.1 * dt)
+        else:
+            self._update_altitude_km(dt)
 
         if self.state.altitude <= 0.01 and self.state.airspeed < self.config.landing_touchdown_speed:
             self.state.altitude = 0.0
@@ -653,19 +663,22 @@ class DigitalTwinEngine:
         desired_speed = float(self.state.desired_airspeed)
 
         target_angle = max(-self.config.max_aoa, min(self.config.max_aoa, desired_angle))
-        target_speed = max(self.config.min_airspeed, min(self.config.reference_speed, desired_speed))
+        if self._flight_phase == FlightPhase.LANDING:
+            speed_floor = 0.0
+        else:
+            speed_floor = self.config.min_airspeed
+
+        target_speed = max(speed_floor, min(self.config.reference_speed, desired_speed))
 
         # Altitude recovery
-        alt = self.state.altitude
         if self._flight_phase == FlightPhase.IN_FLIGHT:
-            if alt < self.config.min_safe_altitude:
-                self._altitude_recovery_active = True
-            else:
-                self._altitude_recovery_active = False
+            self._altitude_recovery_active = self.state.altitude < self.config.min_safe_altitude
+        else:
+            self._altitude_recovery_active = False
 
         if self._altitude_recovery_active:
             target_speed = max(target_speed, self.config.reference_speed)
-            target_angle = max(target_angle, 4.0)
+            target_angle = max(target_angle, self.config.altitude_recovery_aoa_deg)
 
         # When maintenance assist is off, bypass all stress limiting
         if not self.state.maintenance_assist:
@@ -710,8 +723,8 @@ class DigitalTwinEngine:
 
                 if max_stress_pred > stress_limit and max_stress_pred > 0.0:
                     reduction = (stress_limit / max_stress_pred) ** 0.5
-                    target_speed = max(self.config.min_airspeed, target_speed * reduction)
-                    if target_speed == self.config.min_airspeed:
+                    target_speed = max(speed_floor, target_speed * reduction)
+                    if target_speed == speed_floor:
                         target_angle *= stress_limit / max_stress_pred
 
         self.state.target_angle_of_attack = target_angle

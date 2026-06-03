@@ -21,7 +21,7 @@ class EngineConfig:
 
     reference_speed: float = 110.0
     lift_ref_N: float = 1.8
-    climb_rate_gain: float = 3.0
+    climb_rate_gain: float = 5.0
 
     min_airspeed: float = 40.0
     yield_point: float = 80_000_000.0
@@ -34,13 +34,16 @@ class EngineConfig:
     speed_accel: float = 60.0
 
     # Flight lifecycle parameters
-    takeoff_speed: float = 65.0
-    takeoff_climb_angle: float = 8.0
+    takeoff_speed: float = 70.0
+    takeoff_climb_angle: float = 10.0
     landing_approach_speed: float = 55.0
     landing_touchdown_speed: float = 5.0
+    landing_approach_aoa_deg: float = 5.0
+    landing_flare_aoa_deg: float = 8.0
     landing_altitude_threshold: float = 0.5
     max_landing_altitude: float = 50.0
     min_safe_altitude: float = 25.0
+    altitude_recovery_aoa_deg: float = 8.0
 
     wind: WindConfig = field(default_factory=WindConfig)
 
@@ -63,6 +66,18 @@ class EngineConfig:
         check_gt(self.landing_approach_speed, "EngineConfig.landing_approach_speed", 0)
         check_ge(self.landing_touchdown_speed, "EngineConfig.landing_touchdown_speed", 0)
         check_ge(self.min_safe_altitude, "EngineConfig.min_safe_altitude", 0)
+        check_range(
+            self.altitude_recovery_aoa_deg,
+            "EngineConfig.altitude_recovery_aoa_deg", 0, 90,
+        )
+        check_range(
+            self.landing_approach_aoa_deg,
+            "EngineConfig.landing_approach_aoa_deg", 0, 90,
+        )
+        check_range(
+            self.landing_flare_aoa_deg,
+            "EngineConfig.landing_flare_aoa_deg", 0, 90,
+        )
 
 
 
