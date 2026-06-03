@@ -12,7 +12,8 @@ public partial class WingDigitalTwin : MonoBehaviour
         Transform parent = planeScene != null ? planeScene.transform : null;
         if (parent != null)
             view3Axes.transform.SetParent(parent);
-        view3Axes.transform.localPosition = Vector3.zero;
+        if (rotationalPivot != null)
+            view3Axes.transform.position = rotationalPivot.transform.position;
         view3Axes.transform.localRotation = Quaternion.identity;
         view3Axes.transform.localScale = Vector3.one;
         view3Axes.SetActive(false);
