@@ -12,6 +12,7 @@ from wing_twin.fatigue.fatigue import (
     FatigueState,
     accumulate_damage, accumulate_damage_at_nodes,
     update_confidence, sn_curve_for_material,
+    warmup_numba,
 )
 from wing_twin.config.fatigue import FatigueConfig
 from wing_twin.fatigue.life_prediction import LifePredictionState
@@ -44,6 +45,8 @@ class FatigueTracker:
         self.life_prediction = initial_life_prediction or LifePredictionState(
             initial_remaining_km=config.initial_remaining_km,
         )
+
+        warmup_numba()
 
     @property
     def cycles(self) -> list:

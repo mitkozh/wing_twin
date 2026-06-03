@@ -170,6 +170,27 @@ def update_confidence(
     return state.confidence
 
 
+def warmup_numba() -> None:
+    """Pre-compile numba-jitted py_fatigue functions (calc_pm, CycleCount)."""
+    import numba as _nb
+    _nb.config.DISABLE_JIT = 0
+
+    sn = sn_curve_for_material("demo")
+    dummy_sr = np.array([10.0, 20.0, 30.0, 50.0, 100.0], dtype=np.float64)
+    dummy_cc = np.array([1.0, 0.5, 0.2, 0.1, 0.05], dtype=np.float64)
+    try:
+        calc_pm(dummy_sr, dummy_cc, sn)
+    except Exception:
+        pass
+    try:
+        _ = CycleCount.from_timeseries(
+            np.array([0.0, 1.0, -1.0, 0.5, -0.5, 0.0], dtype=np.float64),
+            unit="MPa", range_bin_width=2.0,
+        )
+    except Exception:
+        pass
+
+
 def set_random_seed(seed: Optional[int] = None) -> None:
     if seed is not None:
         np.random.seed(seed)
