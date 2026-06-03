@@ -83,7 +83,7 @@ public partial class WingDigitalTwin : MonoBehaviour
         chartPanel.PushDamage(data.damage);
         chartPanel.PushStress(data.stress_max,
             data.yield_point_pa > 0 ? data.yield_point_pa : yieldPointPa,
-            data.stress_limit_pa > 0 ? data.stress_limit_pa : 0);
+            data.stress_limit_pa > 0 ? data.stress_limit_pa : stressLimitPa);
 
         if (data.cycles_binned != null && data.cycles_binned.Count > 0)
         {
@@ -139,19 +139,7 @@ public partial class WingDigitalTwin : MonoBehaviour
                         break;
                     }
                     case "ack":
-                    {
-                        var jObj = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-                        string action = jObj?.ContainsKey("action") == true ? jObj["action"]?.ToString() : "";
-                        if (action == "takeoff" && toastManager != null)
-                        {
-                            Enqueue(() => toastManager.Show("to_ack", "info", "Takeoff", "Taking off...", null));
-                        }
-                        else if (action == "land" && toastManager != null)
-                        {
-                            Enqueue(() => toastManager.Show("ld_ack", "info", "Landing", "Landing...", null));
-                        }
                         break;
-                    }
                     case "error":
                     {
                         var jObj = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
@@ -180,6 +168,7 @@ public partial class WingDigitalTwin : MonoBehaviour
             stressMin = data.stress_min;
             stressMax = data.stress_max;
             yieldPointPa = data.yield_point_pa > 0 ? data.yield_point_pa : yieldPointPa;
+            stressLimitPa = data.stress_limit_pa > 0 ? data.stress_limit_pa : stressLimitPa;
             if (data.max_angle_deg > 0) {
                 maxAngleDeg = data.max_angle_deg;
                 planeAngleSlider.lowValue = -maxAngleDeg;

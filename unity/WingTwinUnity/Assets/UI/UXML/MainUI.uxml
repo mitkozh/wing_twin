@@ -31,6 +31,7 @@
                     <ui:Label name="avg-damage-label" class="damage-label" text="Avg Damage: 0.0%" />
                 </ui:VisualElement>
                 <ui:Label name="confidence-label" class="conf-label" text="Confidence: 100.0%" />
+                <ui:Label name="stress-limit-label" class="conf-label" text="Stress Limit: 65.0 MPa" />
                 <ui:Toggle name="heatmap-toggle" class="heatmap-toggle" label="Stress" />
             </ui:VisualElement>
 

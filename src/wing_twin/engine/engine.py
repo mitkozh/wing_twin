@@ -311,6 +311,10 @@ class DigitalTwinEngine:
         self.state.effective_airspeed_kmh = 0.0
         self.state.effective_aoa_deg = 0.0
         self.flight_phase = FlightPhase.TAKING_OFF
+        self.state.add_notification(
+            "takeoff_started", "info", "Takeoff",
+            "Takeoff sequence initiated.",
+        )
         return True
 
     def request_landing(self) -> bool:
@@ -320,6 +324,10 @@ class DigitalTwinEngine:
             return False
         self._landing_timer = 0.0
         self.flight_phase = FlightPhase.LANDING
+        self.state.add_notification(
+            "landing_started", "info", "Landing",
+            "Landing sequence initiated.",
+        )
         return True
 
     def _complete_flight(self) -> None:
@@ -375,6 +383,10 @@ class DigitalTwinEngine:
 
         if self.state.altitude >= self.config.min_safe_altitude or t > 30.0:
             self.flight_phase = FlightPhase.IN_FLIGHT
+            self.state.add_notification(
+                "in_flight_reached", "info", "In Flight",
+                "Takeoff complete, now in flight.",
+            )
 
     def _update_landing(self, dt: float) -> None:
         self._landing_timer += dt
@@ -433,6 +445,11 @@ class DigitalTwinEngine:
             self.state.stepper_position = 0
             self._complete_flight()
             self.flight_phase = FlightPhase.ON_GROUND
+            self.state.add_notification(
+                "flight_completed", "info", "Flight Complete",
+                f"Flight {self.state.flight_number} completed. "
+                f"{self._km_this_flight:.2f} km flown.",
+            )
 
     def _update_stepper(self) -> None:
         u_w, w_w = self._sample_wind(self.state.airspeed)
@@ -680,18 +697,19 @@ class DigitalTwinEngine:
             target_speed = max(target_speed, self.config.reference_speed)
             target_angle = max(target_angle, self.config.altitude_recovery_aoa_deg)
 
-        # When maintenance assist is off, bypass all stress limiting
-        if not self.state.maintenance_assist:
-            self.state.target_angle_of_attack = target_angle
-            self.state.target_airspeed = target_speed
-            return
-
         # Damage-based stress limit reduction: 5% at damage=0.3, 15% at damage=1.0
         stress_limit = self.config.stress_limit
         if self.state.damage > 0.3:
             t = min((self.state.damage - 0.3) / 0.7, 1.0)
             reduction_pct = 0.05 + 0.10 * t
             stress_limit *= (1.0 - reduction_pct)
+        self.state.stress_limit_pa = stress_limit
+
+        # When maintenance assist is off, bypass all stress limiting
+        if not self.state.maintenance_assist:
+            self.state.target_angle_of_attack = target_angle
+            self.state.target_airspeed = target_speed
+            return
 
         if self._matrices is not None and self.state.forces:
             F_current = np.array(self.state.forces, dtype=np.float64)

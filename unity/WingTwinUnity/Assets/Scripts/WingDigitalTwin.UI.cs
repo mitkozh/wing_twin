@@ -25,6 +25,7 @@ public partial class WingDigitalTwin : MonoBehaviour
         confidenceLabel = root.Q<Label>("confidence-label");
         connectionLabel = root.Q<Label>("connection-label");
         heatmapToggle = root.Q<Toggle>("heatmap-toggle");
+        stressLimitLabel = root.Q<Label>("stress-limit-label");
         if (heatmapToggle != null)
         {
             var checkmark = heatmapToggle.Q(null, "unity-toggle__checkmark");
@@ -243,6 +244,7 @@ public partial class WingDigitalTwin : MonoBehaviour
         UpdateDamageSlider(avgDamageSliderFill, avgDamageLabel, currentAvgDamage, "Avg Damage");
 
         if (confidenceLabel != null) confidenceLabel.text = $"Confidence: {currentConfidence:F1}%";
+        if (stressLimitLabel != null) stressLimitLabel.text = $"Stress Limit: {stressLimitPa / 1_000_000f:F1} MPa";
 
         UpdateFlightMetrics();
         UpdateControlPanelMode();
@@ -357,8 +359,6 @@ public partial class WingDigitalTwin : MonoBehaviour
         if (controlsLocked || preflightSlider == null) return;
         float dist = preflightSlider.value;
         if (dist <= 0) return;
-        if (toastManager != null)
-            toastManager.Show("pf_checking", "info", "Pre-Flight", $"Checking {dist:F0} km...", null);
         SendCommand("plan_flight", new Dictionary<string, object> { { "planned_km", dist } });
     }
 
@@ -366,8 +366,6 @@ public partial class WingDigitalTwin : MonoBehaviour
     {
         if (controlsLocked) return;
         if (takeoffBtn != null) takeoffBtn.SetEnabled(false);
-        if (toastManager != null)
-            toastManager.Show("to_taking_off", "info", "Takeoff", "Initiating takeoff...", null);
         SendCommand("takeoff");
     }
 
@@ -375,8 +373,6 @@ public partial class WingDigitalTwin : MonoBehaviour
     {
         if (controlsLocked) return;
         if (landBtn != null) landBtn.SetEnabled(false);
-        if (toastManager != null)
-            toastManager.Show("ld_landing", "info", "Landing", "Initiating landing...", null);
         SendCommand("land");
     }
 

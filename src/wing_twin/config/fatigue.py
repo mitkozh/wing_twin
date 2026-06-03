@@ -19,7 +19,7 @@ class FatigueConfig:
     node_buffer_size: int = 500
     ema_alpha: float = 0.1
     confidence_threshold: float = 50.0
-    confidence_frames_threshold: int = 10
+    confidence_frames_threshold: int = 50
     damage_warning: float = 0.3
     damage_critical: float = 0.8
     material: str = "demo"

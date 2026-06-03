@@ -89,6 +89,7 @@ public partial class WingDigitalTwin : MonoBehaviour
     private Toggle heatmapToggle;
     private Toggle maintenanceToggle;
     private VisualElement stressBar;
+    private Label stressLimitLabel;
 
     private Slider planeAngleSlider;
     private Slider stepsSlider;
@@ -142,6 +143,7 @@ public partial class WingDigitalTwin : MonoBehaviour
     private float stressMin;
     private float stressMax;
     private float yieldPointPa = 80_000_000f;
+    private float stressLimitPa = 65_000_000f;
 
     private Color[] vertexColors;
     private float[] meshStressValues;
@@ -213,16 +215,29 @@ public partial class WingDigitalTwin : MonoBehaviour
         return null;
     }
 
+    private readonly HashSet<string> _shownNotificationIds = new HashSet<string>();
+
     void ProcessNotifications(List<NotificationData> notifications)
     {
         if (notifications == null || toastManager == null)
             return;
 
+        var currentIds = new HashSet<string>();
+        foreach (var n in notifications)
+        {
+            if (!string.IsNullOrEmpty(n.id))
+                currentIds.Add(n.id);
+        }
+        _shownNotificationIds.IntersectWith(currentIds);
+
         foreach (var notif in notifications)
         {
             if (string.IsNullOrEmpty(notif.id))
                 continue;
+            if (_shownNotificationIds.Contains(notif.id))
+                continue;
 
+            _shownNotificationIds.Add(notif.id);
             toastManager.Show(notif.id, notif.type, notif.title, notif.message, OnNotificationDismissed);
         }
     }
