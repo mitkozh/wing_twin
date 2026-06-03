@@ -130,7 +130,6 @@ public partial class WingDigitalTwin : MonoBehaviour
         }
 
         mesh.colors = vertexColors;
-        mesh.MarkDynamic();
     }
 
     void UpdateDamageHeatmap()
@@ -154,7 +153,6 @@ public partial class WingDigitalTwin : MonoBehaviour
         }
 
         mesh.colors = vertexColors;
-        mesh.MarkDynamic();
     }
 
     public void LoadMeshFromJson(string jsonPath)
@@ -185,6 +183,7 @@ public partial class WingDigitalTwin : MonoBehaviour
         int[] triangles = data.triangles.SelectMany(t => t).ToArray();
         mesh.triangles = triangles;
 
+        mesh.MarkDynamic();
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
 
