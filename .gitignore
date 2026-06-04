@@ -87,5 +87,11 @@ crashlytics-build.properties
 # Will update later
 docs/
 
-# ESP32 firmware credentials
-esp32/secrets.h
+# ESP32
+esp32/src/secrets.h
+
+esp32/.pio
+esp32/.vscode/.browse.c_cpp.db*
+esp32/.vscode/c_cpp_properties.json
+esp32/.vscode/launch.json
+esp32/.vscode/ipch

@@ -6,14 +6,42 @@
 #include "secrets.h"
 #include "RGB_control.h"
 
+// =====================================================
+// [KEEP IN mqtt_control.cpp]
+// 正式保留：MQTT topics
+//
+// ESP32 publish sensor data to PUBLISH_TOPIC
+// ESP32 subscribe server command from SUBSCRIBE_TOPIC
+// =====================================================
+
 const char* PUBLISH_TOPIC = "wing/sensors";
 const char* SUBSCRIBE_TOPIC = "wing/control";
+
+
+// =====================================================
+// [KEEP IN mqtt_control.cpp]
+// 正式保留：WiFi and MQTT client objects
+// =====================================================
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
 
-// MQTT reception: server -> ESP32(client)
+// =====================================================
+// [KEEP IN mqtt_control.cpp]
+// 正式保留：MQTT receive part
+//
+// 当电脑/server 发送消息到 wing/control 时，会进入这里。
+//
+// 当前 RGB_control 只接受完整三灯状态指令，例如：
+// 1_green,2_green,3_green
+// 1_red,2_yellow,3_green
+// 1_yellow,2_red,3_red
+//
+// 所以这里不再单独判断 red / green / yellow。
+// MQTT 只负责接收 message，然后交给 RGB_control 解析。
+// =====================================================
+
 void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     String message = "";
 
@@ -29,25 +57,15 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     Serial.print(" | message: ");
     Serial.println(message);
 
-    if (message == "red") {
-        set_leds("red");
-    }
-    else if (message == "green") {
-        set_leds("green");
-    }
-    else if (message == "yellow") {
-        set_leds("yellow");
-    }
-    else if (message == "off") {
-        all_leds_off();
-    }
-    else {
-        Serial.println("Unknown MQTT command.");
-    }
+    set_leds(message);
 }
 
 
-// WiFi connection
+// =====================================================
+// [KEEP IN mqtt_control.cpp]
+// 正式保留：WiFi connection
+// =====================================================
+
 void setup_wifi() {
     Serial.print("Connecting to WiFi: ");
     Serial.println(WIFI_SSID);
@@ -68,7 +86,14 @@ void setup_wifi() {
 }
 
 
-// MQTT connection
+// =====================================================
+// [KEEP IN mqtt_control.cpp]
+// 正式保留：MQTT connection / reconnect
+//
+// ESP32 会连接电脑上的 Mosquitto broker。
+// 连接成功后订阅 wing/control，用于接收 server 指令。
+// =====================================================
+
 void mqtt_reconnect() {
     while (!mqttClient.connected()) {
         Serial.print("Connecting to MQTT broker ");
@@ -97,7 +122,13 @@ void mqtt_reconnect() {
 }
 
 
-// MQTT setup
+// =====================================================
+// [KEEP IN mqtt_control.cpp]
+// 正式保留：MQTT initialization
+//
+// 初始化 WiFi、设置 MQTT broker 地址、绑定 receive callback。
+// =====================================================
+
 void mqtt_init() {
     setup_wifi();
 
@@ -105,6 +136,14 @@ void mqtt_init() {
     mqttClient.setCallback(mqtt_callback);
 }
 
+
+// =====================================================
+// [KEEP IN mqtt_control.cpp]
+// 正式保留：MQTT loop
+//
+// main.cpp 或 mqtt_test.cpp 的 loop() 中必须持续调用。
+// 不调用这个，ESP32 就收不到 wing/control 的指令。
+// =====================================================
 
 void mqtt_loop() {
     if (!mqttClient.connected()) {
@@ -115,7 +154,14 @@ void mqtt_loop() {
 }
 
 
-// MQTT transmission: ESP32(client) -> server
+// =====================================================
+// [KEEP IN mqtt_control.cpp]
+// 正式保留：MQTT transfer part
+//
+// 用于 mqtt_test.cpp。
+// ESP32 将 fake sensor data 发送到 wing/sensors。
+// =====================================================
+
 void mqtt_publish_sensor(long raw, long diff, float voltage_mV) {
     char payload[200];
 
@@ -138,6 +184,15 @@ void mqtt_publish_sensor(long raw, long diff, float voltage_mV) {
 }
 
 
+// =====================================================
+// [KEEP IN mqtt_control.cpp]
+// 正式保留：MQTT transfer part
+//
+// 用于 final demo。
+// Hx711_control.cpp 先构建完整 JSON payload，
+// 然后 main.cpp 调用这个函数发送到 wing/sensors。
+// =====================================================
+
 void mqtt_publish_payload(const char* payload) {
     bool ok = mqttClient.publish(PUBLISH_TOPIC, payload);
 
@@ -148,4 +203,6 @@ void mqtt_publish_payload(const char* payload) {
     else {
         Serial.println("[MQTT publish payload failed]");
     }
-}
+} 
+
+ 
