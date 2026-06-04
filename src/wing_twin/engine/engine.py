@@ -467,16 +467,14 @@ class DigitalTwinEngine:
         self.state.effective_airspeed_kmh = v_eff
         self.state.effective_aoa_deg = alpha_eff
 
-        L, D, CL, CD = compute_aero_forces(
+        F_aero = compute_aero_force(
             alpha_eff,
             v_eff,
             model=self._aero_model,
             calibration=self.config.calibration,
         )
-
-        # Purely lift is modelled.
         self.state.stepper_position = force_to_steps(
-            L,
+            F_aero,
             self.config.calibration.steps_per_newton,
             max_steps=self.config.calibration.stepper_max_steps,
         )

@@ -27,7 +27,7 @@ def apparent_wind(
     v_eff_ms = math.hypot(vx, vz)
     delta_alpha_rad = math.atan2(vz, vx)
     v_eff_kmh = v_eff_ms * 3.6
-    alpha_eff_deg = alpha_geom_deg - math.degrees(delta_alpha_rad) # We subtract not add
+    alpha_eff_deg = alpha_geom_deg + math.degrees(delta_alpha_rad)  # Updraft (positive w) increases effective AoA
     return v_eff_kmh, alpha_eff_deg
 
 

@@ -129,12 +129,9 @@ def compute_aero_force(
     if calibration is not None:
         L += calibration.lift_bias
         D += calibration.drag_bias
-
-    #return math.sqrt(L ** 2 + D ** 2)
     
-    # Basically the projection on the perpendicular to chord surface of the wing. 
-    # The surface at which we apply the servo force.
-    return L * math.cos(angle_deg) + D * math.sin(angle_deg)  
+    alpha_rad = math.radians(angle_deg)
+    return L * math.cos(alpha_rad) + D * math.sin(alpha_rad)
 
 
 def force_to_steps(
