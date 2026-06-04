@@ -255,11 +255,17 @@ public partial class WingDigitalTwin : MonoBehaviour
         SendCommand("set_flight_state", new Dictionary<string, object> { { "angle", angle }, { "speed", speed } });
     }
 
-    void Enqueue(Action a) => mainThreadQueue.Enqueue(a);
+    void Enqueue(Action a)
+    {
+        if (mainThreadQueue.Count > 200) mainThreadQueue.Clear();
+        mainThreadQueue.Enqueue(a);
+    }
 
     void LateUpdate()
     {
-        while (mainThreadQueue.Count > 0)
+        int maxPerFrame = 20;
+        int processed = 0;
+        while (mainThreadQueue.Count > 0 && processed++ < maxPerFrame)
             mainThreadQueue.Dequeue()?.Invoke();
 
 #if !UNITY_WEBGL || UNITY_EDITOR
@@ -267,8 +273,19 @@ public partial class WingDigitalTwin : MonoBehaviour
 #endif
     }
 
+    void OnApplicationFocus(bool hasFocus)
+    {
+        if (hasFocus)
+        {
+            mainThreadQueue.Clear();
+            lastMessageTime = Time.time;
+            lastHeartbeatTime = Time.time;
+        }
+    }
+
     async void OnDestroy()
     {
+        _reconnectCts?.Cancel();
         if (ws != null) await ws.Close();
     }
 
@@ -277,7 +294,11 @@ public partial class WingDigitalTwin : MonoBehaviour
         if (connected)
         {
             float timeSinceLastMsg = Time.time - lastMessageTime;
-            if (timeSinceLastMsg > heartbeatInterval * 2)
+            float timeout = heartbeatInterval * 2;
+#if UNITY_EDITOR
+            timeout = 120f;
+#endif
+            if (timeSinceLastMsg > timeout)
             {
                 Debug.LogWarning("[WS] No messages received, reconnecting...");
                 connected = false;

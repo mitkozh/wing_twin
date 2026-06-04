@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -56,17 +57,34 @@ public partial class WingDigitalTwin : MonoBehaviour
         }
     }
 
+    private CancellationTokenSource _reconnectCts;
+
     private async void ScheduleReconnect()
     {
         if (reconnectScheduled) return;
         reconnectScheduled = true;
 
-        Debug.Log($"[WS] Scheduling reconnect in {currentReconnectDelay}s...");
-        await Task.Delay(TimeSpan.FromSeconds(currentReconnectDelay));
-        reconnectScheduled = false;
+        _reconnectCts?.Cancel();
+        _reconnectCts = new CancellationTokenSource();
+        var token = _reconnectCts.Token;
 
-        await ConnectAsync();
-        currentReconnectDelay = Mathf.Min(currentReconnectDelay * 1.5f, maxReconnectDelay);
+        try
+        {
+            Debug.Log($"[WS] Scheduling reconnect in {currentReconnectDelay}s...");
+            await Task.Delay(TimeSpan.FromSeconds(currentReconnectDelay), token);
+            token.ThrowIfCancellationRequested();
+
+            await ConnectAsync();
+            currentReconnectDelay = Mathf.Min(currentReconnectDelay * 1.5f, maxReconnectDelay);
+        }
+        catch (OperationCanceledException)
+        {
+            Debug.Log("[WS] Reconnect cancelled");
+        }
+        finally
+        {
+            reconnectScheduled = false;
+        }
     }
 
     private void SendHeartbeat()
