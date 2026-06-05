@@ -111,8 +111,8 @@ static int s_readErrorCount = 0;
 static const char* CAL_FILE = "/hx711_cal.txt";
 
 bool hx711_load_calibration(Hx711Calibration &cal) {
-    if (!LittleFS.begin(false)) {
-        Serial.println("[HX711] LittleFS mount failed, cannot load calibration");
+    if (!LittleFS.begin(true)) {
+        Serial.println("[HX711] LittleFS mount + format failed, cannot load calibration");
         cal.valid = false;
         return false;
     }
