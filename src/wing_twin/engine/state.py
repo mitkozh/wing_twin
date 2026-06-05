@@ -341,8 +341,6 @@ class EngineSnapshot:
     life: Optional[dict] = None
     flight: Optional[dict] = None
     dynamics: Optional[dict] = None
-    strain_buffer: Optional[list] = None
-    tracker_cycles: Optional[list] = None
     prev_low_confidence: bool = False
     prev_flight_blocked: bool = False
     wind: Optional[dict] = None
@@ -357,8 +355,6 @@ class EngineSnapshot:
             "life": self.life,
             "flight": self.flight,
             "dynamics": self.dynamics,
-            "strain_buffer": self.strain_buffer,
-            "tracker_cycles": self.tracker_cycles,
             "prev_low_confidence": self.prev_low_confidence,
             "prev_flight_blocked": self.prev_flight_blocked,
             "wind": self.wind,
@@ -387,21 +383,7 @@ class EngineSnapshot:
             life=data.get("life"),
             flight=data.get("flight"),
             dynamics=data.get("dynamics"),
-            strain_buffer=data.get("strain_buffer"),
-            tracker_cycles=data.get("tracker_cycles"),
             prev_low_confidence=data.get("prev_low_confidence", False),
             prev_flight_blocked=data.get("prev_flight_blocked", False),
             wind=data.get("wind"),
-        )
-        return EngineSnapshot(
-            version=version,
-            twin=data["twin"],
-            fatigue=data["fatigue"],
-            life=data["life"],
-            flight=data["flight"],
-            dynamics=data["dynamics"],
-            strain_buffer=data["strain_buffer"],
-            tracker_cycles=data["tracker_cycles"],
-            prev_low_confidence=data["prev_low_confidence"],
-            prev_flight_blocked=data["prev_flight_blocked"],
         )

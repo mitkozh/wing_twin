@@ -221,10 +221,10 @@ def save_engine_snapshot(engine, output_dir: Path) -> None:
     path = Path(output_dir) / "state.json"
     snapshot.to_file(path)
     logger.info(
-        "Engine snapshot saved to %s (D=%.4f, %d cycles, %d flights)",
+        "Engine snapshot saved to %s (D=%.4f, %d damaged nodes, %d flights)",
         path,
         engine.fatigue.state.damage,
-        len(engine.fatigue.state.cycles or []),
+        len(engine.fatigue.state.node_damages or {}),
         engine.life_prediction_state.total_flights,
     )
 

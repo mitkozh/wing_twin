@@ -10,8 +10,6 @@ from wing_twin.config.types import check_gt, check_ge, check_range
 @dataclass
 class FatigueConfig:
     min_buffer_size: int = 50
-    strain_buffer_size: int = 3000
-    strain_to_stress: float = 70_000.0
     rainflow_range_bin_width: float = 2.0
     critical_stress_threshold: float = 50.0
     critical_node_percentile: float = 90.0
@@ -27,8 +25,6 @@ class FatigueConfig:
 
     def __post_init__(self) -> None:
         check_gt(self.min_buffer_size, "FatigueConfig.min_buffer_size", 0)
-        check_gt(self.strain_buffer_size, "FatigueConfig.strain_buffer_size", 0)
-        check_gt(self.strain_to_stress, "FatigueConfig.strain_to_stress", 0)
         check_gt(self.rainflow_range_bin_width, "FatigueConfig.rainflow_range_bin_width", 0)
         check_ge(self.critical_stress_threshold, "FatigueConfig.critical_stress_threshold", 0)
         check_range(self.critical_node_percentile, "FatigueConfig.critical_node_percentile", 0, 100)

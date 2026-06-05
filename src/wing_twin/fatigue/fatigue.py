@@ -1,11 +1,10 @@
 """
 Fatigue analysis module for digital twin.
 
-Provides rainflow cycle counting, Miner's Rule damage accumulation,
-and confidence monitoring via EMA-filtered residuals.
+Provides per-node rainflow cycle counting, Miner's Rule damage accumulation
+using the FEA stress field, and confidence monitoring via EMA-filtered residuals.
 
 Units:
-  - Strain input: raw (dimensionless)
   - Stress: MPa
   - Damage: dimensionless (0.0 to 1.0)
   - Confidence: percentage (0 to 100)
@@ -15,7 +14,7 @@ import concurrent.futures
 import numpy as np
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple
 
 from py_fatigue import CycleCount
 from py_fatigue.material.sn_curve import SNCurve
@@ -30,8 +29,6 @@ class FatigueState:
     confidence: float = 100.0
     filtered_residual: float = 0.0
     low_confidence_frames: int = 0
-    cycles: Optional[List[Tuple[float, float]]] = field(default_factory=list)
-    res_sig: List[float] = field(default_factory=list)
     node_buffers: dict = field(default_factory=dict)
     node_damages: dict = field(default_factory=dict)
     node_res_sigs: dict = field(default_factory=dict)
@@ -42,8 +39,6 @@ class FatigueState:
             "confidence": self.confidence,
             "filtered_residual": self.filtered_residual,
             "low_confidence_frames": self.low_confidence_frames,
-            "cycles": self.cycles,
-            "res_sig": self.res_sig,
             "node_damages": {str(k): v for k, v in self.node_damages.items()},
             "node_buffers": {
                 str(k): list(v) for k, v in self.node_buffers.items()
@@ -60,8 +55,6 @@ class FatigueState:
         state.confidence = data["confidence"]
         state.filtered_residual = data["filtered_residual"]
         state.low_confidence_frames = data["low_confidence_frames"]
-        state.cycles = [tuple(c) for c in data["cycles"]]
-        state.res_sig = data["res_sig"]
         state.node_damages = {int(k): v for k, v in data["node_damages"].items()}
         node_buffers_raw = data["node_buffers"]
         node_res_sigs_raw = data["node_res_sigs"]
@@ -82,63 +75,6 @@ def sn_curve_for_material(material: str = "aluminum") -> SNCurve:
         "demo": SNCurve(slope=3.0, intercept=8.0, endurance=1e6),
     }
     return curves.get(material.lower(), curves["aluminum"])
-
-
-def accumulate_damage(
-    strain_buffer: deque,
-    state: FatigueState,
-    sn_curve: Optional[SNCurve] = None,
-    config: Optional[FatigueConfig] = None,
-) -> Tuple[float, List[Tuple[float, float]]]:
-    if config is None:
-        config = FatigueConfig()
-
-    if len(strain_buffer) < config.min_buffer_size:
-        return 0.0, []
-
-    pending = list(state.res_sig)
-    state.res_sig = []
-
-    strain_arr = np.array(strain_buffer, dtype=np.float64)
-    stress_arr = strain_arr * config.strain_to_stress
-
-    if pending:
-        combined = np.concatenate([np.array(pending), stress_arr])
-    else:
-        combined = stress_arr
-
-    strain_buffer.clear()
-
-    if sn_curve is None:
-        sn_curve = sn_curve_for_material("demo")
-
-    try:
-        cc = CycleCount.from_timeseries(
-            combined,
-            unit="MPa",
-            range_bin_width=config.rainflow_range_bin_width,
-        )
-    except ValueError:
-        return 0.0, []
-
-    result_dict = cc.as_dict()
-    state.res_sig = result_dict.get("res_sig", [])
-
-    df = cc.to_df()
-    cycles_for_hist = [
-        (float(row.stress_range), float(row.count_cycle))
-        for _, row in df.iterrows()
-        if row.count_cycle > 0
-    ]
-    state.cycles.extend(cycles_for_hist)
-
-    if len(cc.stress_range) > 0:
-        damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
-        damage = float(np.sum(damage_per_bin))
-    else:
-        damage = 0.0
-    state.damage = min(state.damage + damage, 1.0)
-    return damage, cycles_for_hist
 
 
 def update_confidence(

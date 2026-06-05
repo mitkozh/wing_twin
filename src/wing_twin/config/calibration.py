@@ -18,9 +18,6 @@ class CalibrationConfig:
     sensor_zero_offsets: tuple[float, ...] = field(default_factory=tuple)
     sensor_gain_factors: tuple[float, ...] = field(default_factory=tuple)
 
-    # Strain -> stress conversion (Pa per strain unit)
-    strain_to_stress: float = 70_000.0
-
     # Force reconstruction
     H_matrix_scale: float = 1.0
 
@@ -35,7 +32,6 @@ class CalibrationConfig:
 
     def __post_init__(self) -> None:
         check_ge(self.adc_to_strain_scale, "CalibrationConfig.adc_to_strain_scale", 0)
-        check_ge(self.strain_to_stress, "CalibrationConfig.strain_to_stress", 0)
         check_ge(self.steps_per_newton, "CalibrationConfig.steps_per_newton", 0)
         check_gt(self.stepper_max_steps, "CalibrationConfig.stepper_max_steps", 0)
         check_gt(self.stepper_max_frequency, "CalibrationConfig.stepper_max_frequency", 0)

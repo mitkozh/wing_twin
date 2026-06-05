@@ -1,16 +1,15 @@
 """
-FatigueTracker - Manages fatigue state accumulation, confidence monitoring,
-and lifecycle notifications.
+FatigueTracker - Manages per-node fatigue accumulation, confidence monitoring,
+and lifecycle notifications using the FEA stress field.
 """
 
-from collections import deque
 from typing import Optional
 
 import numpy as np
 
 from wing_twin.fatigue.fatigue import (
     FatigueState,
-    accumulate_damage, accumulate_damage_at_nodes,
+    accumulate_damage_at_nodes,
     update_confidence, sn_curve_for_material,
     warmup_numba,
 )
@@ -20,9 +19,7 @@ from wing_twin.engine.state import TwinState
 
 
 class FatigueTracker:
-    """Tracks fatigue accumulation, confidence, and notifications."""
-
-    _strain_buffer: deque
+    """Tracks per-node fatigue accumulation, confidence, and notifications."""
 
     def __init__(
         self,
@@ -34,14 +31,9 @@ class FatigueTracker:
         self.config = config
         self.state = initial_state or FatigueState()
         if tracker_snapshot:
-            buf = tracker_snapshot.get("strain_buffer", [])
-            self._strain_buffer = deque(buf, maxlen=config.strain_buffer_size)
-            self._cycles: list = list(tracker_snapshot.get("cycles", []))
             self._prev_low_confidence = tracker_snapshot.get("prev_low_confidence", False)
             self._prev_flight_blocked = tracker_snapshot.get("prev_flight_blocked", False)
         else:
-            self._strain_buffer = deque(maxlen=config.strain_buffer_size)
-            self._cycles: list = []
             self._prev_low_confidence = False
             self._prev_flight_blocked = False
         self.life_prediction = initial_life_prediction or LifePredictionState(
@@ -50,17 +42,8 @@ class FatigueTracker:
 
         warmup_numba()
 
-    @property
-    def cycles(self) -> list:
-        return self._cycles
-
-    def clear_cycles(self) -> None:
-        self._cycles.clear()
-
     def tracker_snapshot(self) -> dict:
         return {
-            "strain_buffer": list(self._strain_buffer),
-            "cycles": list(self._cycles),
             "prev_low_confidence": self._prev_low_confidence,
             "prev_flight_blocked": self._prev_flight_blocked,
         }
@@ -70,9 +53,6 @@ class FatigueTracker:
             self.state = FatigueState()
             self._prev_low_confidence = False
             self._prev_flight_blocked = False
-            self._cycles.clear()
-        if target in ("strain", "all"):
-            self._strain_buffer.clear()
 
     def process(
         self,
@@ -80,33 +60,23 @@ class FatigueTracker:
         stress_field_pa: np.ndarray,
         expected_strain: np.ndarray,
         twin_state: TwinState,
-        matrices,
-        single_strain: float,
     ) -> None:
-        """Process one frame of data through fatigue analysis.
+        """Process one frame of data through per-node fatigue analysis.
 
         Updates twin_state with damage, confidence, node_damages,
-        cycles_histogram, and notifications.
+        and notifications.
         """
-        self._strain_buffer.append(single_strain)
         fatigue_cfg = self.config
         sn_curve = sn_curve_for_material(fatigue_cfg.material)
 
         # Confidence
         update_confidence(self.state, strain_vector, expected_strain, config=fatigue_cfg)
 
-        # Per-node fatigue
+        # Per-node fatigue using FEA stress field
         stress_mpa = stress_field_pa / 1e6
         accumulate_damage_at_nodes(stress_mpa, self.state, sn_curve=sn_curve, config=fatigue_cfg)
 
         twin_state.node_damages = dict(self.state.node_damages)
-
-        # Global fatigue
-        _, new_cycles = accumulate_damage(
-            self._strain_buffer, self.state, sn_curve=sn_curve, config=fatigue_cfg,
-        )
-        self._cycles.extend(new_cycles)
-        self._bin_cycles(new_cycles, fatigue_cfg.rainflow_range_bin_width, twin_state)
 
         # Damage tracking
         self._update_damage_metrics(twin_state)
@@ -116,12 +86,6 @@ class FatigueTracker:
 
         # Notifications
         self._check_notifications(twin_state)
-
-    def _bin_cycles(self, new_cycles, bin_width: float, twin_state: TwinState) -> None:
-        for r, c in new_cycles:
-            idx = int(r / bin_width)
-            key = round((idx + 0.5) * bin_width, 1)
-            twin_state.cycles_histogram[key] = twin_state.cycles_histogram.get(key, 0.0) + c
 
     def _update_damage_metrics(self, twin_state: TwinState) -> None:
         if self.state.node_damages:

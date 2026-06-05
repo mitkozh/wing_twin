@@ -69,13 +69,10 @@ class DigitalTwinEngine:
                 initial_fatigue = FatigueState.from_dict(engine_snapshot.fatigue)
             if engine_snapshot.life:
                 initial_life = LifePredictionState.from_dict(engine_snapshot.life)
-            if engine_snapshot.strain_buffer is not None:
-                tracker_snap = {
-                    "strain_buffer": engine_snapshot.strain_buffer,
-                    "cycles": engine_snapshot.tracker_cycles or [],
-                    "prev_low_confidence": engine_snapshot.prev_low_confidence,
-                    "prev_flight_blocked": engine_snapshot.prev_flight_blocked,
-                }
+            tracker_snap = {
+                "prev_low_confidence": engine_snapshot.prev_low_confidence,
+                "prev_flight_blocked": engine_snapshot.prev_flight_blocked,
+            }
             if engine_snapshot.dynamics:
                 self.dynamics.from_dict(engine_snapshot.dynamics)
 
@@ -86,7 +83,6 @@ class DigitalTwinEngine:
             tracker_snapshot=tracker_snap,
         )
 
-        self.config.fatigue.strain_to_stress = self.config.calibration.strain_to_stress
         self.state.yield_point_pa = self.config.yield_point
         self.state.stress_limit_pa = self.config.stress_limit
         self.state.max_angle_deg = self.config.max_aoa
@@ -185,13 +181,6 @@ class DigitalTwinEngine:
         return self.fatigue.life_prediction
 
     @property
-    def cycles(self) -> list:
-        return self.fatigue.cycles
-
-    def clear_cycles(self) -> None:
-        self.fatigue.clear_cycles()
-
-    @property
     def num_gauges(self) -> int:
         return self._num_gauges
 
@@ -266,8 +255,6 @@ class DigitalTwinEngine:
                 "time_elapsed": self._time_elapsed,
             },
             dynamics=self.dynamics.to_dict(),
-            strain_buffer=ts["strain_buffer"],
-            tracker_cycles=ts["cycles"],
             prev_low_confidence=ts["prev_low_confidence"],
             prev_flight_blocked=ts["prev_flight_blocked"],
             wind={
@@ -667,8 +654,6 @@ class DigitalTwinEngine:
                 stress_field_pa=stress,
                 expected_strain=expected_strain,
                 twin_state=self.state,
-                matrices=self._matrices,
-                single_strain=reading.strain,
             )
         else:
             nd = self.fatigue.state.node_damages
