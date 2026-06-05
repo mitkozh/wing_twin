@@ -734,8 +734,10 @@ class DigitalTwinEngine:
                 F_total_current = F_aero_current
                 F_total_target = F_aero_target
 
-                min_total = max(0.01 * F_total_target, 1e-9)
-                stress_scale = F_total_target / max(F_total_current, min_total)
+                min_total = max(0.01 * abs(F_total_target), 1e-9)
+                denom_mag = max(abs(F_total_current), min_total)
+                denom = math.copysign(denom_mag, F_total_current) if F_total_current != 0 else denom_mag
+                stress_scale = F_total_target / denom
                 F_predicted = F_current * stress_scale
                 stress_predicted = compute_stress_field(self._matrices.S, F_predicted)
                 max_stress_pred = float(np.max(np.abs(stress_predicted)))
