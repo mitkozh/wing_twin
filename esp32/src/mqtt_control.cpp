@@ -57,12 +57,12 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     }
 
     // --- 1. Stepper position ---
-    if (doc.containsKey("position")) {
+    /*if (doc.containsKey("position")) {
         long pos = doc["position"].as<long>();
         stepper_set_target(pos);
         Serial.print("[MQTT] Stepper target -> ");
         Serial.println(pos);
-    }
+    }*/
 
     // --- 2. LED colors ---
     if (doc.containsKey("leds")) {
