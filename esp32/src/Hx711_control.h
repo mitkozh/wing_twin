@@ -18,8 +18,8 @@ const int HX711_NUM_CHANNELS = 10;
 // =====================================================
 
 struct Hx711Calibration {
-    float scale[HX711_NUM_ACTIVE];      // raw-to-strain scale factor
-    float offset[HX711_NUM_ACTIVE];     // tare offset (compensated raw)
+    float scale[HX711_NUM_ACTIVE];      // per-channel scale (default 1.0 = ADC counts)
+    float offset[HX711_NUM_ACTIVE];     // tare offset (compensated ADC counts)
     bool  valid;                        // true if calibration has been saved
 };
 

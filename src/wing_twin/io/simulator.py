@@ -22,6 +22,10 @@ class SimulatorState:
 
 class SimulatorSource(DataSource):
 
+    @property
+    def provides_strain(self) -> bool:
+        return True
+
     def __init__(
         self,
         config: Optional[SimulationConfig] = None,

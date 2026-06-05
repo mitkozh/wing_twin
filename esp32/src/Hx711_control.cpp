@@ -33,6 +33,9 @@ const int DOUT_TIP_90      = 35;   // input-only — needs external 10kΩ pull-u
 
 const int DOUT_DUMMY_GAUGE = 36;   // input-only — needs external 10kΩ pull-up
 
+// Saturation limits for 24-bit two's complement HX711 readings
+const long HX711_SATURATION_POS =  8388607;   //  0x7FFFFF — positive saturation
+const long HX711_SATURATION_NEG = -8388608;   //  0xFF800000 after sign extension — negative saturation
 
 // =====================================================
 // [KEEP IN Hx711_control.cpp]
@@ -82,7 +85,13 @@ const char* CHANNEL_NAMES[HX711_NUM_CHANNELS] = {
 
 
 // =====================================================
-// raw / compensated / strain values
+// raw / compensated / published values
+//
+// rawValues:     HX711 raw 24-bit ADC count per channel
+// compensatedRaw: temperature-compensated (raw - dummy)
+// strainValues:  (compensated - offset) * scale
+//                With default scale=1.0 this is compensated
+//                ADC counts; Python does the ADC->strain conversion.
 // =====================================================
 
 long rawValues[HX711_NUM_CHANNELS] = {0};
@@ -328,6 +337,16 @@ bool hx711_read_all_channels() {
     while (!hx711_ready_all()) {
         if (millis() - startTime > 1000) {
             Serial.println("HX711 read timeout.");
+            Serial.print("  Not ready: ");
+            bool first = true;
+            for (int i = 0; i < HX711_NUM_CHANNELS; i++) {
+                if (digitalRead(HX711_DT_PINS[i]) != LOW) {
+                    if (!first) Serial.print(", ");
+                    Serial.print(CHANNEL_NAMES[i]);
+                    first = false;
+                }
+            }
+            Serial.println();
             s_readErrorCount++;
             return false;
         }
@@ -352,6 +371,17 @@ bool hx711_read_all_channels() {
         }
     }
 
+    // Detect ADC saturation on raw readings
+    for (int i = 0; i < HX711_NUM_CHANNELS; i++) {
+        if (rawValues[i] == HX711_SATURATION_POS) {
+            Serial.print("[HX711] SATURATED (+) raw: ");
+            Serial.println(CHANNEL_NAMES[i]);
+        } else if (rawValues[i] == HX711_SATURATION_NEG) {
+            Serial.print("[HX711] SATURATED (-) raw: ");
+            Serial.println(CHANNEL_NAMES[i]);
+        }
+    }
+
     // Apply dummy compensation and calibration
     hx711_compensate_dummy();
 
@@ -370,10 +400,18 @@ void hx711_reset_read_error_count() {
 
 
 // =====================================================
-// Dummy compensation + per-channel calibration
+// Dummy compensation + per-channel tare
 //
 // compensated = active channel raw - dummy gauge raw
-// strainValue = (compensated - offset) * scale
+// published_value = (compensated - offset) * scale
+//
+// NOTE: With default scale=1.0, the published "strain_vector"
+// values are compensated ADC counts (not actual strain).
+// The ADC-to-strain conversion (ε = count * 9.31e-10) is
+// done on the Python side via CalibrationConfig.adc_to_strain_scale.
+// Set scale[i] to non-1.0 ONLY if you want the ESP32 to do
+// the conversion itself — but then set Python's
+// adc_to_strain_scale to 1.0 to avoid double conversion.
 // =====================================================
 
 void hx711_compensate_dummy() {
@@ -486,6 +524,8 @@ void hx711_build_sensor_payload(char* buffer, size_t bufferSize) {
 
     int len = 0;
 
+    // Published values are compensated ADC counts (scale=1.0 by default).
+    // Python side converts to strain via CalibrationConfig.adc_to_strain_scale.
     len += snprintf(buffer + len, bufferSize - len,
                     "{\"strain_vector\":[");
 

@@ -626,13 +626,14 @@ class DigitalTwinEngine:
             )
 
         cal = self.config.calibration
-        if cal.sensor_zero_offsets:
-            offsets = np.array(cal.sensor_zero_offsets[:len(strain_vec)])
-            strain_vec -= offsets
-        if cal.sensor_gain_factors:
-            gains = np.array(cal.sensor_gain_factors[:len(strain_vec)])
-            strain_vec *= gains
-        strain_vec *= cal.adc_to_strain_scale
+        if not self._data_source.provides_strain:
+            if cal.sensor_zero_offsets:
+                offsets = np.array(cal.sensor_zero_offsets[:len(strain_vec)])
+                strain_vec -= offsets
+            if cal.sensor_gain_factors:
+                gains = np.array(cal.sensor_gain_factors[:len(strain_vec)])
+                strain_vec *= gains
+            strain_vec *= cal.adc_to_strain_scale
 
         self.state.strain_vector = strain_vec.tolist()
 

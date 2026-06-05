@@ -36,3 +36,8 @@ class DataSource(ABC):
     @abstractmethod
     def is_connected(self) -> bool:
         pass
+
+    @property
+    def provides_strain(self) -> bool:
+        """Whether this source already provides unitless strain values."""
+        return False

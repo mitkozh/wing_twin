@@ -78,16 +78,16 @@ void loop() {
         if (!readOk) {
             Serial.print("[HX711] Read error count: ");
             Serial.println(hx711_get_read_error_count());
-
-            if (hx711_get_read_error_count() > 5) {
-                Serial.println("[HX711] Too many consecutive errors — skipping publish");
-            }
         }
 
         hx711_print_latest_values();
 
-        char payload[1000];
-        hx711_build_sensor_payload(payload, sizeof(payload));
-        mqtt_publish_payload(payload);
+        if (readOk || hx711_get_read_error_count() <= 5) {
+            char payload[1000];
+            hx711_build_sensor_payload(payload, sizeof(payload));
+            mqtt_publish_payload(payload);
+        } else {
+            Serial.println("[HX711] Too many consecutive errors — skipping publish");
+        }
     }
 }

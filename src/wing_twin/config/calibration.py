@@ -12,9 +12,23 @@ from wing_twin.config.types import check_ge, check_gt
 @dataclass
 class CalibrationConfig:
     # ADC -> strain conversion
-    adc_to_strain_scale: float = 1.0
+    #
+    # Converts HX711 compensated ADC counts to unitless strain.
+    # Calculation assumes:
+    #   - Quarter-bridge: 1 active strain gauge + 3 completion resistors
+    #   - HX711 gain = 128 (set by 25 SCK pulses in firmware)
+    #   - Gauge factor GF = 2.0 (standard cheap metal foil)
+    #   - V_excitation = AVDD (E+ tracks AVDD on typical HX711 modules)
+    #
+    #   \epsilon = ADC_count * 4 / (GAIN * 2^24 * GF)
+    #     = ADC_count * 4 / (128 * 16_777_216 * 2.0)
+    #     = ADC_count / 1_073_741_824
+    #     \approx ADC_count * 9.31e-10
+    #
+    # Re-calibrate empirically by applying a known strain and adjusting.
+    adc_to_strain_scale: float = 9.313225746154785e-10
 
-    # Per-gauge zero offsets and gain trims
+    # Per-gauge zero offsets and gain trims (applied BEFORE adc_to_strain_scale)
     sensor_zero_offsets: tuple[float, ...] = field(default_factory=tuple)
     sensor_gain_factors: tuple[float, ...] = field(default_factory=tuple)
 
