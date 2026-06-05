@@ -168,3 +168,5 @@ class MqttPublisher(MqttClientBase):
     def publish(self, topic: str, payload: dict) -> None:
         if self._client and self._connected:
             self._client.publish(topic, json.dumps(payload))
+        else:
+            logger.warning("MQTT not connected - dropping publish to %s", topic)

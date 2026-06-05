@@ -10,7 +10,7 @@ const int ENABLE_PIN  = 23;
 // =====================================================
 // Stepper parameters
 // =====================================================
-const unsigned long MAX_STEP_RATE_US = 200;       // 5 kHz max step rate
+const unsigned long MAX_STEP_RATE_US = 1000;      // 1 kHz max step rate
 const unsigned long MIN_STEP_RATE_US = 2000;      // 500 Hz min step rate
 const unsigned long ACCEL_STEPS      = 200;       // steps to accelerate/decelerate
 const long          POSITION_TOLERANCE = 5;       // acceptable error (steps)

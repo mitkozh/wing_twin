@@ -130,6 +130,9 @@ class EngineCommandHandler:
         if steps is None:
             return {"cmd": "error", "message": "Missing 'steps'"}
         steps = int(steps)
+        max_steps = self._engine.state.max_stepper_steps
+        if steps < 0 or steps > max_steps:
+            return {"cmd": "error", "message": f"Steps out of range [0, {max_steps}]"}
         speed = cmd.get("speed", float(self._engine.state.target_airspeed))
         self._engine.state.stepper_position = steps
         self._engine.state.target_airspeed = speed

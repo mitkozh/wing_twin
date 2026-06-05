@@ -1,4 +1,5 @@
 #include "Hx711_control.h"
+// #include "Stepper_control.h"
 #include <LittleFS.h>
 
 // =====================================================
@@ -505,6 +506,12 @@ void hx711_build_sensor_payload(char* buffer, size_t bufferSize) {
                         (i < HX711_NUM_ACTIVE - 1) ? "," : "");
     }
 
+//     len += snprintf(buffer + len, bufferSize - len,
+//                     "],\"dummy_raw\":%ld,\"stepper_position\":%ld,\"timestamp\":%lu}",
+//                     rawValues[HX711_NUM_CHANNELS - 1],
+//                     stepper_get_current_position(),
+//                     millis());
+// }
     len += snprintf(buffer + len, bufferSize - len,
                     "],\"dummy_raw\":%ld,\"timestamp\":%lu}",
                     rawValues[HX711_NUM_CHANNELS - 1],
