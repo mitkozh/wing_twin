@@ -21,7 +21,7 @@ const int LED1_STATUS_RED   = 4;   // D4 / red
 const int LED2_STATUS_RED   = 5;   // D5 / GPIO5, red channel
 const int LED2_STATUS_GREEN = 19;   // D19 / GPIO19, green channel
 
-const int LED3_STATUS_GREEN = 13;   // D13 / green
+const int LED3_STATUS_GREEN = 17;   // D13 / green**just change to 17 for test on june 5th
 const int LED3_STATUS_RED   = 22;   // D22 / GPIO22, red feedback LED
 
 
@@ -166,9 +166,9 @@ void rgb_init() {
 
     all_leds_off();
 
-    set_single_led_internal(1, "green");
-    set_single_led_internal(2, "green");
-    set_single_led_internal(3, "green");
+    // set_single_led_internal(1, "green");
+    // set_single_led_internal(2, "green");
+    // set_single_led_internal(3, "green");
 }
 
 

@@ -81,7 +81,6 @@ void loop() {
 
             if (hx711_get_read_error_count() > 5) {
                 Serial.println("[HX711] Too many consecutive errors — skipping publish");
-                continue;
             }
         }
 
