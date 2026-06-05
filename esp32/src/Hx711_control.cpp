@@ -1,36 +1,24 @@
 #include "Hx711_control.h"
+#include <LittleFS.h>
 
 // =====================================================
-// [KEEP IN Hx711_control.cpp]
-// 正式保留：HX711 shared SCK + 10 independent DT pins
+// HX711 shared SCK + 10 independent DT pins
 //
-// 设计逻辑：
-// - 10 个 HX711 共用一个 SCK
-// - 每个 HX711 有自己的 DT / DOUT pin
-// - 9 个 active channels 对应 wing root/middle/tip + 0/45/90
-// - 第 10 个 channel 是 dummy gauge，用于 temperature compensation
+// 10 HX711 modules share one SCK, each has its own DT pin.
+// 9 active channels = wing root/middle/tip × (0°/45°/90°)
+// Channel 10 = dummy gauge for temperature compensation.
 // =====================================================
 
-
-// =====================================================
-// [COPY / MODIFY HERE]
-// 这里是你之后最需要根据实际接线修改的地方。
-// SCK 必须是可输出 GPIO，不能用 GPIO34/35/36/39。
-// =====================================================
-
-const int HX711_SCK = 18;  // shared SCK / CLK pin, D18 / GPIO18
+const int HX711_SCK = 18;  // shared SCK / CLK pin
 
 
-// =====================================================
-// [COPY / MODIFY HERE]
-// 10 个 DT / DOUT pins
 //
-// 注意：下面 pin 是模板，你需要根据实际接线修改。
-// 不要和 RGB、MQTT 无关，但不要和 LED pin 冲突。
-// 如果某个 pin 已经被 RGB 用了，就换掉。
-// =====================================================
-
-const int DOUT_ROOT_0      = 4;
+// NOTE: GPIO 34, 35, 36 are input-only pins.
+// They have NO internal pullup — you MUST add external 10kΩ
+// pull-up resistors on the hardware for TIP_45, TIP_90, DUMMY.
+// Without them these channels may never show as "ready".
+//
+const int DOUT_ROOT_0      = 15;   // moved from GPIO4 (was conflicting with LED1_RED)
 const int DOUT_ROOT_45     = 25;
 const int DOUT_ROOT_90     = 26;
 
@@ -39,10 +27,10 @@ const int DOUT_MIDDLE_45   = 14;
 const int DOUT_MIDDLE_90   = 32;
 
 const int DOUT_TIP_0       = 33;
-const int DOUT_TIP_45      = 34;
-const int DOUT_TIP_90      = 35;
+const int DOUT_TIP_45      = 34;   // input-only — needs external 10kΩ pull-up
+const int DOUT_TIP_90      = 35;   // input-only — needs external 10kΩ pull-up
 
-const int DOUT_DUMMY_GAUGE = 36;
+const int DOUT_DUMMY_GAUGE = 36;   // input-only — needs external 10kΩ pull-up
 
 
 // =====================================================
@@ -93,26 +81,139 @@ const char* CHANNEL_NAMES[HX711_NUM_CHANNELS] = {
 
 
 // =====================================================
-// [KEEP IN Hx711_control.cpp]
-// 正式保留：raw / compensated / strain values
+// raw / compensated / strain values
 // =====================================================
 
 long rawValues[HX711_NUM_CHANNELS] = {0};
-
 long compensatedRaw[HX711_NUM_ACTIVE] = {0};
-
 float strainValues[HX711_NUM_ACTIVE] = {0.0};
 
-float strainOffset[HX711_NUM_ACTIVE] = {0.0};
+// Calibration (loaded from / saved to LittleFS)
+Hx711Calibration g_hx711_cal = {};
 
-// 当前先用 raw count 作为 strain value。
-// 之后标定后改这个 scale。
-float strainScale = 1.0;
+// Error counter — incremented on read failures, cleared on successful read
+static int s_readErrorCount = 0;
+
+// =====================================================
+// LittleFS helpers for calibration persistence
+// =====================================================
+
+static const char* CAL_FILE = "/hx711_cal.txt";
+
+bool hx711_load_calibration(Hx711Calibration &cal) {
+    if (!LittleFS.begin(false)) {
+        Serial.println("[HX711] LittleFS mount failed, cannot load calibration");
+        cal.valid = false;
+        return false;
+    }
+
+    if (!LittleFS.exists(CAL_FILE)) {
+        Serial.println("[HX711] No saved calibration found");
+        cal.valid = false;
+        LittleFS.end();
+        return false;
+    }
+
+    File f = LittleFS.open(CAL_FILE, "r");
+    if (!f) {
+        Serial.println("[HX711] Failed to open calibration file");
+        cal.valid = false;
+        LittleFS.end();
+        return false;
+    }
+
+    // Text format: one line per active channel:  scale,offset
+    int idx = 0;
+    while (f.available() && idx < HX711_NUM_ACTIVE) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.length() == 0) continue;
+
+        int comma = line.indexOf(',');
+        if (comma <= 0) continue;
+
+        float s = line.substring(0, comma).toFloat();
+        float o = line.substring(comma + 1).toFloat();
+        cal.scale[idx] = s;
+        cal.offset[idx] = o;
+        idx++;
+    }
+    f.close();
+    LittleFS.end();
+
+    cal.valid = (idx == HX711_NUM_ACTIVE);
+    if (cal.valid) {
+        Serial.println("[HX711] Calibration loaded from LittleFS");
+    } else {
+        Serial.println("[HX711] Calibration file incomplete (" + String(idx) + "/" + String(HX711_NUM_ACTIVE) + " entries), ignoring");
+    }
+    return cal.valid;
+}
+
+bool hx711_save_calibration(const Hx711Calibration &cal) {
+    if (!LittleFS.begin(false)) {
+        LittleFS.format();
+        if (!LittleFS.begin(false)) {
+            Serial.println("[HX711] LittleFS mount failed, cannot save calibration");
+            return false;
+        }
+    }
+
+    File f = LittleFS.open(CAL_FILE, "w");
+    if (!f) {
+        Serial.println("[HX711] Failed to open calibration file for writing");
+        LittleFS.end();
+        return false;
+    }
+
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        f.print(cal.scale[i], 6);
+        f.print(",");
+        f.println(cal.offset[i], 2);
+    }
+    f.close();
+    LittleFS.end();
+    Serial.println("[HX711] Calibration saved to LittleFS");
+    return true;
+}
+
+bool hx711_auto_tare(Hx711Calibration &cal) {
+    Serial.println("[HX711] Auto-taring active channels (10 samples)...");
+    const int TARE_SAMPLES = 10;
+    float accum[HX711_NUM_ACTIVE] = {0};
+    int validSamples = 0;
+
+    for (int s = 0; s < TARE_SAMPLES; s++) {
+        if (hx711_read_all_channels()) {
+            long dummy = rawValues[HX711_NUM_CHANNELS - 1];
+            for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+                accum[i] += (float)(rawValues[i] - dummy);
+            }
+            validSamples++;
+        }
+        delay(50);
+    }
+
+    if (validSamples == 0) {
+        Serial.println("[HX711] Tare failed — no valid samples");
+        return false;
+    }
+
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        cal.offset[i] = accum[i] / validSamples;
+        if (cal.scale[i] <= 0.0f) {
+            cal.scale[i] = 1.0f;   // default scale if never set
+        }
+    }
+
+    cal.valid = true;
+    Serial.println("[HX711] Tare complete");
+    return true;
+}
 
 
 // =====================================================
-// [KEEP IN Hx711_control.cpp]
-// 正式保留：初始化 HX711 pins
+// Initialize HX711 pins
 // =====================================================
 
 void hx711_init() {
@@ -122,57 +223,50 @@ void hx711_init() {
     digitalWrite(HX711_SCK, LOW);
 
     for (int i = 0; i < HX711_NUM_CHANNELS; i++) {
-        pinMode(HX711_DT_PINS[i], INPUT_PULLUP);
+        // GPIO 34, 35, 36 are input-only — cannot use INPUT_PULLUP
+        int p = HX711_DT_PINS[i];
+        if (p == 34 || p == 35 || p == 36) {
+            pinMode(p, INPUT);
+            Serial.print("[HX711] Channel ");
+            Serial.print(CHANNEL_NAMES[i]);
+            Serial.println(" set to INPUT (no pullup — external 10kΩ required)");
+        } else {
+            pinMode(p, INPUT_PULLUP);
+        }
     }
 
     hx711_print_pin_info();
+
+    // Load saved calibration if available
+    if (hx711_load_calibration(g_hx711_cal)) {
+        Serial.println("[HX711] Using saved calibration");
+    } else {
+        Serial.println("[HX711] No saved calibration — will use defaults (scale=1.0)");
+        for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+            g_hx711_cal.scale[i] = 1.0f;
+            g_hx711_cal.offset[i] = 0.0f;
+        }
+        g_hx711_cal.valid = false;
+    }
 
     Serial.println("Waiting for HX711 array to become ready...");
 
     unsigned long startTime = millis();
     while (!hx711_ready_all()) {
-        Serial.println("HX711 array not ready. Check DT/SCK/VCC/GND wiring.");
-        delay(500);
-
-        // 防止 final demo 永久卡死
         if (millis() - startTime > 10000) {
-            Serial.println("HX711 init timeout. Continue anyway for debugging.");
+            Serial.println("HX711 init timeout. Check DT/SCK/VCC/GND wiring.");
+            Serial.println("Continue anyway — partial data may be available.");
             return;
         }
+        delay(200);
     }
 
-    Serial.println("HX711 array ready.");
+    Serial.println("HX711 array ready (all channels).");
 
-    // Tare / zero offset
-    Serial.println("Taring active channels...");
-    const int TARE_SAMPLES = 10;
-
-    long accum[HX711_NUM_ACTIVE] = {0};
-    int validSamples = 0;
-
-    for (int s = 0; s < TARE_SAMPLES; s++) {
-        if (hx711_read_all_channels()) {
-            long dummy = rawValues[HX711_NUM_CHANNELS - 1];
-
-            for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
-                accum[i] += rawValues[i] - dummy;
-            }
-
-            validSamples++;
-        }
-
-        delay(50);
-    }
-
-    if (validSamples > 0) {
-        for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
-            strainOffset[i] = (float)accum[i] / validSamples;
-        }
-
-        Serial.println("Tare complete.");
-    }
-    else {
-        Serial.println("Tare failed. No valid HX711 samples.");
+    // Perform tare if no saved calibration exists
+    if (!g_hx711_cal.valid) {
+        hx711_auto_tare(g_hx711_cal);
+        hx711_save_calibration(g_hx711_cal);
     }
 }
 
@@ -220,14 +314,11 @@ void hx711_pulse_sck_read(int bitPosition) {
 
 
 // =====================================================
-// [KEEP IN Hx711_control.cpp]
-// 正式保留：一次性读取 10 个 HX711
+// Read all 10 HX711 channels simultaneously via shared SCK
 //
-// 为什么不用 10 个 HX711 library object？
-// 因为你是 shared SCK。
-// 如果逐个 scale.read()，读第一个时会把所有 HX711 都 clock 掉，
-// 其他 channel 的数据会被破坏。
-// 所以 final 版本必须同时读取所有 DT。
+// Why not 10 HX711 library objects? Because the SCK is shared.
+// Using scale.read() on one would clock all of them,
+// corrupting the other channels' data.
 // =====================================================
 
 bool hx711_read_all_channels() {
@@ -236,6 +327,7 @@ bool hx711_read_all_channels() {
     while (!hx711_ready_all()) {
         if (millis() - startTime > 1000) {
             Serial.println("HX711 read timeout.");
+            s_readErrorCount++;
             return false;
         }
     }
@@ -259,18 +351,28 @@ bool hx711_read_all_channels() {
         }
     }
 
+    // Apply dummy compensation and calibration
     hx711_compensate_dummy();
 
+    // Reset error count on successful read
+    s_readErrorCount = 0;
     return true;
+}
+
+int hx711_get_read_error_count() {
+    return s_readErrorCount;
+}
+
+void hx711_reset_read_error_count() {
+    s_readErrorCount = 0;
 }
 
 
 // =====================================================
-// [KEEP IN Hx711_control.cpp]
-// 正式保留：dummy compensation
+// Dummy compensation + per-channel calibration
 //
 // compensated = active channel raw - dummy gauge raw
-// strainValue = (compensated - zero offset) * scale
+// strainValue = (compensated - offset) * scale
 // =====================================================
 
 void hx711_compensate_dummy() {
@@ -278,7 +380,7 @@ void hx711_compensate_dummy() {
 
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
         compensatedRaw[i] = rawValues[i] - dummy;
-        strainValues[i] = (compensatedRaw[i] - strainOffset[i]) * strainScale;
+        strainValues[i] = (compensatedRaw[i] - g_hx711_cal.offset[i]) * g_hx711_cal.scale[i];
     }
 }
 

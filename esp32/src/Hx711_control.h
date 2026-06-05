@@ -4,8 +4,7 @@
 #include <Arduino.h>
 
 // =====================================================
-// [KEEP IN Hx711_control.h]
-// 正式保留：HX711 channel 数量定义
+// HX711 channel count
 // 9 active strain channels + 1 dummy gauge
 // =====================================================
 
@@ -14,8 +13,23 @@ const int HX711_NUM_CHANNELS = 10;
 
 
 // =====================================================
-// [KEEP IN Hx711_control.h]
-// 正式保留：HX711 模块对 main.cpp 暴露的函数
+// Calibration data per active channel
+// Stored in LittleFS so it survives reboots
+// =====================================================
+
+struct Hx711Calibration {
+    float scale[HX711_NUM_ACTIVE];      // raw-to-strain scale factor
+    float offset[HX711_NUM_ACTIVE];     // tare offset (compensated raw)
+    bool  valid;                        // true if calibration has been saved
+};
+
+bool hx711_load_calibration(Hx711Calibration &cal);
+bool hx711_save_calibration(const Hx711Calibration &cal);
+bool hx711_auto_tare(Hx711Calibration &cal);
+
+
+// =====================================================
+// Public functions
 // =====================================================
 
 void hx711_init();
@@ -38,15 +52,9 @@ void hx711_print_pin_info();
 
 void hx711_print_latest_values();
 
-
-// =====================================================
-// [KEEP IN Hx711_control.h]
-// 正式保留：给 MQTT final demo 使用
-//
-// final 里可以用这个函数把 9 个 active channels
-// 打包成 JSON payload，然后通过 MQTT 发出去。
-// =====================================================
-
 void hx711_build_sensor_payload(char* buffer, size_t bufferSize);
+
+int  hx711_get_read_error_count();
+void hx711_reset_read_error_count();
 
 #endif

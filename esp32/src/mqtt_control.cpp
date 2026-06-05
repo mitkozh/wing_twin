@@ -2,206 +2,272 @@
 
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 
 #include "secrets.h"
 #include "RGB_control.h"
+#include "Stepper_control.h"
 
 // =====================================================
-// [KEEP IN mqtt_control.cpp]
-// 正式保留：MQTT topics
-//
-// ESP32 publish sensor data to PUBLISH_TOPIC
-// ESP32 subscribe server command from SUBSCRIBE_TOPIC
+// MQTT topics
 // =====================================================
-
-const char* PUBLISH_TOPIC = "wing/sensors";
+const char* PUBLISH_TOPIC   = "wing/sensors";
 const char* SUBSCRIBE_TOPIC = "wing/control";
 
-
 // =====================================================
-// [KEEP IN mqtt_control.cpp]
-// 正式保留：WiFi and MQTT client objects
+// WiFi / MQTT client objects
 // =====================================================
-
-WiFiClient espClient;
+WiFiClient   espClient;
 PubSubClient mqttClient(espClient);
 
+// =====================================================
+// Non-blocking connection state
+// =====================================================
+static bool             s_wifiConnected   = false;
+static bool             s_mqttConnected   = false;
+static unsigned long    s_lastConnectAttempt = 0;
+static unsigned int     s_connectRetryMs  = 2000;      // starts at 2s, doubles on failure
+static const unsigned int MAX_RETRY_MS    = 60000;     // caps at 60s
+static const unsigned int WIFI_TIMEOUT_MS = 15000;     // give up on WiFi after 15s
 
 // =====================================================
-// [KEEP IN mqtt_control.cpp]
-// 正式保留：MQTT receive part
+// JSON parsing for incoming wing/control messages
 //
-// 当电脑/server 发送消息到 wing/control 时，会进入这里。
-//
-// 当前 RGB_control 只接受完整三灯状态指令，例如：
-// 1_green,2_green,3_green
-// 1_red,2_yellow,3_green
-// 1_yellow,2_red,3_red
-//
-// 所以这里不再单独判断 red / green / yellow。
-// MQTT 只负责接收 message，然后交给 RGB_control 解析。
+// Expected format from Python engine:
+//   {"position": 1234, "leds": ["green", "yellow", "red"]}
 // =====================================================
 
 void mqtt_callback(char* topic, byte* payload, unsigned int length) {
-    String message = "";
-
+    // Convert to null-terminated string
+    String jsonStr;
     for (unsigned int i = 0; i < length; i++) {
-        message += (char)payload[i];
+        jsonStr += (char)payload[i];
     }
 
-    message.trim();
-    message.toLowerCase();
+    Serial.print("[MQTT received] ");
+    Serial.println(jsonStr);
 
-    Serial.print("[MQTT received] topic: ");
-    Serial.print(topic);
-    Serial.print(" | message: ");
-    Serial.println(message);
+    // Parse JSON
+    StaticJsonDocument<256> doc;
+    DeserializationError err = deserializeJson(doc, jsonStr);
+    if (err) {
+        Serial.print("[MQTT] JSON parse error: ");
+        Serial.println(err.c_str());
+        return;
+    }
 
-    set_leds(message);
+    // --- 1. Stepper position ---
+    if (doc.containsKey("position")) {
+        long pos = doc["position"].as<long>();
+        stepper_set_target(pos);
+        Serial.print("[MQTT] Stepper target -> ");
+        Serial.println(pos);
+    }
+
+    // --- 2. LED colors ---
+    if (doc.containsKey("leds")) {
+        JsonArray leds = doc["leds"].as<JsonArray>();
+        if (leds.size() == 3) {
+            // Convert ["green","yellow","red"] -> "1_green,2_yellow,3_red"
+            String cmd = "";
+            for (int i = 0; i < 3; i++) {
+                if (i > 0) cmd += ",";
+                cmd += String(i + 1) + "_" + leds[i].as<String>();
+            }
+            cmd.toLowerCase();
+
+            Serial.print("[MQTT] LED command -> ");
+            Serial.println(cmd);
+
+            set_leds(cmd);
+        } else {
+            Serial.print("[MQTT] Expected 3 LED colors, got ");
+            Serial.println(leds.size());
+        }
+    }
 }
 
 
 // =====================================================
-// [KEEP IN mqtt_control.cpp]
-// 正式保留：WiFi connection
+// Non-blocking WiFi connection with timeout
 // =====================================================
 
-void setup_wifi() {
-    Serial.print("Connecting to WiFi: ");
-    Serial.println(WIFI_SSID);
+static void setup_wifi_nonblocking() {
+    static bool s_wifiPending = false;
+    unsigned long now = millis();
 
+    wl_status_t status = WiFi.status();
+
+    // --- Already connected ---
+    if (status == WL_CONNECTED) {
+        if (!s_wifiConnected) {
+            s_wifiConnected = true;
+            s_wifiPending = false;
+            s_connectRetryMs = 2000;
+            Serial.println();
+            Serial.print("[WiFi] Connected, IP: ");
+            Serial.println(WiFi.localIP());
+        }
+        return;
+    }
+
+    // --- Connection lost ---
+    if (s_wifiConnected) {
+        s_wifiConnected = false;
+        s_wifiPending = false;
+        Serial.println("[WiFi] Connection lost");
+    }
+
+    // --- Connection in progress, just wait ---
+    if (status == WL_IDLE_STATUS || status == WL_DISCONNECTED) {
+        // Check for timeout
+        if (s_wifiPending && (now - s_lastConnectAttempt > WIFI_TIMEOUT_MS)) {
+            Serial.println("[WiFi] Timeout — resetting");
+            WiFi.disconnect(true);
+            s_wifiPending = false;
+            s_lastConnectAttempt = now;
+        }
+        return;
+    }
+
+    // --- Connection failed or idle — start a new attempt ---
+    if (now - s_lastConnectAttempt < 2000) {
+        return;   // throttle retries to every 2s
+    }
+
+    Serial.print("[WiFi] Connecting to ");
+    Serial.println(WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-
-    Serial.println();
-    Serial.println("WiFi connected.");
-
-    Serial.print("ESP32 IP: ");
-    Serial.println(WiFi.localIP());
+    s_lastConnectAttempt = now;
+    s_wifiPending = true;
 }
 
 
 // =====================================================
-// [KEEP IN mqtt_control.cpp]
-// 正式保留：MQTT connection / reconnect
-//
-// ESP32 会连接电脑上的 Mosquitto broker。
-// 连接成功后订阅 wing/control，用于接收 server 指令。
+// Non-blocking MQTT reconnect with exponential backoff
 // =====================================================
 
-void mqtt_reconnect() {
-    while (!mqttClient.connected()) {
-        Serial.print("Connecting to MQTT broker ");
-        Serial.print(MQTT_SERVER);
-        Serial.print(":");
-        Serial.println(MQTT_PORT);
+static void mqtt_reconnect_nonblocking() {
+    unsigned long now = millis();
 
-        String clientId = "ESP32-Wing-" + String(random(0xffff), HEX);
+    if (!s_wifiConnected) {
+        return;   // can't connect MQTT without WiFi
+    }
 
-        if (mqttClient.connect(clientId.c_str())) {
-            Serial.println("MQTT connected.");
+    if (mqttClient.connected()) {
+        if (!s_mqttConnected) {
+            s_mqttConnected = true;
+            s_connectRetryMs = 2000;
+            Serial.println("[MQTT] Connected to broker");
 
+            // Re-subscribe on reconnect
             mqttClient.subscribe(SUBSCRIBE_TOPIC);
-
-            Serial.print("Subscribed to: ");
+            Serial.print("[MQTT] Subscribed to ");
             Serial.println(SUBSCRIBE_TOPIC);
         }
-        else {
-            Serial.print("MQTT failed, rc = ");
-            Serial.print(mqttClient.state());
-            Serial.println(". Retry in 2 seconds.");
+        return;
+    }
 
-            delay(2000);
-        }
+    // Connection lost
+    if (s_mqttConnected) {
+        s_mqttConnected = false;
+        Serial.println("[MQTT] Connection lost");
+    }
+
+    // Throttle reconnect attempts
+    if (now - s_lastConnectAttempt < s_connectRetryMs) {
+        return;
+    }
+
+    Serial.print("[MQTT] Reconnecting to ");
+    Serial.print(MQTT_SERVER);
+    Serial.print(":");
+    Serial.println(MQTT_PORT);
+
+    s_lastConnectAttempt = now;
+
+    String clientId = "ESP32-Wing-" + String(random(0xffff), HEX);
+    if (mqttClient.connect(clientId.c_str())) {
+        s_connectRetryMs = 2000;   // reset on success
+        // Will set s_mqttConnected in the next loop() call
+    } else {
+        Serial.print("[MQTT] Failed, rc=");
+        Serial.print(mqttClient.state());
+        Serial.print(", retry in ");
+        Serial.print(s_connectRetryMs);
+        Serial.println("ms");
+
+        // Exponential backoff with cap
+        s_connectRetryMs = min(s_connectRetryMs * 2, MAX_RETRY_MS);
     }
 }
 
 
 // =====================================================
-// [KEEP IN mqtt_control.cpp]
-// 正式保留：MQTT initialization
-//
-// 初始化 WiFi、设置 MQTT broker 地址、绑定 receive callback。
+// Public API
 // =====================================================
 
 void mqtt_init() {
-    setup_wifi();
+    randomSeed(analogRead(0));
 
     mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
     mqttClient.setCallback(mqtt_callback);
+
+    s_lastConnectAttempt = 0;
+    s_connectRetryMs = 2000;
+
+    Serial.println("[MQTT] Initialized");
 }
 
-
-// =====================================================
-// [KEEP IN mqtt_control.cpp]
-// 正式保留：MQTT loop
-//
-// main.cpp 或 mqtt_test.cpp 的 loop() 中必须持续调用。
-// 不调用这个，ESP32 就收不到 wing/control 的指令。
-// =====================================================
 
 void mqtt_loop() {
-    if (!mqttClient.connected()) {
-        mqtt_reconnect();
-    }
+    // Non-blocking WiFi connection
+    setup_wifi_nonblocking();
 
-    mqttClient.loop();
+    // Non-blocking MQTT reconnect
+    mqtt_reconnect_nonblocking();
+
+    // Process incoming messages (only if connected)
+    if (mqttClient.connected()) {
+        mqttClient.loop();
+    }
 }
 
 
-// =====================================================
-// [KEEP IN mqtt_control.cpp]
-// 正式保留：MQTT transfer part
-//
-// 用于 mqtt_test.cpp。
-// ESP32 将 fake sensor data 发送到 wing/sensors。
-// =====================================================
+bool mqtt_is_connected() {
+    return s_wifiConnected && s_mqttConnected;
+}
+
 
 void mqtt_publish_sensor(long raw, long diff, float voltage_mV) {
-    char payload[200];
+    if (!mqttClient.connected()) {
+        return;
+    }
 
+    char payload[200];
     snprintf(payload, sizeof(payload),
              "{\"raw\":%ld,\"diff\":%ld,\"voltage_mV\":%.6f,\"timestamp\":%lu}",
-             raw,
-             diff,
-             voltage_mV,
-             millis());
+             raw, diff, voltage_mV, millis());
 
-    bool ok = mqttClient.publish(PUBLISH_TOPIC, payload);
-
-    if (ok) {
-        Serial.print("[MQTT published sensor] ");
+    if (mqttClient.publish(PUBLISH_TOPIC, payload)) {
+        Serial.print("[MQTT] Published sensor: ");
         Serial.println(payload);
-    }
-    else {
-        Serial.println("[MQTT publish sensor failed]");
     }
 }
 
 
-// =====================================================
-// [KEEP IN mqtt_control.cpp]
-// 正式保留：MQTT transfer part
-//
-// 用于 final demo。
-// Hx711_control.cpp 先构建完整 JSON payload，
-// 然后 main.cpp 调用这个函数发送到 wing/sensors。
-// =====================================================
-
 void mqtt_publish_payload(const char* payload) {
-    bool ok = mqttClient.publish(PUBLISH_TOPIC, payload);
-
-    if (ok) {
-        Serial.print("[MQTT published payload] ");
-        Serial.println(payload);
+    if (!mqttClient.connected()) {
+        Serial.println("[MQTT] Not connected — payload dropped");
+        return;
     }
-    else {
-        Serial.println("[MQTT publish payload failed]");
+
+    if (mqttClient.publish(PUBLISH_TOPIC, payload)) {
+        Serial.print("[MQTT] Published payload: ");
+        Serial.println(payload);
+    } else {
+        Serial.println("[MQTT] Publish failed");
     }
 } 
 
