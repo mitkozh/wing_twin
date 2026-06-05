@@ -300,6 +300,16 @@ bool hx711_ready_all() {
     return true;
 }
 
+bool hx711_ready_active() {
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        if (digitalRead(HX711_DT_PINS[i]) != LOW) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 
 // =====================================================
 // [KEEP IN Hx711_control.cpp]
@@ -334,7 +344,10 @@ void hx711_pulse_sck_read(int bitPosition) {
 bool hx711_read_all_channels() {
     unsigned long startTime = millis();
 
-    while (!hx711_ready_all()) {
+    // Wait for active channels (0..8) to be ready
+    // Dummy gauge (index 9) is optional — missing external pull-up on GPIO 36
+    // should not block the other 9 channels.
+    while (!hx711_ready_active()) {
         if (millis() - startTime > 1000) {
             Serial.println("HX711 read timeout.");
             Serial.print("  Not ready: ");
@@ -349,6 +362,16 @@ bool hx711_read_all_channels() {
             Serial.println();
             s_readErrorCount++;
             return false;
+        }
+    }
+
+    // Check if dummy gauge is also ready
+    bool dummyReady = (digitalRead(HX711_DT_PINS[HX711_NUM_CHANNELS - 1]) == LOW);
+    if (!dummyReady) {
+        static unsigned long lastDummyWarn = 0;
+        if (millis() - lastDummyWarn > 10000) {
+            Serial.println("[HX711] Dummy gauge not ready — compensation skipped (add 10k\u2126 pull-up on GPIO 36)");
+            lastDummyWarn = millis();
         }
     }
 
@@ -380,6 +403,11 @@ bool hx711_read_all_channels() {
             Serial.print("[HX711] SATURATED (-) raw: ");
             Serial.println(CHANNEL_NAMES[i]);
         }
+    }
+
+    // Zero out dummy if it wasn't ready (skip compensation)
+    if (!dummyReady) {
+        rawValues[HX711_NUM_CHANNELS - 1] = 0;
     }
 
     // Apply dummy compensation and calibration

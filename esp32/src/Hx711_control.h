@@ -35,6 +35,7 @@ bool hx711_auto_tare(Hx711Calibration &cal);
 void hx711_init();
 
 bool hx711_ready_all();
+bool hx711_ready_active();
 
 bool hx711_read_all_channels();
 
