@@ -4,7 +4,7 @@
 #include "RGB_control.h"
 #include "Hx711_control.h"
 #include "mqtt_control.h"
-#include "Stepper_control.h"
+// #include "Stepper_control.h"
 
 
 // =====================================================
@@ -38,7 +38,7 @@ void setup() {
     set_leds("1_green,2_green,3_green");
 
     // --- Stepper motor ---
-    stepper_init();
+    // stepper_init();
 
     // --- HX711 strain gauges ---
     hx711_init();
@@ -67,7 +67,7 @@ void loop() {
     mqtt_loop();
 
     // --- 2. Stepper motor (move toward target position) ---
-    stepper_loop();
+    // stepper_loop();
 
     // --- 3. Periodic HX711 read + publish ---
     if (millis() - lastPublishTime >= PUBLISH_INTERVAL) {
