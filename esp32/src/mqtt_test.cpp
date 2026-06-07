@@ -1,7 +1,9 @@
 #include <Arduino.h>
+#include <WiFi.h>
 
 #include "mqtt_control.h"
 #include "RGB_control.h"
+#include "secrets.h"
 
 // =====================================================
 // [TEST ONLY]
@@ -65,6 +67,43 @@ void setup() {
 
     // Initialize WiFi + MQTT
     mqtt_init();
+
+    // --- WiFi Scan: see which networks the ESP32 can see ---
+    Serial.println("\n=== WiFi Scan ===");
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
+    delay(100);
+    int n = WiFi.scanNetworks();
+    Serial.print("Found ");
+    Serial.print(n);
+    Serial.println(" networks:");
+    for (int i = 0; i < n; i++) {
+        Serial.print("  ");
+        Serial.print(i + 1);
+        Serial.print(": ");
+        Serial.print(WiFi.SSID(i));
+        Serial.print(" (");
+        Serial.print(WiFi.RSSI(i));
+        Serial.print(" dBm) ");
+        Serial.println(WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "open" : "secured");
+    }
+    if (n == 0) {
+        Serial.println("  (no networks found - check ESP32 WiFi antenna/range)");
+    }
+    // Check if our target SSID is in the list
+    bool found = false;
+    for (int i = 0; i < n; i++) {
+        if (WiFi.SSID(i) == WIFI_SSID) {
+            found = true;
+            break;
+        }
+    }
+    if (found) {
+        Serial.println(">>> Target SSID 'Canny iphone 8P' IS visible");
+    } else {
+        Serial.println(">>> Target SSID 'Canny iphone 8P' NOT visible - out of range?");
+    }
+    Serial.println("================\n");
 
     Serial.println("MQTT test ready.");
     Serial.println("ESP32 will publish fake sensor data to: wing/sensors");

@@ -153,9 +153,24 @@ bool hx711_load_calibration(Hx711Calibration &cal) {
 
     cal.valid = (idx == HX711_NUM_ACTIVE);
     if (cal.valid) {
+        for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+            if (cal.scale[i] <= 0.0f || cal.offset[i] <= -1.0f) {
+                cal.valid = false;
+                Serial.print("[HX711] Invalid calibration at channel ");
+                Serial.print(i);
+                Serial.print(": scale=");
+                Serial.print(cal.scale[i], 6);
+                Serial.print(", offset=");
+                Serial.println(cal.offset[i], 2);
+                break;
+            }
+        }
+    }
+    if (cal.valid) {
         Serial.println("[HX711] Calibration loaded from LittleFS");
     } else {
-        Serial.println("[HX711] Calibration file incomplete (" + String(idx) + "/" + String(HX711_NUM_ACTIVE) + " entries), ignoring");
+        Serial.println("[HX711] Calibration file invalid — will re-tare");
+        LittleFS.remove(CAL_FILE);
     }
     return cal.valid;
 }
@@ -262,11 +277,17 @@ void hx711_init() {
     Serial.println("Waiting for HX711 array to become ready...");
 
     unsigned long startTime = millis();
-    while (!hx711_ready_all()) {
-        if (millis() - startTime > 10000) {
-            Serial.println("HX711 init timeout. Check DT/SCK/VCC/GND wiring.");
-            Serial.println("Continue anyway — partial data may be available.");
+    unsigned long lastWarnTime = 0;
+    while (!hx711_ready_active()) {
+        if (millis() - startTime > 30000) {
+            Serial.println("HX711 init timeout (active channels 0-8). Proceeding with partial data.");
             return;
+        }
+        if (millis() - lastWarnTime > 5000) {
+            lastWarnTime = millis();
+            Serial.print("[HX711] Waiting for ready... ");
+            Serial.print((millis() - startTime) / 1000);
+            Serial.println("s elapsed");
         }
         delay(200);
     }
@@ -275,8 +296,12 @@ void hx711_init() {
 
     // Perform tare if no saved calibration exists
     if (!g_hx711_cal.valid) {
-        hx711_auto_tare(g_hx711_cal);
-        hx711_save_calibration(g_hx711_cal);
+        bool tareOk = hx711_auto_tare(g_hx711_cal);
+        if (tareOk) {
+            hx711_save_calibration(g_hx711_cal);
+        } else {
+            Serial.println("[HX711] Tare failed — calibration not saved");
+        }
     }
 }
 

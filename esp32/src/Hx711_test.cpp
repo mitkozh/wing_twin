@@ -23,7 +23,7 @@
 // 再把对应 pin 同步到 Hx711_control.cpp 的 channel pin 定义里。
 // =====================================================
 
-const int TEST_HX711_DT  = 35;  
+const int TEST_HX711_DT  = 15;  
 const int TEST_HX711_SCK = 18;  // D27 / GPIO27
 
 

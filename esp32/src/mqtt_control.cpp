@@ -21,14 +21,13 @@ WiFiClient   espClient;
 PubSubClient mqttClient(espClient);
 
 // =====================================================
-// Non-blocking connection state
+// Connection state
 // =====================================================
 static bool             s_wifiConnected   = false;
 static bool             s_mqttConnected   = false;
 static unsigned long    s_lastConnectAttempt = 0;
 static unsigned int     s_connectRetryMs  = 2000;      // starts at 2s, doubles on failure
 static const unsigned int MAX_RETRY_MS    = 60000;     // caps at 60s
-static const unsigned int WIFI_TIMEOUT_MS = 15000;     // give up on WiFi after 15s
 
 // =====================================================
 // JSON parsing for incoming wing/control messages
@@ -89,58 +88,41 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
 
 
 // =====================================================
-// Non-blocking WiFi connection with timeout
+// WiFi Station mode — connects to existing WiFi
+// ESP32 connects to phone hotspot, PC runs Mosquitto
 // =====================================================
 
+static void setup_wifi_sta() {
+    Serial.print("[WiFi] Connecting to ");
+    Serial.println(WIFI_SSID);
+
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
+
 static void setup_wifi_nonblocking() {
-    static bool s_wifiPending = false;
-    unsigned long now = millis();
+    static bool s_connectingStarted = false;
+    if (!s_connectingStarted) {
+        s_connectingStarted = true;
+        setup_wifi_sta();
+        return;
+    }
 
     wl_status_t status = WiFi.status();
-
-    // --- Already connected ---
     if (status == WL_CONNECTED) {
         if (!s_wifiConnected) {
             s_wifiConnected = true;
-            s_wifiPending = false;
-            s_connectRetryMs = 2000;
-            Serial.println();
             Serial.print("[WiFi] Connected, IP: ");
             Serial.println(WiFi.localIP());
+            Serial.println("[WiFi] Run Mosquitto on this PC then restart ESP32");
         }
         return;
     }
 
-    // --- Connection lost ---
     if (s_wifiConnected) {
         s_wifiConnected = false;
-        s_wifiPending = false;
-        Serial.println("[WiFi] Connection lost");
+        Serial.println("[WiFi] Connection lost — reconnecting");
     }
-
-    // --- Connection in progress, just wait ---
-    if (status == WL_IDLE_STATUS || status == WL_DISCONNECTED) {
-        // Check for timeout
-        if (s_wifiPending && (now - s_lastConnectAttempt > WIFI_TIMEOUT_MS)) {
-            Serial.println("[WiFi] Timeout — resetting");
-            WiFi.disconnect(true);
-            s_wifiPending = false;
-            s_lastConnectAttempt = now;
-        }
-        return;
-    }
-
-    // --- Connection failed or idle — start a new attempt ---
-    if (now - s_lastConnectAttempt < 2000) {
-        return;   // throttle retries to every 2s
-    }
-
-    Serial.print("[WiFi] Connecting to ");
-    Serial.println(WIFI_SSID);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    s_lastConnectAttempt = now;
-    s_wifiPending = true;
 }
 
 
