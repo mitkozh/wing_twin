@@ -68,11 +68,11 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     if (doc.containsKey("leds")) {
         JsonArray leds = doc["leds"].as<JsonArray>();
         if (leds.size() == 3) {
-            // Convert ["green","yellow","red"] -> "1_green,2_yellow,3_red"
+            // Reverse index so leds[0](root)->LED3, leds[1](middle)->LED2, leds[2](tip)->LED1 as per Python's needs
             String cmd = "";
             for (int i = 0; i < 3; i++) {
                 if (i > 0) cmd += ",";
-                cmd += String(i + 1) + "_" + leds[i].as<String>();
+                cmd += String(3 - i) + "_" + leds[i].as<String>();
             }
             cmd.toLowerCase();
 
