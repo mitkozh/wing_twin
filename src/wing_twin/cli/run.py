@@ -9,7 +9,7 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
-from ._lifecycle import cancel_task, finalize_recorder, setup_recorder, setup_signal_handler
+from ._lifecycle import cancel_task, finalize_recorder, publish_final_zero, setup_recorder, setup_signal_handler
 
 from wing_twin.config import PROJECT_ROOT, Config
 from wing_twin.engine.engine import DigitalTwinEngine
@@ -70,6 +70,13 @@ async def run_production(
                 logger.error("Engine step failed: %s", e)
                 stepped = False
 
+            reported = mqtt_source.handler.latest_esp32_stepper
+            if reported is not None:
+                engine.state.esp32_reported_position = reported
+            offset = mqtt_source.handler.latest_esp32_home_offset
+            if offset is not None:
+                engine.state.esp32_reported_home_offset = offset
+
             if stepped and recorder is not None:
                 try:
                     recorder.record_frame(engine)
@@ -95,6 +102,10 @@ async def run_production(
         await cancel_task(process_task)
         await cancel_task(ws_task)
         await asyncio.sleep(0.1)
+
+        publish_final_zero(mqtt_publisher, config, engine)
+        await asyncio.sleep(0.05)
+        mqtt_publisher.disconnect()
 
         finalize_recorder(recorder, engine, rec_dir)
         if recorder is not None:
