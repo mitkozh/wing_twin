@@ -24,6 +24,8 @@ void stepper_init(void) {
 }
 
 void stepper_set_target(long steps) {
+    if (steps < STEPPER_MIN_POSITION) steps = STEPPER_MIN_POSITION;
+    if (steps > STEPPER_MAX_POSITION) steps = STEPPER_MAX_POSITION;
     s_target = steps;
     s_stepsTaken = 0;
 }
@@ -77,6 +79,9 @@ void stepper_loop(void) {
         s_position--;
     }
     s_stepsTaken++;
+    if (s_position <= STEPPER_MIN_POSITION || s_position >= STEPPER_MAX_POSITION) {
+        s_target = s_position;
+    }
     digitalWrite(STEP_PIN, HIGH);
     delayMicroseconds(5);
     digitalWrite(STEP_PIN, LOW);
