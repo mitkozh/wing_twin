@@ -1,97 +1,226 @@
 #include <Arduino.h>
-#include "esp_task_wdt.h"
+#include <ArduinoJson.h>
 
-#include "RGB_control.h"
-#include "Hx711_control.h"
-#include "mqtt_control.h"
-// TODO: Uncomment when stepper motor hardware is installed
-// #include "Stepper_control.h"
+#include "pins.h"
+#include "config.h"
+#include "secrets.h"
 
+#include "hardware/rgb.h"
+#include "hardware/hx711.h"
+#include "hardware/stepper.h"
 
-// =====================================================
-// Publish interval — send sensor data every 1 second
-// =====================================================
-unsigned long lastPublishTime = 0;
-const unsigned long PUBLISH_INTERVAL = 1000;
+#include "comms/wifi_mgr.h"
+#include "comms/mqtt.h"
 
-// =====================================================
-// Watchdog timeout — if loop() blocks for 5s, reset
-// =====================================================
-const unsigned long WATCHDOG_TIMEOUT_MS = 5000;
+#include "calibration/zero.h"
+#include "cli/shell.h"
+#include "utils/watchdog.h"
 
+// ---------------------------------------------------------------------------
+// MQTT topics
+// ---------------------------------------------------------------------------
+static const char* PUBLISH_TOPIC   = "wing/sensors";
+static const char* SUBSCRIBE_TOPIC = "wing/control";
 
-// =====================================================
-// [SETUP]
-// =====================================================
+// ---------------------------------------------------------------------------
+// Stepper state tracking
+// ---------------------------------------------------------------------------
+static bool          s_zeroCalibrated = false;
+static unsigned long s_lastMqttMsg    = 0;
+static bool          s_mqttMsgSeen    = false;
 
+// ---------------------------------------------------------------------------
+// MQTT message handler
+// ---------------------------------------------------------------------------
+static void on_mqtt_message(const char* topic, const char* payload) {
+    s_lastMqttMsg = millis();
+    s_mqttMsgSeen = true;
+
+    StaticJsonDocument<256> doc;
+    DeserializationError err = deserializeJson(doc, payload);
+    if (err) {
+        Serial.printf("[MQTT] parse error: %s\n", err.c_str());
+        return;
+    }
+    Serial.printf("[MQTT] << %s\n", payload);
+
+    if (doc.containsKey("position")) {
+        long pos = doc["position"].as<long>();
+        if (pos == 0 && !s_zeroCalibrated) {
+            s_zeroCalibrated = true;
+            zero_run();
+            stepper_reset_position(0);
+        } else if (pos != 0) {
+            s_zeroCalibrated = false;
+            stepper_set_target(pos);
+        } else {
+            stepper_set_target(0);
+        }
+    }
+
+    if (doc.containsKey("leds")) {
+        JsonArray leds = doc["leds"].as<JsonArray>();
+        if (leds.size() == 3 &&
+            leds[0].is<const char*>() &&
+            leds[1].is<const char*>() &&
+            leds[2].is<const char*>()) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "1_%s,2_%s,3_%s",
+                     leds[0].as<const char*>(),
+                     leds[1].as<const char*>(),
+                     leds[2].as<const char*>());
+            rgb_set_all(buf);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sensor data publishing
+// ---------------------------------------------------------------------------
+static void publish_sensor_data(void) {
+    hx711_read_all();
+
+    StaticJsonDocument<512> doc;
+
+    JsonArray strain = doc.createNestedArray("strain_vector");
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++)
+        strain.add(hx711_get_strain(i));
+
+    JsonArray channels = doc.createNestedArray("channels");
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++)
+        channels.add(hx711_get_channel_name(i));
+
+    doc["dummy_raw"]  = hx711_get_raw(9);
+    doc["stepper_position"] = stepper_get_position();
+    doc["home_offset"]      = zero_get_offset();
+    doc["timestamp"]        = millis();
+
+    String out;
+    serializeJson(doc, out);
+    mqtt_publish(PUBLISH_TOPIC, out.c_str());
+}
+
+// ---------------------------------------------------------------------------
+// Shell commands
+// ---------------------------------------------------------------------------
+static void cmd_hx711(int argc, char** argv) {
+    if (argc > 1 && strcmp(argv[1], "tare") == 0) {
+        hx711_tare();
+        hx711_save_calibration();
+    } else if (argc > 1 && strcmp(argv[1], "read") == 0) {
+        hx711_read_all();
+        hx711_print_values();
+    } else {
+        Serial.println("usage: hx711 read|tare");
+    }
+}
+
+static void cmd_stepper_cmd(int argc, char** argv) {
+    if (argc > 2 && strcmp(argv[1], "set") == 0) {
+        stepper_set_target(atol(argv[2]));
+        Serial.printf("stepper target -> %ld\n", atol(argv[2]));
+    } else if (argc > 1 && strcmp(argv[1], "get") == 0) {
+        Serial.printf("position=%ld target=%ld\n", stepper_get_position(), stepper_get_target());
+    } else {
+        Serial.println("usage: stepper set <steps> | get");
+    }
+}
+
+static void cmd_home(int, char**) {
+    s_zeroCalibrated = true;
+    zero_run();
+    stepper_reset_position(0);
+}
+
+static void cmd_leds(int argc, char** argv) {
+    if (argc > 1) {
+        rgb_set_all(argv[1]);
+    } else {
+        Serial.println("usage: leds 1_green,2_yellow,3_red");
+    }
+}
+
+static void cmd_status(int, char**) {
+    Serial.printf("stepper: pos=%ld\n", stepper_get_position());
+    Serial.printf("wifi:    %s\n", wifi_mgr_is_connected() ? "connected" : "disconnected");
+    Serial.printf("mqtt:    %s\n", mqtt_is_connected() ? "connected" : "disconnected");
+    Serial.printf("hx711:   errors=%d\n", hx711_get_error_count());
+    Serial.printf("zero:    offset=%ld calibrated=%d\n", zero_get_offset(), s_zeroCalibrated);
+}
+
+// ---------------------------------------------------------------------------
+// Stepper wait helper (passed to zero calibrator via callbacks)
+// ---------------------------------------------------------------------------
+static void wait_for_stepper(unsigned long timeout_ms) {
+    unsigned long start = millis();
+    while (stepper_is_moving() && millis() - start < timeout_ms) {
+        stepper_loop();
+        delay(1);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
 void setup() {
     Serial.begin(115200);
     delay(500);
+    Serial.println("\n=== Wing Digital Twin Node ===");
 
-    Serial.println();
-    Serial.println("=================================");
-    Serial.println(" ESP32 Wing Digital Twin Node");
-    Serial.println(" HX711 + MQTT + RGB + Stepper");
-    Serial.println("=================================");
-
-    // --- RGB LEDs ---
     rgb_init();
-    set_leds("1_green,2_green,3_green");
-
-    // --- Stepper motor ---
-    // TODO: Uncomment when stepper motor hardware is installed
-    // stepper_init();
-    // stepper_zero_with_feedback();
-
-    // --- HX711 strain gauges ---
     hx711_init();
+    stepper_init();
 
-    // --- WiFi + MQTT ---
-    mqtt_init();
+    wifi_mgr_init();
+    mqtt_init(MQTT_SERVER, MQTT_PORT, SUBSCRIBE_TOPIC);
+    mqtt_set_callback(on_mqtt_message);
 
-    Serial.println("System initialization finished.");
-    print_rgb_pin_info();
-    hx711_print_pin_info();
+    zero_callbacks_t cbs = {
+        hx711_get_strain,
+        stepper_set_target,
+        stepper_get_position,
+        wait_for_stepper
+    };
+    zero_init(cbs);
+    zero_run();
+    stepper_reset_position(0);
+    s_zeroCalibrated = true;
 
-    // Enable hardware watchdog
-    esp_task_wdt_init(WATCHDOG_TIMEOUT_MS / 1000, true);
-    esp_task_wdt_add(NULL);
+    shell_init();
+    shell_register("stepper", "set <steps> | get", cmd_stepper_cmd);
+    shell_register("hx711",   "read | tare",       cmd_hx711);
+    shell_register("home",    "run zero calibration", cmd_home);
+    shell_register("leds",    "<r,g,b>",          cmd_leds);
+    shell_register("status",  "show all states",  cmd_status);
+
+    watchdog_init(WATCHDOG_TIMEOUT_S);
+    rgb_set_all("1_green,2_green,3_green");
+    Serial.println("=== Ready ===");
 }
 
-
-// =====================================================
-// [LOOP]
-// =====================================================
-
+// ---------------------------------------------------------------------------
+// Main loop
+// ---------------------------------------------------------------------------
 void loop() {
-    esp_task_wdt_reset();
-
-    // --- 1. MQTT housekeeping (reconnect + callback processing) ---
+    watchdog_feed();
+    wifi_mgr_loop();
     mqtt_loop();
+    stepper_loop();
+    shell_loop();
 
-    // --- 2. Stepper motor (move toward target position) ---
-    // TODO: Uncomment when stepper motor hardware is installed
-    // stepper_loop();
+    // Auto-zero if no MQTT message for timeout period
+    if (mqtt_is_connected() && s_mqttMsgSeen &&
+        millis() - s_lastMqttMsg > MQTT_POSITION_TIMEOUT_MS &&
+        !stepper_is_moving()) {
+        Serial.println("[MAIN] MQTT timeout — zeroing stepper");
+        stepper_set_target(0);
+        s_lastMqttMsg = millis();
+    }
 
-    // --- 3. Periodic HX711 read + publish ---
-    if (millis() - lastPublishTime >= PUBLISH_INTERVAL) {
-        lastPublishTime = millis();
-
-        bool readOk = hx711_read_all_channels();
-
-        if (!readOk) {
-            Serial.print("[HX711] Read error count: ");
-            Serial.println(hx711_get_read_error_count());
-        }
-
-        hx711_print_latest_values();
-
-        if (readOk || hx711_get_read_error_count() <= 5) {
-            char payload[1000];
-            hx711_build_sensor_payload(payload, sizeof(payload));
-            mqtt_publish_payload(payload);
-        } else {
-            Serial.println("[HX711] Too many consecutive errors — skipping publish");
-        }
+    // Periodic publish
+    static unsigned long lastPub = 0;
+    if (millis() - lastPub >= PUBLISH_INTERVAL_MS) {
+        lastPub = millis();
+        publish_sensor_data();
     }
 }
