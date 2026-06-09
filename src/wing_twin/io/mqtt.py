@@ -38,6 +38,11 @@ class MqttClientBase:
             logger.error("Connection failed: %s", e)
             return False
 
+    def _set_will(self, topic: str, payload: dict) -> None:
+        """Set MQTT Last Will message (called before connect in subclasses)."""
+        if self._client:
+            self._client.will_set(topic, json.dumps(payload), qos=1)
+
     def _register_callbacks(self) -> None:
         pass
 
@@ -67,6 +72,8 @@ class MqttHandler(MqttClientBase):
         super().__init__(config)
         self._strain_buffers: dict[str, deque] = {}
         self._num_gauges = 3
+        self._latest_esp32_stepper: Optional[int] = None
+        self._latest_esp32_home_offset: Optional[int] = None
 
     @property
     def strain_buffers(self) -> dict[str, deque]:
@@ -105,8 +112,20 @@ class MqttHandler(MqttClientBase):
                     self._strain_buffers[key] = deque(maxlen=max(100, self._num_gauges))
                 self._strain_buffers[key].append((strain_val, timestamp))
 
+            # --- Optional: ESP32 stepper feedback ---
+            self._latest_esp32_stepper = payload.get("stepper_position")
+            self._latest_esp32_home_offset = payload.get("home_offset")
+
         except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
             logger.error("Parse error: %s", e)
+
+    @property
+    def latest_esp32_stepper(self) -> Optional[int]:
+        return self._latest_esp32_stepper
+
+    @property
+    def latest_esp32_home_offset(self) -> Optional[int]:
+        return self._latest_esp32_home_offset
 
 
 class MqttSource(DataSource):
@@ -164,6 +183,11 @@ class MqttSource(DataSource):
 
 class MqttPublisher(MqttClientBase):
     """Publishes control output to ESP32 via MQTT."""
+
+    def connect(self) -> bool:
+        will_payload = {"position": 0, "leds": ["green", "green", "green"]}
+        self._set_will(self.config.control_topic, will_payload)
+        return super().connect()
 
     def publish(self, topic: str, payload: dict) -> None:
         if self._client and self._connected:

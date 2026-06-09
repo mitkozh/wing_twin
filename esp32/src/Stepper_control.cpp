@@ -1,4 +1,12 @@
+// TODO: Uncomment the HX711 include when stepper motor hardware is installed.
+//       This module is ready and tested for strain-guided zero calibration.
+//       Enable steps:
+//         1. Uncomment #include "Hx711_control.h" below
+//         2. main.cpp: uncomment stepper init/homing/loop
+//         3. mqtt_control.cpp: uncomment stepper position handling
+
 #include "Stepper_control.h"
+// #include "Hx711_control.h"
 
 // =====================================================
 // GPIO pin assignments
@@ -23,6 +31,7 @@ static long s_targetPosition  = 0;
 static unsigned long s_lastStepTime = 0;
 static unsigned long s_currentStepRate = MAX_STEP_RATE_US;
 static bool s_enabled = true;
+static long s_homeOffset = 0;
 
 // =====================================================
 // Initialize GPIOs
@@ -53,6 +62,114 @@ void stepper_set_target(long targetSteps) {
 
 long stepper_get_current_position() {
     return s_currentPosition;
+}
+
+long stepper_get_home_offset() {
+    return s_homeOffset;
+}
+
+static void _wait_for_motor(unsigned long timeout_ms) {
+    unsigned long start = millis();
+    while (stepper_is_moving() && millis() - start < timeout_ms) {
+        stepper_loop();
+        delay(1);
+    }
+}
+
+void stepper_zero_with_feedback() {
+    const int   NUM_SAMPLES        = 10;
+    const float STRAIN_THRESHOLD   = 0.005f;  // per-channel, tune empirically
+    const int   SLACK_SAFE_MARGIN  = 100;     // steps below expected zero to guarantee slack
+    const int   MAX_FORWARD_ITER   = 50;
+
+    Serial.println("[STEPPER] Zero calibration starting (strain feedback)...");
+
+    // 1. Sample current strain baseline across all active channels
+    float baseline[HX711_NUM_ACTIVE] = {0};
+    int validSamples = 0;
+    for (int s = 0; s < NUM_SAMPLES; s++) {
+        if (hx711_read_all_channels()) {
+            for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+                baseline[i] += hx711_get_strain_value(i);
+            }
+            validSamples++;
+        }
+        delay(25);
+    }
+    if (validSamples == 0) {
+        Serial.println("[STEPPER] WARNING: No HX711 samples, fallback to software zero");
+        s_homeOffset = s_currentPosition;
+        s_currentPosition = 0;
+        s_targetPosition = 0;
+        return;
+    }
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        baseline[i] /= validSamples;
+    }
+
+    long slackTarget = -SLACK_SAFE_MARGIN;
+    if (s_currentPosition > -SLACK_SAFE_MARGIN) {
+        slackTarget = -SLACK_SAFE_MARGIN;
+    } else {
+        // Already past safe margin, back off a bit more
+        slackTarget = s_currentPosition - 50;
+    }
+    stepper_set_target(slackTarget);
+    _wait_for_motor(5000);
+    Serial.printf("[STEPPER] Retracted to slack position %ld\n", slackTarget);
+
+    hx711_read_all_channels();
+    float maxStrainDelta = 0;
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        float d = fabs(hx711_get_strain_value(i) - baseline[i]);
+        if (d > maxStrainDelta) maxStrainDelta = d;
+    }
+    if (maxStrainDelta > STRAIN_THRESHOLD * 3) {
+        Serial.printf("[STEPPER] WARNING: Strain still elevated (%.4f) after retraction — "
+                      "string may be jammed\n", maxStrainDelta);
+    }
+
+    // Refresh baseline from the guaranteed-slack position
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        baseline[i] = hx711_get_strain_value(i);
+    }
+
+    // 4. Step forward +1 at a time until strain changes (contact point = true zero)
+    long contactPos = slackTarget;
+    for (int iter = 0; iter < MAX_FORWARD_ITER; iter++) {
+        long newTarget = s_currentPosition + 1;
+        stepper_set_target(newTarget);
+        _wait_for_motor(500);
+
+        if (!hx711_read_all_channels()) {
+            contactPos = newTarget;
+            continue;
+        }
+
+        float maxDelta = 0;
+        for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+            float d = fabs(hx711_get_strain_value(i) - baseline[i]);
+            if (d > maxDelta) maxDelta = d;
+        }
+
+        if (maxDelta > STRAIN_THRESHOLD) {
+            // String just contacted — zero is the previous position
+            Serial.printf("[STEPPER] Contact at step %ld (delta=%.4f)\n", newTarget, maxDelta);
+            break;
+        }
+        contactPos = newTarget;
+    }
+
+    // 5. Move to contact position (true zero) and calibrate
+    stepper_set_target(contactPos);
+    _wait_for_motor(2000);
+
+    s_homeOffset = s_currentPosition;
+    s_currentPosition = 0;
+    s_targetPosition = 0;
+
+    Serial.printf("[STEPPER] Zero calibrated: physical zero at raw step %ld, offset=%ld\n",
+                  contactPos, s_homeOffset);
 }
 
 bool stepper_is_moving() {

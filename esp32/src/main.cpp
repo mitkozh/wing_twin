@@ -4,6 +4,7 @@
 #include "RGB_control.h"
 #include "Hx711_control.h"
 #include "mqtt_control.h"
+// TODO: Uncomment when stepper motor hardware is installed
 // #include "Stepper_control.h"
 
 
@@ -38,7 +39,9 @@ void setup() {
     set_leds("1_green,2_green,3_green");
 
     // --- Stepper motor ---
+    // TODO: Uncomment when stepper motor hardware is installed
     // stepper_init();
+    // stepper_zero_with_feedback();
 
     // --- HX711 strain gauges ---
     hx711_init();
@@ -67,6 +70,7 @@ void loop() {
     mqtt_loop();
 
     // --- 2. Stepper motor (move toward target position) ---
+    // TODO: Uncomment when stepper motor hardware is installed
     // stepper_loop();
 
     // --- 3. Periodic HX711 read + publish ---

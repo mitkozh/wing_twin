@@ -1,4 +1,5 @@
 #include "Hx711_control.h"
+// TODO: Uncomment when stepper motor hardware is installed
 // #include "Stepper_control.h"
 #include <LittleFS.h>
 
@@ -574,12 +575,13 @@ void hx711_build_sensor_payload(char* buffer, size_t bufferSize) {
                         (i < HX711_NUM_ACTIVE - 1) ? "," : "");
     }
 
+// TODO: Uncomment "stepper_position" and "home_offset" when stepper is active
 //     len += snprintf(buffer + len, bufferSize - len,
-//                     "],\"dummy_raw\":%ld,\"stepper_position\":%ld,\"timestamp\":%lu}",
+//                     "],\"dummy_raw\":%ld,\"stepper_position\":%ld,\"home_offset\":%ld,\"timestamp\":%lu}",
 //                     rawValues[HX711_NUM_CHANNELS - 1],
 //                     stepper_get_current_position(),
+//                     stepper_get_home_offset(),
 //                     millis());
-// }
     len += snprintf(buffer + len, bufferSize - len,
                     "],\"dummy_raw\":%ld,\"timestamp\":%lu}",
                     rawValues[HX711_NUM_CHANNELS - 1],

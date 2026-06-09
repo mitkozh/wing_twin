@@ -73,6 +73,17 @@ def setup_recorder(
     return recorder, rec_dir
 
 
+def publish_final_zero(mqtt_publisher, config, engine) -> None:
+    """Publish a final zero command to the ESP32 before shutdown."""
+    try:
+        engine.state.stepper_position = 0
+        payload = {"position": 0, "leds": ["green", "green", "green"]}
+        mqtt_publisher.publish(config.mqtt.control_topic, payload)
+        logger.info("Published final zero command to ESP32")
+    except Exception as exc:
+        logger.error("Failed to publish final zero: %s", exc)
+
+
 def finalize_recorder(recorder: Optional[DataRecorder], engine, rec_dir: Optional[Path]) -> None:
     if recorder is None:
         return

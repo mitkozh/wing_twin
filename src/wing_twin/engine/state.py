@@ -121,6 +121,8 @@ class TwinState:
     flight_allowed: bool = True
 
     stepper_position: int = 0
+    esp32_reported_position: Optional[int] = None
+    esp32_reported_home_offset: Optional[int] = None
     heatmap_mode: str = "damage"
     cycles_histogram: dict = field(default_factory=dict)
 
@@ -230,6 +232,8 @@ class TwinState:
             "desired_angle_of_attack": self.desired_angle_of_attack,
             "desired_speed": self.desired_airspeed,
             "stepper_position": self.stepper_position,
+            "esp32_reported_position": self.esp32_reported_position,
+            "esp32_reported_home_offset": self.esp32_reported_home_offset,
             "heatmap_mode": self.heatmap_mode,
             "yield_point_pa": self.yield_point_pa,
             "stress_limit_pa": self.stress_limit_pa,
@@ -306,7 +310,7 @@ class TwinState:
             "desired_angle_of_attack", "desired_airspeed",
             "target_angle_of_attack", "target_airspeed",
             "angle_of_attack", "airspeed",
-            "flight_allowed", "stepper_position", "heatmap_mode", "maintenance_assist",
+            "flight_allowed", "stepper_position", "esp32_reported_position", "esp32_reported_home_offset", "heatmap_mode", "maintenance_assist",
             "flight_phase", "altitude", "km_this_flight",
             "total_km_flown", "flight_number",
             "remaining_km", "planned_km", "pre_flight_safe", "pre_flight_warning",
