@@ -20,13 +20,13 @@ class CalibrationConfig:
     #   - Gauge factor GF = 2.0 (standard cheap metal foil)
     #   - V_excitation = AVDD (E+ tracks AVDD on typical HX711 modules)
     #
-    #   \epsilon = ADC_count * 4 / (GAIN * 2^24 * GF)
-    #     = ADC_count * 4 / (128 * 16_777_216 * 2.0)
-    #     = ADC_count / 1_073_741_824
-    #     \approx ADC_count * 9.31e-10
+    #   \epsilon = ADC_count * 4 / (GAIN * 2^23 * GF)
+    #     = ADC_count * 4 / (128 * 8_388_608 * 2.0)
+    #     = ADC_count / 536_870_912
+    #     \approx ADC_count * 1.8626e-9
     #
     # Re-calibrate empirically by applying a known strain and adjusting.
-    adc_to_strain_scale: float = 9.313225746154785e-10
+    adc_to_strain_scale: float = 1.862645149230957e-9
 
     # Per-gauge zero offsets and gain trims (applied BEFORE adc_to_strain_scale)
     sensor_zero_offsets: tuple[float, ...] = field(default_factory=tuple)

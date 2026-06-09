@@ -68,8 +68,11 @@ bool hx711_load_calibration(void) {
         if (line.length() == 0) continue;
         int comma = line.indexOf(',');
         if (comma <= 0) continue;
-        g_cal.scale[idx]  = line.substring(0, comma).toFloat();
-        g_cal.offset[idx] = line.substring(comma + 1).toFloat();
+        float s = line.substring(0, comma).toFloat();
+        float o = line.substring(comma + 1).toFloat();
+        if (isnan(s) || isinf(s) || isnan(o) || isinf(o)) continue;
+        g_cal.scale[idx]  = s;
+        g_cal.offset[idx] = o;
         idx++;
     }
     f.close(); unmount_littlefs();
@@ -151,22 +154,24 @@ void hx711_init(void) {
 // ---------------------------------------------------------------------------
 // Read all channels
 // ---------------------------------------------------------------------------
-static bool hx711_ready_active(void) {
-    for (int i = 0; i < HX711_NUM_ACTIVE; i++)
+static bool hx711_all_ready(void) {
+    for (int i = 0; i < HX711_NUM_CHANNELS; i++)
         if (digitalRead(HX711_DT_PINS[i]) != LOW) return false;
     return true;
 }
 
 bool hx711_read_all(void) {
     unsigned long start = millis();
-    while (!hx711_ready_active()) {
+    while (!hx711_all_ready()) {
         if (millis() - start > HX711_READ_TIMEOUT_MS) {
             s_readErrorCount++;
+            for (int i = 0; i < HX711_NUM_CHANNELS; i++)
+                if (digitalRead(HX711_DT_PINS[i]) != LOW)
+                    Serial.printf("[HX711] channel %d not ready\n", i);
             return false;
         }
         delay(1);
     }
-    bool dummyReady = (digitalRead(HX711_DT_PINS[HX711_NUM_CHANNELS - 1]) == LOW);
     for (int i = 0; i < HX711_NUM_CHANNELS; i++) rawValues[i] = 0;
     for (int bit = 23; bit >= 0; bit--) {
         digitalWrite(HX711_SCK, HIGH); delayMicroseconds(1);
@@ -180,7 +185,10 @@ bool hx711_read_all(void) {
     for (int i = 0; i < HX711_NUM_CHANNELS; i++) {
         if (rawValues[i] & 0x800000) rawValues[i] |= 0xFF000000;
     }
-    if (!dummyReady) rawValues[HX711_NUM_CHANNELS - 1] = 0;
+    if (digitalRead(HX711_DT_PINS[HX711_NUM_CHANNELS - 1]) != HIGH) {
+        Serial.println("[HX711] WARNING: dummy gauge not responding — temp compensation disabled");
+        rawValues[HX711_NUM_CHANNELS - 1] = 0;
+    }
     long dummy = rawValues[HX711_NUM_CHANNELS - 1];
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
         compensatedRaw[i] = rawValues[i] - dummy;

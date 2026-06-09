@@ -80,7 +80,7 @@ static void on_mqtt_message(const char* topic, const char* payload) {
 static void publish_sensor_data(void) {
     hx711_read_all();
 
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<768> doc;
 
     JsonArray strain = doc.createNestedArray("strain_vector");
     for (int i = 0; i < HX711_NUM_ACTIVE; i++)
