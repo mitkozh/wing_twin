@@ -11,6 +11,7 @@ Units:
 """
 
 import concurrent.futures
+import logging
 import numpy as np
 from collections import deque
 from dataclasses import dataclass, field
@@ -22,6 +23,8 @@ from py_fatigue.damage.stress_life import calc_pm
 
 from wing_twin.config.fatigue import FatigueConfig
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class FatigueState:
@@ -32,6 +35,10 @@ class FatigueState:
     node_buffers: dict = field(default_factory=dict)
     node_damages: dict = field(default_factory=dict)
     node_res_sigs: dict = field(default_factory=dict)
+    per_channel_residual: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float64))
+    per_channel_confidence: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float64))
+    saturated_channels: list[int] = field(default_factory=list)
+    per_channel_low_frames: dict[int, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -46,6 +53,10 @@ class FatigueState:
             "node_res_sigs": {
                 str(k): v for k, v in self.node_res_sigs.items()
             },
+            "per_channel_residual": self.per_channel_residual.tolist(),
+            "per_channel_confidence": self.per_channel_confidence.tolist(),
+            "saturated_channels": self.saturated_channels,
+            "per_channel_low_frames": dict(self.per_channel_low_frames),
         }
 
     @staticmethod
@@ -65,6 +76,13 @@ class FatigueState:
             buf_data = node_buffers_raw.get(str(node_idx), [])
             state.node_buffers[node_idx] = deque(buf_data, maxlen=500)
             state.node_res_sigs[node_idx] = node_res_sigs_raw.get(str(node_idx), [])
+        pcr = data.get("per_channel_residual", [])
+        state.per_channel_residual = np.array(pcr, dtype=np.float64) if pcr else np.array([], dtype=np.float64)
+        pcc = data.get("per_channel_confidence", [])
+        state.per_channel_confidence = np.array(pcc, dtype=np.float64) if pcc else np.array([], dtype=np.float64)
+        state.saturated_channels = data.get("saturated_channels", [])
+        pclf = data.get("per_channel_low_frames", {})
+        state.per_channel_low_frames = {int(k): int(v) for k, v in pclf.items()}
         return state
 
 
@@ -90,11 +108,16 @@ def update_confidence(
     if expected_norm < 1e-10:
         return state.confidence
 
-    residual_norm = float(np.linalg.norm(observed_strain - expected_strain))
-    residual = residual_norm / expected_norm
+    diff = np.abs(observed_strain - expected_strain)
+    denom = np.maximum(np.abs(expected_strain), 1e-12)
+    per_channel = diff / denom
+    state.per_channel_residual = per_channel.copy()
+    state.per_channel_confidence = np.clip(100.0 * (1.0 - per_channel), 0.0, 100.0)
 
+    global_residual = float(np.linalg.norm(diff)) / expected_norm
     state.filtered_residual = (
-        config.ema_alpha * residual + (1 - config.ema_alpha) * state.filtered_residual
+        config.ema_alpha * global_residual
+        + (1.0 - config.ema_alpha) * state.filtered_residual
     )
     state.confidence = np.clip(100.0 * (1.0 - abs(state.filtered_residual)), 0.0, 100.0)
 
@@ -103,7 +126,40 @@ def update_confidence(
     else:
         state.low_confidence_frames = 0
 
+    for i in range(len(per_channel)):
+        if state.per_channel_confidence[i] < config.confidence_threshold:
+            state.per_channel_low_frames[i] = state.per_channel_low_frames.get(i, 0) + 1
+        else:
+            state.per_channel_low_frames[i] = 0
+
     return state.confidence
+
+
+def log_low_confidence_channels(
+    state: FatigueState,
+    channel_names: Optional[list[str]],
+    config: Optional[FatigueConfig] = None,
+) -> None:
+    if config is None:
+        config = FatigueConfig()
+    if state.per_channel_confidence.size == 0:
+        return
+
+    new_low = sorted(
+        i for i, c in state.per_channel_low_frames.items()
+        if c == config.confidence_frames_threshold
+    )
+    if not new_low:
+        return
+
+    names = channel_names or [str(i) for i in range(state.per_channel_confidence.size)]
+    for i in new_low:
+        logger.warning(
+            "Sustained low confidence on %s: conf=%.1f%% resid=%.4f",
+            names[i] if i < len(names) else str(i),
+            state.per_channel_confidence[i],
+            state.per_channel_residual[i],
+        )
 
 
 def warmup_numba() -> None:

@@ -12,6 +12,11 @@ from wing_twin.fea.matrices import TransferMatrices, load_transfer_matrices
 from wing_twin.fea.force_reconstruct import solve_forces
 from wing_twin.fea.field_compute import compute_stress_field, compute_deformation_field
 from wing_twin.fatigue.fatigue import FatigueState, set_random_seed
+from wing_twin.io.sensor_validation import (
+    detect_saturated,
+    impute_saturated,
+    log_saturation,
+)
 from wing_twin.physics.aero import (
     compute_aero_force,
     compute_aero_forces,
@@ -81,6 +86,7 @@ class DigitalTwinEngine:
             initial_state=initial_fatigue,
             initial_life_prediction=initial_life,
             tracker_snapshot=tracker_snap,
+            channel_names=list(self.config.calibration.channel_names),
         )
 
         self.state.yield_point_pa = self.config.yield_point
@@ -637,6 +643,13 @@ class DigitalTwinEngine:
                 strain_vec *= gains
             strain_vec *= cal.adc_to_strain_scale
 
+        sat_idxs = detect_saturated(strain_vec, cal.strain_saturation_threshold)
+        if sat_idxs:
+            original = strain_vec.copy()
+            strain_vec = impute_saturated(strain_vec, sat_idxs, self._matrices.H)
+            log_saturation(original, strain_vec, sat_idxs, list(cal.channel_names))
+
+        self.fatigue.state.saturated_channels = sat_idxs
         self.state.strain_vector = strain_vec.tolist()
 
         F = solve_forces(self._matrices.H_inv, strain_vec)

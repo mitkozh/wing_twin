@@ -44,6 +44,15 @@ class CalibrationConfig:
     lift_bias: float = 0.0
     drag_bias: float = 0.0
 
+    strain_saturation_threshold: float = 0.003
+
+    # Channel names matching ESP32 firmware ordering (9 active gauges)
+    channel_names: tuple[str, ...] = (
+        "root_0", "root_45", "root_90",
+        "middle_0", "middle_45", "middle_90",
+        "tip_0", "tip_45", "tip_90",
+    )
+
     def __post_init__(self) -> None:
         check_ge(self.adc_to_strain_scale, "CalibrationConfig.adc_to_strain_scale", 0)
         check_ge(self.steps_per_newton, "CalibrationConfig.steps_per_newton", 0)

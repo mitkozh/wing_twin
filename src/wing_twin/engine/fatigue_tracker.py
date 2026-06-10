@@ -10,10 +10,12 @@ import numpy as np
 from wing_twin.fatigue.fatigue import (
     FatigueState,
     accumulate_damage_at_nodes,
+    log_low_confidence_channels,
     update_confidence, sn_curve_for_material,
     warmup_numba,
 )
 from wing_twin.config.fatigue import FatigueConfig
+from wing_twin.config.calibration import CalibrationConfig
 from wing_twin.fatigue.life_prediction import LifePredictionState
 from wing_twin.engine.state import TwinState
 
@@ -27,9 +29,11 @@ class FatigueTracker:
         initial_state: Optional[FatigueState] = None,
         initial_life_prediction: Optional[LifePredictionState] = None,
         tracker_snapshot: Optional[dict] = None,
+        channel_names: Optional[list[str]] = None,
     ):
         self.config = config
         self.state = initial_state or FatigueState()
+        self._channel_names = channel_names or list(CalibrationConfig().channel_names)
         if tracker_snapshot:
             self._prev_low_confidence = tracker_snapshot.get("prev_low_confidence", False)
             self._prev_flight_blocked = tracker_snapshot.get("prev_flight_blocked", False)
@@ -69,8 +73,14 @@ class FatigueTracker:
         fatigue_cfg = self.config
         sn_curve = sn_curve_for_material(fatigue_cfg.material)
 
-        # Confidence
-        update_confidence(self.state, strain_vector, expected_strain, config=fatigue_cfg)
+        update_confidence(
+            self.state, strain_vector, expected_strain,
+            config=fatigue_cfg,
+        )
+
+        log_low_confidence_channels(
+            self.state, self._channel_names, config=fatigue_cfg,
+        )
 
         # Per-node fatigue using FEA stress field
         stress_mpa = stress_field_pa / 1e6
@@ -120,10 +130,19 @@ class FatigueTracker:
     def _check_notifications(self, twin_state: TwinState) -> None:
         low_conf = self.state.low_confidence_frames >= self.config.confidence_frames_threshold
         if low_conf and not self._prev_low_confidence:
+            bad = self.state.saturated_channels or sorted(
+                i for i, c in self.state.per_channel_low_frames.items()
+                if c >= self.config.confidence_frames_threshold
+            )
+            if bad:
+                names = [self._channel_names[i] for i in bad if i < len(self._channel_names)]
+                msg = f"Sensor readings low confidence. Problematic channels: {', '.join(names)}."
+            else:
+                msg = "Sensor readings show low confidence."
             twin_state.add_notification(
                 "maint_low_conf", "warning",
                 "Maintenance Required",
-                "Sensor readings show low confidence.",
+                msg,
             )
         elif not low_conf and self._prev_low_confidence:
             twin_state.dismiss_notification("maint_low_conf")
