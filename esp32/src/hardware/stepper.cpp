@@ -2,7 +2,7 @@
 #include "../pins.h"
 #include "../config.h"
 #include <AccelStepper.h>
-#include <LittleFS.h>
+#include <Preferences.h>
 
 static AccelStepper s_stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
 static long s_target = 0;
@@ -10,8 +10,7 @@ static bool s_enabled = true;
 static bool s_pos_saved = false;
 static unsigned long s_last_move_save = 0;
 
-static const char* STEPPER_STATE_FILE = "/stepper_pos.txt";
-static const char* STEPPER_DIRTY_FILE = "/stepper_dirty.txt";
+static const char* PREFS_NS = "stepper";
 
 void stepper_init(void) {
     pinMode(ENABLE_PIN, OUTPUT);
@@ -60,8 +59,9 @@ void stepper_loop(void) {
 
     // Clamp at limits
     if (pos <= STEPPER_MIN_POSITION || pos >= STEPPER_MAX_POSITION) {
-        s_stepper.moveTo(pos);
-        s_target = pos;
+        long clamped = constrain(pos, STEPPER_MIN_POSITION, STEPPER_MAX_POSITION);
+        s_stepper.moveTo(clamped);
+        s_target = clamped;
     }
 
     // Periodic save during motion (every 500ms)
@@ -83,44 +83,35 @@ void stepper_loop(void) {
 }
 
 bool stepper_save_position(void) {
-    if (!LittleFS.begin(false)) return false;
-    File f = LittleFS.open(STEPPER_STATE_FILE, "w");
-    if (!f) { LittleFS.end(); return false; }
-    f.println(s_stepper.currentPosition());
-    f.close();
-    LittleFS.end();
-    return true;
+    Preferences prefs;
+    if (!prefs.begin(PREFS_NS, false)) return false;
+    bool ok = prefs.putLong("pos", s_stepper.currentPosition());
+    prefs.end();
+    return ok;
 }
 
 bool stepper_load_position(long* out_pos) {
-    if (!LittleFS.begin(false)) return false;
-    if (!LittleFS.exists(STEPPER_STATE_FILE)) { LittleFS.end(); return false; }
-    File f = LittleFS.open(STEPPER_STATE_FILE, "r");
-    if (!f) { LittleFS.end(); return false; }
-    String line = f.readStringUntil('\n'); line.trim();
-    f.close(); LittleFS.end();
-    if (line.length() == 0) return false;
-    *out_pos = line.toInt();
+    Preferences prefs;
+    if (!prefs.begin(PREFS_NS, true)) return false;
+    long val = prefs.getLong("pos", 0);
+    bool found = prefs.isKey("pos");
+    prefs.end();
+    if (!found) return false;
+    *out_pos = val;
     return true;
 }
 
 void stepper_set_dirty(bool dirty) {
-    if (!LittleFS.begin(false)) return;
-    if (dirty) {
-        File f = LittleFS.open(STEPPER_DIRTY_FILE, "w");
-        if (f) { f.println("1"); f.close(); }
-    } else {
-        LittleFS.remove(STEPPER_DIRTY_FILE);
-    }
-    LittleFS.end();
+    Preferences prefs;
+    if (!prefs.begin(PREFS_NS, false)) return;
+    prefs.putBool("dirty", dirty);
+    prefs.end();
 }
 
 bool stepper_was_mid_move(void) {
-    if (!LittleFS.begin(false)) return false;
-    if (!LittleFS.exists(STEPPER_DIRTY_FILE)) { LittleFS.end(); return false; }
-    File f = LittleFS.open(STEPPER_DIRTY_FILE, "r");
-    if (!f) { LittleFS.end(); return false; }
-    String line = f.readStringUntil('\n'); line.trim();
-    f.close(); LittleFS.end();
-    return line == "1";
+    Preferences prefs;
+    if (!prefs.begin(PREFS_NS, true)) return false;
+    bool dirty = prefs.getBool("dirty", false);
+    prefs.end();
+    return dirty;
 }

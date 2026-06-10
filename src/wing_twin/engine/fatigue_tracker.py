@@ -57,6 +57,13 @@ class FatigueTracker:
             self.state = FatigueState()
             self._prev_low_confidence = False
             self._prev_flight_blocked = False
+        if target == "confidence":
+            self.state.filtered_residual = 0.0
+            self.state.low_confidence_frames = 0
+            self.state.per_channel_residual = np.array([], dtype=np.float64)
+            self.state.per_channel_confidence = np.array([], dtype=np.float64)
+            self.state.bad_channels = []
+            self.state.per_channel_low_frames = {}
 
     def process(
         self,

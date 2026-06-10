@@ -12,6 +12,7 @@
 #include "comms/wifi_mgr.h"
 #include "comms/mqtt.h"
 
+#include <LittleFS.h>
 #include "calibration/zero.h"
 #include "cli/shell.h"
 #include "utils/watchdog.h"
@@ -174,6 +175,15 @@ void setup() {
     Serial.println("\n=== Wing Digital Twin Node ===");
 
     rgb_init();
+
+    // Mount LittleFS once at startup for all components
+    if (!LittleFS.begin(false)) {
+        Serial.println("[MAIN] LittleFS mount failed, trying format...");
+        if (!LittleFS.begin(true)) {
+            Serial.println("[MAIN] LittleFS mount + format failed");
+        }
+    }
+
     hx711_init();
     stepper_init();
 

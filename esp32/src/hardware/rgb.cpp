@@ -44,11 +44,10 @@ void rgb_all_off(void) {
 void rgb_set_all(const char* command) {
     String cmd(command);
     cmd.trim(); cmd.toLowerCase();
-    int leds[3] = {0,0,0};
-    String cols[3] = {"","",""};
     bool seen[4] = {false,false,false,false};
-    int idx = 0, pos = 0;
-    while (pos < (int)cmd.length() && idx < 3) {
+    int cols[4] = {0,0,0,0};
+    int pos = 0;
+    while (pos < (int)cmd.length()) {
         int comma = cmd.indexOf(',', pos);
         String part = (comma == -1) ? cmd.substring(pos) : cmd.substring(pos, comma);
         pos = (comma == -1) ? cmd.length() : comma + 1;
@@ -61,13 +60,20 @@ void rgb_set_all(const char* command) {
             Serial.println("[RGB] bad command"); return;
         }
         if (seen[n]) { Serial.println("[RGB] duplicate LED"); return; }
-        seen[n] = true; leds[idx] = n; cols[idx] = c; idx++;
+        seen[n] = true;
+        if (c == "green")      cols[n] = 1;
+        else if (c == "yellow") cols[n] = 2;
+        else if (c == "red")    cols[n] = 3;
     }
-    if (idx != 3 || !seen[1] || !seen[2] || !seen[3]) {
-        Serial.println("[RGB] need all 3 LEDs"); return;
+    for (int i = 1; i <= 3; i++) {
+        if (seen[i]) {
+            const char* colour =
+                cols[i] == 1 ? "green" :
+                cols[i] == 2 ? "yellow" :
+                cols[i] == 3 ? "red" : "";
+            set_one(i, colour);
+        }
     }
-    rgb_all_off();
-    for (int i = 0; i < 3; i++) set_one(leds[i], cols[i]);
     Serial.printf("[RGB] set: %s\n", command);
 }
 

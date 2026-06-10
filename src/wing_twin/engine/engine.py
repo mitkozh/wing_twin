@@ -280,6 +280,7 @@ class DigitalTwinEngine:
         if not self.state.flight_allowed:
             return False
         self.dynamics.reset()
+        self.fatigue.reset(target="confidence")
         self._takeoff_timer = 0.0
         self._km_this_flight = 0.0
         self._last_flight_damage = self.state.damage

@@ -27,8 +27,6 @@ static float  strainValues[HX711_NUM_ACTIVE] = {0.0};
 static bool   s_saturated[HX711_NUM_ACTIVE] = {false};
 static int    s_readErrorCount = 0;
 
-static long   s_lastDummy = 0;
-
 // Calibration storage
 typedef struct {
     float scale[HX711_NUM_ACTIVE];
@@ -39,32 +37,13 @@ typedef struct {
 static Hx711Calibration g_cal = {};
 static const char* CAL_FILE = "/hx711_cal.txt";
 
-// ---------------------------------------------------------------------------
-// LittleFS helpers
-// ---------------------------------------------------------------------------
-static bool mount_littlefs(void) {
-    if (!LittleFS.begin(false)) {
-        Serial.println("[HX711] LittleFS mount failed, trying format...");
-        if (!LittleFS.begin(true)) {
-            Serial.println("[HX711] LittleFS mount + format failed");
-            return false;
-        }
-    }
-    return true;
-}
-
-static void unmount_littlefs(void) {
-    LittleFS.end();
-}
-
 bool hx711_load_calibration(void) {
-    if (!mount_littlefs()) { g_cal.valid = false; return false; }
     if (!LittleFS.exists(CAL_FILE)) {
         Serial.println("[HX711] No saved calibration");
-        unmount_littlefs(); g_cal.valid = false; return false;
+        g_cal.valid = false; return false;
     }
     File f = LittleFS.open(CAL_FILE, "r");
-    if (!f) { unmount_littlefs(); g_cal.valid = false; return false; }
+    if (!f) { g_cal.valid = false; return false; }
     int idx = 0;
     while (f.available() && idx < HX711_NUM_ACTIVE) {
         String line = f.readStringUntil('\n'); line.trim();
@@ -78,20 +57,19 @@ bool hx711_load_calibration(void) {
         g_cal.offset[idx] = o;
         idx++;
     }
-    f.close(); unmount_littlefs();
+    f.close();
     g_cal.valid = (idx == HX711_NUM_ACTIVE);
     if (g_cal.valid) Serial.println("[HX711] Calibration loaded");
     return g_cal.valid;
 }
 
 bool hx711_save_calibration(void) {
-    if (!mount_littlefs()) return false;
     File f = LittleFS.open(CAL_FILE, "w");
-    if (!f) { unmount_littlefs(); return false; }
+    if (!f) return false;
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
         f.print(g_cal.scale[i], 6); f.print(","); f.println(g_cal.offset[i], 2);
     }
-    f.close(); unmount_littlefs();
+    f.close();
     Serial.println("[HX711] Calibration saved");
     return true;
 }
@@ -202,12 +180,6 @@ bool hx711_read_all(void) {
     }
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
         s_saturated[i] = (rawValues[i] >= 8388607) || (rawValues[i] <= -8388608);
-    }
-    if (digitalRead(HX711_DT_PINS[HX711_NUM_CHANNELS - 1]) != HIGH) {
-        Serial.println("[HX711] WARNING: dummy stuck - using last valid dummy value");
-        rawValues[HX711_NUM_CHANNELS - 1] = s_lastDummy;
-    } else {
-        s_lastDummy = rawValues[HX711_NUM_CHANNELS - 1];
     }
     long dummy = rawValues[HX711_NUM_CHANNELS - 1];
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
