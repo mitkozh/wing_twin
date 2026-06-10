@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  const POLL_MS = 500;
+  const POLL_MS = 200;
 
   const els = {
     /* header */

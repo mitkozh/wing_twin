@@ -35,6 +35,6 @@
 #define WATCHDOG_TIMEOUT_S       5
 
 // Sensor publish
-#define PUBLISH_INTERVAL_MS      500
+#define PUBLISH_INTERVAL_MS      100
 
 #endif
