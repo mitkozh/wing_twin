@@ -16,34 +16,36 @@ long zero_get_offset(void) {
     return s_homeOffset;
 }
 
-// Accumulate baseline for one channel, skipping saturated reads
-static float sample_baseline_channel(int ch, int num_samples) {
-    double accum = 0.0;
-    int count = 0;
+// Average per-channel baselines across multiple reads, skipping saturated channels
+static void sample_baselines(float* out, int num_samples) {
+    double accum[HX711_NUM_ACTIVE] = {0};
+    int count[HX711_NUM_ACTIVE] = {0};
     for (int s = 0; s < num_samples; s++) {
         hx711_read_all();
-        if (hx711_get_saturated(ch)) continue;
-        accum += s_cbs.read_strain(ch);
-        count++;
+        for (int ch = 0; ch < HX711_NUM_ACTIVE; ch++) {
+            if (hx711_get_saturated(ch)) continue;
+            accum[ch] += s_cbs.read_strain(ch);
+            count[ch]++;
+        }
         delay(25);
     }
-    if (count == 0) return 0.0f;
-    return (float)(accum / count);
+    for (int ch = 0; ch < HX711_NUM_ACTIVE; ch++) {
+        out[ch] = (count[ch] > 0) ? (float)(accum[ch] / count[ch]) : 0.0f;
+    }
 }
 
-// Compute max delta from baseline using only non-saturated channels.
-// Returns true if at least one channel was valid; maxDelta is set.
-static bool compute_max_delta(float* baseline, float* maxDelta, int* validOut) {
+// Compute max|delta| from per-channel baselines, skipping saturated channels.
+// Returns true if at least one channel was valid.
+static bool compute_max_delta(const float* baseline, float* maxDelta) {
     *maxDelta = 0.0f;
-    int valid = 0;
+    bool valid = false;
     for (int ch = 0; ch < HX711_NUM_ACTIVE; ch++) {
         if (hx711_get_saturated(ch)) continue;
         float d = fabs(s_cbs.read_strain(ch) - baseline[ch]);
         if (d > *maxDelta) *maxDelta = d;
-        valid++;
+        valid = true;
     }
-    if (validOut) *validOut = valid;
-    return valid > 0;
+    return valid;
 }
 
 bool zero_run(void) {
@@ -53,11 +55,37 @@ bool zero_run(void) {
     }
     Serial.println("[ZERO] starting calibration...");
 
-    // 1. Sample per-channel baseline (skip saturated channels)
-    float baseline[HX711_NUM_ACTIVE] = {0};
+    // 1. Retract until strain stabilises between consecutive reads.
+    float prev[HX711_NUM_ACTIVE];
+    sample_baselines(prev, ZERO_NUM_SAMPLES);
+    const long RETRACT_STEP = 50;
+    for (int i = 0; i < 20; i++) {
+        long pos = s_cbs.get_position() - RETRACT_STEP;
+        if (pos < STEPPER_MIN_POSITION) pos = STEPPER_MIN_POSITION;
+        s_cbs.move_to(pos);
+        if (s_cbs.wait_for_motor) s_cbs.wait_for_motor(ZERO_MOVE_TIMEOUT_MS);
+        float curr[HX711_NUM_ACTIVE];
+        sample_baselines(curr, 3);
+        float maxChange = 0.0f;
+        for (int ch = 0; ch < HX711_NUM_ACTIVE; ch++) {
+            float d = fabs(curr[ch] - prev[ch]);
+            if (d > maxChange) maxChange = d;
+            prev[ch] = curr[ch];
+        }
+        Serial.printf("[ZERO] retracting: pos=%ld change=%.4f\n", pos, maxChange);
+        if (maxChange < ZERO_SLACK_STABLE_THRESHOLD || pos == STEPPER_MIN_POSITION) {
+            if (maxChange < ZERO_SLACK_STABLE_THRESHOLD)
+                Serial.printf("[ZERO] slack confirmed at %ld\n", pos);
+            break;
+        }
+    }
+
+    // 2. Sample clean baseline at confirmed slack position
+    float baseline[HX711_NUM_ACTIVE];
+    sample_baselines(baseline, ZERO_NUM_SAMPLES);
+
     int saturatedCount = 0;
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
-        baseline[i] = sample_baseline_channel(i, ZERO_NUM_SAMPLES);
         if (hx711_get_saturated(i)) {
             saturatedCount++;
             Serial.printf("[ZERO] channel %d saturated at baseline\n", i);
@@ -68,40 +96,19 @@ bool zero_run(void) {
         return false;
     }
 
-    // 2. Retract to guaranteed-safe negative position
-    long pos = s_cbs.get_position();
-    long slackTarget = -ZERO_SLACK_SAFE_MARGIN;
-    if (pos <= slackTarget) slackTarget = pos - 50;
-    s_cbs.move_to(slackTarget);
-    if (s_cbs.wait_for_motor) s_cbs.wait_for_motor(ZERO_MOVE_TIMEOUT_MS);
-
-    // 3. Verify strain plateau at slack position
-    hx711_read_all();
-    float maxDelta = 0;
-    int validCh = 0;
-    if (!compute_max_delta(baseline, &maxDelta, &validCh)) {
-        Serial.println("[ZERO] ERROR: all channels saturated after retract, aborting");
-        return false;
-    }
-    if (maxDelta > ZERO_STRAIN_THRESHOLD * 3)
-        Serial.printf("[ZERO] warning: strain elevated (%.4f) after retract\n", maxDelta);
-
-    // Refresh baseline at slack position
-    for (int i = 0; i < HX711_NUM_ACTIVE; i++)
-        baseline[i] = sample_baseline_channel(i, 1);
-
-    // 4. Step forward with multi-sample contact confirmation
-    long contactPos = slackTarget;
+    // 3. Step forward until strain exceeds threshold (contact)
+    long contactPos = 0;
     bool contactDetected = false;
     int contactConfirm = 0;
 
     for (int i = 0; i < ZERO_MAX_FORWARD_ITER; i++) {
-        long t = s_cbs.get_position() + 1;
-        s_cbs.move_to(t);
+        long pos = s_cbs.get_position() + 1;
+        s_cbs.move_to(pos);
         if (s_cbs.wait_for_motor) s_cbs.wait_for_motor(ZERO_FORWARD_TIMEOUT_MS);
         hx711_read_all();
 
-        if (!compute_max_delta(baseline, &maxDelta, &validCh)) {
+        float maxDelta;
+        if (!compute_max_delta(baseline, &maxDelta)) {
             Serial.printf("[ZERO] all channels saturated at step %d, aborting\n", i);
             return false;
         }
@@ -109,22 +116,45 @@ bool zero_run(void) {
         if (maxDelta > ZERO_STRAIN_THRESHOLD) {
             contactConfirm++;
             if (contactConfirm >= CONTACT_CONFIRM_NEEDED) {
-                Serial.printf("[ZERO] contact at %ld (confirm=%d, delta=%.4f)\n", t, contactConfirm, maxDelta);
+                contactPos = pos;
                 contactDetected = true;
+                Serial.printf("[ZERO] contact at %ld (confirm=%d, delta=%.4f)\n", pos, contactConfirm, maxDelta);
                 break;
             }
         } else {
             contactConfirm = 0;
         }
-        contactPos = t;
     }
 
-    // 5. Report offset only - main.cpp handles resetting the stepper position.
-    s_homeOffset = s_cbs.get_position();
     if (!contactDetected) {
-        Serial.printf("[ZERO] no contact within %d steps, offset=%ld\n", ZERO_MAX_FORWARD_ITER, s_homeOffset);
+        Serial.printf("[ZERO] no contact within %d steps, aborting\n", ZERO_MAX_FORWARD_ITER);
         return false;
     }
-    Serial.printf("[ZERO] done: contact at %ld, offset=%ld\n", contactPos, s_homeOffset);
+
+    // 4. Back off one step at a time until strain drops below threshold.
+    long zeroPos = contactPos;
+    for (long pos = contactPos - 1; pos >= STEPPER_MIN_POSITION; pos--) {
+        s_cbs.move_to(pos);
+        if (s_cbs.wait_for_motor) s_cbs.wait_for_motor(ZERO_FORWARD_TIMEOUT_MS);
+        hx711_read_all();
+
+        float maxDelta;
+        if (!compute_max_delta(baseline, &maxDelta)) {
+            Serial.println("[ZERO] all channels saturated during backoff, aborting");
+            return false;
+        }
+
+        if (maxDelta <= ZERO_STRAIN_THRESHOLD) {
+            zeroPos = pos;
+            Serial.printf("[ZERO] zero edge at %ld (delta=%.4f)\n", pos, maxDelta);
+            break;
+        }
+    }
+
+    // 5. Command stepper to zero position and record offset
+    s_cbs.move_to(zeroPos);
+    if (s_cbs.wait_for_motor) s_cbs.wait_for_motor(ZERO_MOVE_TIMEOUT_MS);
+    s_homeOffset = zeroPos;
+    Serial.printf("[ZERO] done: contact at %ld, zero at %ld\n", contactPos, zeroPos);
     return true;
 }
