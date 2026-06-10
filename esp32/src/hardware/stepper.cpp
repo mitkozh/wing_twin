@@ -57,6 +57,10 @@ void stepper_enable(bool on) {
     digitalWrite(ENABLE_PIN, on ? LOW : HIGH);
 }
 
+bool stepper_is_enabled(void) {
+    return s_enabled;
+}
+
 void stepper_loop(void) {
     if (!s_enabled) return;
     s_stepper.run();

@@ -57,6 +57,28 @@ static void on_mqtt_message(const char* topic, const char* payload) {
         stepper_set_target(doc["position"].as<long>());
     }
 
+    if (doc.containsKey("tare") && doc["tare"].as<bool>()) {
+        if (hx711_tare()) {
+            hx711_save_calibration();
+            Serial.println("[MQTT] tare done");
+        } else {
+            Serial.println("[MQTT] tare failed");
+        }
+    }
+
+    if (doc.containsKey("stepper_enable")) {
+        stepper_enable(doc["stepper_enable"].as<bool>());
+    }
+
+    if (doc.containsKey("status") && doc["status"].as<bool>()) {
+        Serial.printf("[MQTT] status: wifi=%d mqtt=%d stepper_pos=%ld target=%ld enabled=%d\n",
+                      wifi_mgr_is_connected(), mqtt_is_connected(),
+                      stepper_get_position(), stepper_get_target(), stepper_is_enabled());
+        for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+            Serial.printf("  hx711[%d] raw=%ld sat=%d\n", i, hx711_get_raw(i), hx711_get_saturated(i));
+        }
+    }
+
     if (doc.containsKey("leds")) {
         JsonArray leds = doc["leds"].as<JsonArray>();
         if (leds.size() == 3 &&

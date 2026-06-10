@@ -31,6 +31,7 @@ dependencies = [
     "h5py>=3.8.0",
     "vtk",
     "neuralfoil>=0.3.2",
+    "flask>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +47,7 @@ wing-demo-run = "wing_twin.cli.demo:main"
 wing-simulator = "wing_twin.cli.simulator:main"
 wing-mesh-export = "wing_twin.cli.mesh_export:main"
 wing-neuralfoil-export = "wing_twin.cli.neuralfoil_export:main"
+wing-dashboard = "wing_twin.viz.dashboard:run_dashboard"
 
 [tool.setuptools.packages.find]
 where = ["src"]

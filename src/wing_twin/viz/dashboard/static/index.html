@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wing Twin Dashboard</title>
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<div class="header">
+  <h1>Wing Twin Dashboard</h1>
+  <span id="status-badge" class="badge badge-offline">OFFLINE</span>
+  <span id="record-count" class="badge" style="background:#333;color:#aaa">0 rec</span>
+</div>
+
+<div class="grid">
+  <!-- Connection -->
+  <div class="card">
+    <h2>Connection</h2>
+    <table>
+      <tr><td>MQTT</td><td><span id="mqtt-indicator" class="dot dot-red"></span> <span id="mqtt-status">Disconnected</span></td></tr>
+      <tr><td>Last msg</td><td id="last-msg">—</td></tr>
+    </table>
+  </div>
+
+  <!-- Stepper -->
+  <div class="card">
+    <h2>Stepper</h2>
+    <div class="gauge-container">
+      <div class="gauge-bar">
+        <div id="stepper-fill" class="gauge-fill" style="width:0%"></div>
+      </div>
+      <div class="gauge-labels">
+        <span id="stepper-pos">0</span>
+        <span>/</span>
+        <span>2720</span>
+      </div>
+    </div>
+    <div class="control-row">
+      <input type="range" id="pos-slider" min="-500" max="2720" value="0">
+      <input type="number" id="pos-input" min="-500" max="2720" value="0">
+      <button id="btn-set" class="btn">Set</button>
+      <button id="btn-home" class="btn btn-warn">Home</button>
+      <button id="btn-stepper-enable" class="btn btn-enable" style="display:none">Enable</button>
+      <button id="btn-stepper-disable" class="btn btn-warn" style="display:none">Disable</button>
+    </div>
+  </div>
+
+  <!-- LED controls -->
+  <div class="card">
+    <h2>LED Controls</h2>
+    <div class="led-row">
+      <label>Tip</label>
+      <select id="led-tip" class="sel-led">
+        <option value="green">Green</option>
+        <option value="yellow">Yellow</option>
+        <option value="red">Red</option>
+      </select>
+    </div>
+    <div class="led-row">
+      <label>Span</label>
+      <select id="led-mid" class="sel-led">
+        <option value="green">Green</option>
+        <option value="yellow">Yellow</option>
+        <option value="red">Red</option>
+      </select>
+    </div>
+    <div class="led-row">
+      <label>Root</label>
+      <select id="led-root" class="sel-led">
+        <option value="green">Green</option>
+        <option value="yellow">Yellow</option>
+        <option value="red">Red</option>
+      </select>
+    </div>
+    <div class="control-row">
+      <button id="btn-led-apply" class="btn">Apply LEDs</button>
+    </div>
+  </div>
+
+  <!-- Test controls -->
+  <div class="card">
+    <h2>Test Controls</h2>
+    <div class="control-row">
+      <button id="btn-tare" class="btn btn-warn">Tare HX711</button>
+      <button id="btn-request-status" class="btn">Request Status</button>
+    </div>
+    <p id="test-feedback" class="feedback">—</p>
+  </div>
+
+  <!-- Strain gauges -->
+  <div class="card card-wide">
+    <h2>Strain Gauges</h2>
+    <div id="strain-info" class="strain-meta">
+      <span>Dummy: <strong id="dummy-val">—</strong></span>
+      <span>Home offset: <strong id="home-offset-val">—</strong></span>
+      <span>Last tare: <strong id="last-tare-val">—</strong></span>
+    </div>
+    <div class="strain-table-wrap">
+      <table class="strain-table" id="strain-table">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Raw</th>
+            <th>Offset</th>
+            <th>Bar</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="strain-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CSV export -->
+  <div class="card card-wide">
+    <h2>Export CSV</h2>
+    <div class="control-row" style="flex-wrap:wrap">
+      <label style="color:#888;font-size:0.85rem">From</label>
+      <input type="datetime-local" id="export-start" class="dt-input">
+      <label style="color:#888;font-size:0.85rem">To</label>
+      <input type="datetime-local" id="export-end" class="dt-input">
+      <button id="btn-export" class="btn">Export CSV</button>
+      <button id="btn-set-range" class="btn" style="border-color:#555">Last 10 min</button>
+    </div>
+    <p id="export-info" style="color:#555;font-size:0.8rem;margin-top:4px">
+      Select a time window and click Export. Data is buffered in the dashboard (~6 hr max).
+    </p>
+  </div>
+</div>
+
+<script src="static/app.js"></script>
+</body>
+</html>
