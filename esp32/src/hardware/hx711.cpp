@@ -24,6 +24,7 @@ static const char* CHANNEL_NAMES[HX711_NUM_CHANNELS] = {
 static long   rawValues[HX711_NUM_CHANNELS] = {0};
 static long   compensatedRaw[HX711_NUM_ACTIVE] = {0};
 static float  strainValues[HX711_NUM_ACTIVE] = {0.0};
+static bool   s_saturated[HX711_NUM_ACTIVE] = {false};
 static int    s_readErrorCount = 0;
 
 // Calibration storage
@@ -100,19 +101,29 @@ bool hx711_tare(void) {
     Serial.println("[HX711] Taring...");
     const int TARE_SAMPLES = 10;
     float accum[HX711_NUM_ACTIVE] = {0};
-    int valid = 0;
+    int perChannelValid[HX711_NUM_ACTIVE] = {0};
+    int totalValid = 0;
     for (int s = 0; s < TARE_SAMPLES; s++) {
         if (hx711_read_all()) {
             long dummy = rawValues[HX711_NUM_CHANNELS - 1];
-            for (int i = 0; i < HX711_NUM_ACTIVE; i++)
-                accum[i] += (float)(rawValues[i] - dummy);
-            valid++;
+            for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+                if (!s_saturated[i]) {
+                    accum[i] += (float)(rawValues[i] - dummy);
+                    perChannelValid[i]++;
+                }
+            }
+            totalValid++;
         }
         delay(50);
     }
-    if (valid == 0) { Serial.println("[HX711] Tare failed"); return false; }
+    if (totalValid == 0) { Serial.println("[HX711] Tare failed"); return false; }
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
-        g_cal.offset[i] = accum[i] / valid;
+        if (perChannelValid[i] > 0) {
+            g_cal.offset[i] = accum[i] / perChannelValid[i];
+        } else {
+            g_cal.offset[i] = 0.0f;
+            Serial.printf("[HX711] WARNING: channel %d saturated - offset set to 0, strain=comp\n", i);
+        }
         if (g_cal.scale[i] <= 0.0f) g_cal.scale[i] = 1.0f;
     }
     g_cal.valid = true;
@@ -173,6 +184,7 @@ bool hx711_read_all(void) {
         delay(1);
     }
     for (int i = 0; i < HX711_NUM_CHANNELS; i++) rawValues[i] = 0;
+    noInterrupts();
     for (int bit = 23; bit >= 0; bit--) {
         digitalWrite(HX711_SCK, HIGH); delayMicroseconds(1);
         for (int i = 0; i < HX711_NUM_CHANNELS; i++)
@@ -182,11 +194,15 @@ bool hx711_read_all(void) {
     }
     digitalWrite(HX711_SCK, HIGH); delayMicroseconds(1);
     digitalWrite(HX711_SCK, LOW);  delayMicroseconds(1);
+    interrupts();
     for (int i = 0; i < HX711_NUM_CHANNELS; i++) {
         if (rawValues[i] & 0x800000) rawValues[i] |= 0xFF000000;
     }
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        s_saturated[i] = (rawValues[i] >= 8388607) || (rawValues[i] <= -8388608);
+    }
     if (digitalRead(HX711_DT_PINS[HX711_NUM_CHANNELS - 1]) != HIGH) {
-        Serial.println("[HX711] WARNING: dummy gauge not responding — temp compensation disabled");
+        Serial.println("[HX711] WARNING: dummy gauge stuck / not ready after read — temp compensation disabled");
         rawValues[HX711_NUM_CHANNELS - 1] = 0;
     }
     long dummy = rawValues[HX711_NUM_CHANNELS - 1];
@@ -213,6 +229,16 @@ long hx711_get_raw(int i) {
 long hx711_get_compensated_raw(int i) {
     if (i < 0 || i >= HX711_NUM_ACTIVE) return 0;
     return compensatedRaw[i];
+}
+
+bool hx711_get_saturated(int i) {
+    if (i < 0 || i >= HX711_NUM_ACTIVE) return false;
+    return s_saturated[i];
+}
+
+float hx711_get_offset(int i) {
+    if (i < 0 || i >= HX711_NUM_ACTIVE) return 0.0f;
+    return g_cal.offset[i];
 }
 
 const char* hx711_get_channel_name(int i) {

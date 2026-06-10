@@ -80,15 +80,19 @@ static void on_mqtt_message(const char* topic, const char* payload) {
 static void publish_sensor_data(void) {
     hx711_read_all();
 
-    StaticJsonDocument<768> doc;
+    StaticJsonDocument<1024> doc;
 
-    JsonArray strain = doc.createNestedArray("strain_vector");
+    JsonArray rawArr = doc.createNestedArray("raw");
     for (int i = 0; i < HX711_NUM_ACTIVE; i++)
-        strain.add(hx711_get_strain(i));
+        rawArr.add(hx711_get_raw(i));
 
-    JsonArray channels = doc.createNestedArray("channels");
+    JsonArray offsetArr = doc.createNestedArray("offset");
     for (int i = 0; i < HX711_NUM_ACTIVE; i++)
-        channels.add(hx711_get_channel_name(i));
+        offsetArr.add(hx711_get_offset(i));
+
+    JsonArray saturatedArr = doc.createNestedArray("saturated");
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++)
+        saturatedArr.add(hx711_get_saturated(i));
 
     doc["dummy_raw"]  = hx711_get_raw(9);
     doc["stepper_position"] = stepper_get_position();

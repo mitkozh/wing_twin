@@ -11,8 +11,11 @@ import numpy as np
 @dataclass
 class SensorReading:
     """Single sensor reading."""
-    strain: float
     strain_vector: Optional[np.ndarray] = None
+    raw_values: Optional[np.ndarray] = None
+    offset_values: Optional[np.ndarray] = None
+    dummy_raw: Optional[int] = None
+    saturated_flags: Optional[list[bool]] = None
     accel_z: float = 0.0
     timestamp: int = 0
     gauge_id: str = "primary"
@@ -37,7 +40,4 @@ class DataSource(ABC):
     def is_connected(self) -> bool:
         pass
 
-    @property
-    def provides_strain(self) -> bool:
-        """Whether this source already provides unitless strain values."""
-        return False
+

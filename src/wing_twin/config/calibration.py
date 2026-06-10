@@ -4,33 +4,26 @@ Calibration configuration for physical model parameters.
 Values here are tuned per physical wing unit after experimental calibration
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from wing_twin.config.types import check_ge, check_gt
 
 
 @dataclass
 class CalibrationConfig:
-    # ADC -> strain conversion
+    # ADC -> unitless strain conversion.
     #
-    # Converts HX711 compensated ADC counts to unitless strain.
-    # Calculation assumes:
-    #   - Quarter-bridge: 1 active strain gauge + 3 completion resistors
-    #   - HX711 gain = 128 (set by 25 SCK pulses in firmware)
-    #   - Gauge factor GF = 2.0 (standard cheap metal foil)
-    #   - V_excitation = AVDD (E+ tracks AVDD on typical HX711 modules)
+    # ESP32 firmware publishes strain_vector = (raw - dummy - tare_offset) * scale
+    # with scale = 1.0 (stored in ESP32 calibration file after tare).
+    # This constant converts those firmware strain values (in ADC count space)
+    # to unitless strain.
     #
     #   \epsilon = ADC_count * 4 / (GAIN * 2^23 * GF)
     #     = ADC_count * 4 / (128 * 8_388_608 * 2.0)
     #     = ADC_count / 536_870_912
     #     \approx ADC_count * 1.8626e-9
     #
-    # Re-calibrate empirically by applying a known strain and adjusting.
     adc_to_strain_scale: float = 1.862645149230957e-9
-
-    # Per-gauge zero offsets and gain trims (applied BEFORE adc_to_strain_scale)
-    sensor_zero_offsets: tuple[float, ...] = field(default_factory=tuple)
-    sensor_gain_factors: tuple[float, ...] = field(default_factory=tuple)
 
     # Force reconstruction
     H_matrix_scale: float = 1.0

@@ -22,10 +22,6 @@ class SimulatorState:
 
 class SimulatorSource(DataSource):
 
-    @property
-    def provides_strain(self) -> bool:
-        return True
-
     def __init__(
         self,
         config: Optional[SimulationConfig] = None,
@@ -117,18 +113,9 @@ class SimulatorSource(DataSource):
         with self._lock:
             self._state.time_elapsed += dt
 
-        if self._state.num_gauges == 1:
-            return SensorReading(
-                strain=float(strain_vector[0]),
-                strain_vector=None,
-                accel_z=accel_z,
-                timestamp=int(t * 1000),
-                gauge_id="primary",
-            )
         return SensorReading(
-            strain=float(strain_vector[0]),
             strain_vector=strain_vector,
             accel_z=accel_z,
             timestamp=int(t * 1000),
-            gauge_id="vector",
+            gauge_id="simulator",
         )

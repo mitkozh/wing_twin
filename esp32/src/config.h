@@ -15,7 +15,7 @@
 
 // Zero calibration
 #define ZERO_NUM_SAMPLES         10
-#define ZERO_STRAIN_THRESHOLD    0.005f
+#define ZERO_STRAIN_THRESHOLD    5000.0f
 #define ZERO_SLACK_SAFE_MARGIN   100
 #define ZERO_MAX_FORWARD_ITER    50
 #define ZERO_MOVE_TIMEOUT_MS     5000

@@ -626,28 +626,28 @@ class DigitalTwinEngine:
         if self._matrices is None:
             raise RuntimeError("Call load_matrices() before processing readings")
 
-        if reading.strain_vector is not None:
+        cal = self.config.calibration
+
+        if reading.raw_values is not None:
+            raw = np.array(reading.raw_values, dtype=np.float64)
+            off = np.array(reading.offset_values or [], dtype=np.float64)
+            strain_vec = (raw - reading.dummy_raw - off) * cal.adc_to_strain_scale
+        elif reading.strain_vector is not None:
             strain_vec = np.array(reading.strain_vector, dtype=np.float64)
         else:
-            strain_vec = np.array(
-                [reading.strain] * self._num_gauges, dtype=np.float64
-            )
-
-        cal = self.config.calibration
-        if not self._data_source.provides_strain:
-            if cal.sensor_zero_offsets:
-                offsets = np.array(cal.sensor_zero_offsets[:len(strain_vec)])
-                strain_vec -= offsets
-            if cal.sensor_gain_factors:
-                gains = np.array(cal.sensor_gain_factors[:len(strain_vec)])
-                strain_vec *= gains
-            strain_vec *= cal.adc_to_strain_scale
+            raise ValueError("SensorReading has neither raw_values nor strain_vector")
 
         sat_idxs = detect_saturated(strain_vec, cal.strain_saturation_threshold)
+        if reading.saturated_flags is not None:
+            for i, flagged in enumerate(reading.saturated_flags):
+                if flagged and i not in sat_idxs:
+                    sat_idxs.append(i)
+            sat_idxs.sort()
+
+        pre_impute_strain = strain_vec.copy()
         if sat_idxs:
-            original = strain_vec.copy()
             strain_vec = impute_saturated(strain_vec, sat_idxs, self._matrices.H)
-            log_saturation(original, strain_vec, sat_idxs, list(cal.channel_names))
+            log_saturation(pre_impute_strain, strain_vec, sat_idxs, list(cal.channel_names))
 
         self.fatigue.state.saturated_channels = sat_idxs
         self.state.strain_vector = strain_vec.tolist()
@@ -666,7 +666,7 @@ class DigitalTwinEngine:
         # Only accumulate fatigue during active flight phases
         if self._flight_phase != FlightPhase.ON_GROUND:
             self.fatigue.process(
-                strain_vector=strain_vec,
+                strain_vector=pre_impute_strain,
                 stress_field_pa=stress,
                 expected_strain=expected_strain,
                 twin_state=self.state,

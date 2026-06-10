@@ -70,14 +70,15 @@ class MqttHandler(MqttClientBase):
 
     def __init__(self, config: Optional[MqttConfig] = None):
         super().__init__(config)
-        self._strain_buffers: dict[str, deque] = {}
+        self._sensor_buffers: dict[str, deque] = {}
         self._num_gauges = 3
+        self._latest_saturated: Optional[list[bool]] = None
         self._latest_esp32_stepper: Optional[int] = None
         self._latest_esp32_home_offset: Optional[int] = None
 
     @property
-    def strain_buffers(self) -> dict[str, deque]:
-        return self._strain_buffers
+    def sensor_buffers(self) -> dict[str, deque]:
+        return self._sensor_buffers
 
     @property
     def num_gauges(self) -> int:
@@ -96,23 +97,22 @@ class MqttHandler(MqttClientBase):
             payload = json.loads(msg.payload.decode())
             timestamp = payload.get("timestamp", 0)
 
-            if "strain_vector" in payload:
-                strain_vals = np.array(payload["strain_vector"], dtype=np.float64)
-                self._num_gauges = len(strain_vals)
-                key = "vector"
-                if key not in self._strain_buffers:
-                    self._strain_buffers[key] = deque(maxlen=1)
-                self._strain_buffers[key].clear()
-                self._strain_buffers[key].append((strain_vals.tolist(), timestamp))
+            if "raw" not in payload:
+                return
 
-            elif "strain" in payload:
-                strain_val = float(payload["strain"])
-                key = "primary"
-                if key not in self._strain_buffers:
-                    self._strain_buffers[key] = deque(maxlen=max(100, self._num_gauges))
-                self._strain_buffers[key].append((strain_val, timestamp))
+            raw_vals = np.array(payload["raw"], dtype=np.int64)
+            dummy_raw = int(payload.get("dummy_raw", 0))
+            offset_vals = np.array(payload.get("offset", []), dtype=np.float64)
+            self._num_gauges = len(raw_vals)
+            key = "esp32"
+            if key not in self._sensor_buffers:
+                self._sensor_buffers[key] = deque(maxlen=1)
+            self._sensor_buffers[key].clear()
+            self._sensor_buffers[key].append(
+                (raw_vals, offset_vals, dummy_raw, timestamp)
+            )
 
-            # --- Optional: ESP32 stepper feedback ---
+            self._latest_saturated = payload.get("saturated")
             self._latest_esp32_stepper = payload.get("stepper_position")
             self._latest_esp32_home_offset = payload.get("home_offset")
 
@@ -129,7 +129,7 @@ class MqttHandler(MqttClientBase):
 
 
 class MqttSource(DataSource):
-    """Data source that receives strain data from MQTT broker."""
+    """Data source that receives sensor data from MQTT broker."""
 
     def __init__(self, config: Optional[MqttConfig] = None):
         self.config = config or MqttConfig()
@@ -153,32 +153,20 @@ class MqttSource(DataSource):
         return self._connected and self._handler.is_connected()
 
     def read(self) -> Optional[SensorReading]:
-        buffers = self._handler.strain_buffers
-        if not buffers:
+        buffers = self._handler.sensor_buffers
+        if "esp32" not in buffers or not buffers["esp32"]:
             return None
 
-        if "vector" in buffers and buffers["vector"]:
-            raw, ts = buffers["vector"].popleft()
-            strain_vector = np.array(raw, dtype=np.float64)
-            return SensorReading(
-                strain=float(strain_vector[0]) if len(strain_vector) > 0 else 0.0,
-                strain_vector=strain_vector,
-                accel_z=0.0,
-                timestamp=ts,
-                gauge_id="vector"
-            )
-
-        if "primary" in buffers and buffers["primary"]:
-            strain, ts = buffers["primary"].popleft()
-            return SensorReading(
-                strain=strain,
-                strain_vector=None,
-                accel_z=0.0,
-                timestamp=ts,
-                gauge_id="primary"
-            )
-
-        return None
+        raw_vals, offset_vals, dummy_raw, ts = buffers["esp32"].popleft()
+        return SensorReading(
+            raw_values=raw_vals,
+            offset_values=offset_vals,
+            dummy_raw=dummy_raw,
+            saturated_flags=self._handler._latest_saturated,
+            accel_z=0.0,
+            timestamp=ts,
+            gauge_id="esp32_raw",
+        )
 
 
 class MqttPublisher(MqttClientBase):

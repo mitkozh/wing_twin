@@ -1,5 +1,6 @@
 #include "zero.h"
 #include "../config.h"
+#include "../hardware/hx711.h"
 #include <Arduino.h>
 
 static zero_callbacks_t s_cbs;
@@ -26,6 +27,7 @@ bool zero_run(void) {
     float baseline[HX711_NUM_ACTIVE] = {0};
     int valid = 0;
     for (int s = 0; s < ZERO_NUM_SAMPLES; s++) {
+        hx711_read_all();
         for (int i = 0; i < HX711_NUM_ACTIVE; i++)
             baseline[i] += s_cbs.read_strain(i);
         valid++;
@@ -41,6 +43,7 @@ bool zero_run(void) {
     if (s_cbs.wait_for_motor) s_cbs.wait_for_motor(ZERO_MOVE_TIMEOUT_MS);
 
     // 3. Verify strain plateau at slack position
+    hx711_read_all();
     float maxDelta = 0;
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
         float d = fabs(s_cbs.read_strain(i) - baseline[i]);
@@ -50,6 +53,7 @@ bool zero_run(void) {
         Serial.printf("[ZERO] warning: strain elevated (%.4f) after retract\n", maxDelta);
 
     // Refresh baseline at slack position
+    hx711_read_all();
     for (int i = 0; i < HX711_NUM_ACTIVE; i++)
         baseline[i] = s_cbs.read_strain(i);
 
@@ -60,6 +64,7 @@ bool zero_run(void) {
         long t = s_cbs.get_position() + 1;
         s_cbs.move_to(t);
         if (s_cbs.wait_for_motor) s_cbs.wait_for_motor(ZERO_FORWARD_TIMEOUT_MS);
+        hx711_read_all();
         maxDelta = 0;
         for (int ch = 0; ch < HX711_NUM_ACTIVE; ch++) {
             float d = fabs(s_cbs.read_strain(ch) - baseline[ch]);
