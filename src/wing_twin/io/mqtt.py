@@ -71,7 +71,7 @@ class MqttHandler(MqttClientBase):
     def __init__(self, config: Optional[MqttConfig] = None):
         super().__init__(config)
         self._sensor_buffers: dict[str, deque] = {}
-        self._num_gauges = 3
+        self._num_gauges = 9
         self._latest_esp32_stepper: Optional[int] = None
         self._latest_esp32_home_offset: Optional[int] = None
 

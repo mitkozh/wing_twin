@@ -27,6 +27,8 @@ static float  strainValues[HX711_NUM_ACTIVE] = {0.0};
 static bool   s_saturated[HX711_NUM_ACTIVE] = {false};
 static int    s_readErrorCount = 0;
 
+static long   s_lastDummy = 0;
+
 // Calibration storage
 typedef struct {
     float scale[HX711_NUM_ACTIVE];
@@ -202,8 +204,10 @@ bool hx711_read_all(void) {
         s_saturated[i] = (rawValues[i] >= 8388607) || (rawValues[i] <= -8388608);
     }
     if (digitalRead(HX711_DT_PINS[HX711_NUM_CHANNELS - 1]) != HIGH) {
-        Serial.println("[HX711] WARNING: dummy gauge stuck / not ready after read — temp compensation disabled");
-        rawValues[HX711_NUM_CHANNELS - 1] = 0;
+        Serial.println("[HX711] WARNING: dummy stuck - using last valid dummy value");
+        rawValues[HX711_NUM_CHANNELS - 1] = s_lastDummy;
+    } else {
+        s_lastDummy = rawValues[HX711_NUM_CHANNELS - 1];
     }
     long dummy = rawValues[HX711_NUM_CHANNELS - 1];
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {

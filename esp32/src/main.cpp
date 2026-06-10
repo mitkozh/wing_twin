@@ -50,11 +50,8 @@ static void on_mqtt_message(const char* topic, const char* payload) {
             s_zeroCalibrated = true;
             zero_run();
             stepper_reset_position(0);
-        } else if (pos != 0) {
-            s_zeroCalibrated = false;
-            stepper_set_target(pos);
         } else {
-            stepper_set_target(0);
+            stepper_set_target(pos);
         }
     }
 
