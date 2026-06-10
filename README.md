@@ -240,3 +240,66 @@ The `unity/WingTwinUnity` folder is a **Unity 6** project. It connects to the Py
 | **H** | Toggle help overlay |
 
 The Unity client connects to `ws://localhost:8765`. You need to start the Python backend first (`wing-demo-run` or `wing-real-run`).
+
+## ESP32 Firmware
+
+The `esp32/` directory contains the Arduino firmware for the ESP32 hardware node. It reads strain gauges via HX711, drives a stepper motor for actuation, controls RGB LEDs, and communicates with the digital twin engine over MQTT.
+
+- **Publishes** sensor data to `wing/sensors`
+- **Subscribes** to control commands on `wing/control`
+
+### PlatformIO Workflow
+
+Build, upload, and monitor using PlatformIO from the `esp32/` directory:
+
+| Command | Description |
+|---|---|
+| `pio run` | Build the firmware |
+| `pio run -t upload` | Upload firmware to ESP32 (port: COM3) |
+| `pio device monitor -b 115200 -p COM3` | Open serial monitor for interactive shell |
+
+The serial monitor baud rate and port are configured in `platformio.ini` (`monitor_speed = 115200`, `monitor_port = COM3`).
+
+### Interactive Shell
+
+Once connected via serial monitor, the firmware exposes a shell with the following commands:
+
+| Command | Description |
+|---|---|
+| `help` | Print available commands |
+| `stepper set <steps>` | Set stepper motor absolute position |
+| `stepper get` | Display current position and target |
+| `hx711 read` | Read and print all HX711 strain gauge values |
+| `hx711 tare` | Tare (zero) all HX711 channels |
+| `home` | Run the zero-calibration routine |
+| `leds <r,g,b>` | Set RGB LED colors (e.g., `1_green,2_yellow,3_red`) |
+| `status` | Show all states: stepper position, WiFi/MQTT connection, HX711 error count, zero calibration |
+
+### Monitoring the Node
+
+To start interactive monitoring:
+
+1. Connect the ESP32 via USB
+2. Run `pio device monitor -b 115200 -p COM3`
+3. The firmware outputs status messages and a `> ` prompt for shell commands
+4. Type `status` to see the current node state, or `help` for all commands
+
+Behind the scenes, the node automatically publishes sensor data (raw strain, offsets, saturation flags, stepper position) to `wing/sensors` every 1 second. It also auto-zeros the stepper if no MQTT control message is received for 5 seconds. The RGB LEDs provide connection-state feedback: **green** when MQTT is connected, **red** when disconnected.
+
+### MQTT Topics
+
+| Direction | Topic | Payload (JSON) |
+|---|---|---|
+| Publish | `wing/sensors` | `{"raw": [...], "offset": [...], "saturated": [...], "stepper_position": N, "timestamp": N}` |
+| Subscribe | `wing/control` | `{"position": N}` and/or `{"leds": ["1_green", "2_yellow", "3_red"]}` |
+
+### Key Configuration (`esp32/src/config.h`)
+
+| Parameter | Default | Description |
+|---|---|---|
+| `STEPPER_MAX_SPEED` | 1000 steps/s | Maximum stepper speed |
+| `STEPPER_MAX_POSITION` | 2720 steps | Maximum stepper travel |
+| `HX711_NUM_ACTIVE` | 9 | Number of active strain gauge channels |
+| `PUBLISH_INTERVAL_MS` | 1000 ms | Sensor data publish interval |
+| `MQTT_POSITION_TIMEOUT_MS` | 5000 ms | Timeout before auto-zero |
+| `WATCHDOG_TIMEOUT_S` | 5 s | Hardware watchdog timeout |
