@@ -5,26 +5,15 @@
 // LED1 = tip, LED2 = span, LED3 = root.
 // Input format: "1_green,2_yellow,3_red"
 
-static void set_one(int led, const String& colour) {
+static void set_one(int led, const char* colour) {
+    bool g = false, r = false;
+    if      (strcmp(colour, "green")  == 0) { g = true; }
+    else if (strcmp(colour, "yellow") == 0) { g = true; r = true; }
+    else if (strcmp(colour, "red")    == 0) { r = true; }
     switch (led) {
-        case 1:
-            digitalWrite(LED1_STATUS_GREEN, LOW); digitalWrite(LED1_STATUS_RED, LOW);
-            if (colour == "green")  digitalWrite(LED1_STATUS_GREEN, HIGH);
-            else if (colour == "yellow") { digitalWrite(LED1_STATUS_GREEN, HIGH); digitalWrite(LED1_STATUS_RED, HIGH); }
-            else if (colour == "red")   digitalWrite(LED1_STATUS_RED, HIGH);
-            break;
-        case 2:
-            digitalWrite(LED2_STATUS_GREEN, LOW); digitalWrite(LED2_STATUS_RED, LOW);
-            if (colour == "green")  digitalWrite(LED2_STATUS_GREEN, HIGH);
-            else if (colour == "yellow") { digitalWrite(LED2_STATUS_GREEN, HIGH); digitalWrite(LED2_STATUS_RED, HIGH); }
-            else if (colour == "red")   digitalWrite(LED2_STATUS_RED, HIGH);
-            break;
-        case 3:
-            digitalWrite(LED3_STATUS_GREEN, LOW); digitalWrite(LED3_STATUS_RED, LOW);
-            if (colour == "green")  digitalWrite(LED3_STATUS_GREEN, HIGH);
-            else if (colour == "yellow") { digitalWrite(LED3_STATUS_GREEN, HIGH); digitalWrite(LED3_STATUS_RED, HIGH); }
-            else if (colour == "red")   digitalWrite(LED3_STATUS_RED, HIGH);
-            break;
+        case 1: digitalWrite(LED1_STATUS_GREEN, g ? HIGH : LOW); digitalWrite(LED1_STATUS_RED, r ? HIGH : LOW); break;
+        case 2: digitalWrite(LED2_STATUS_GREEN, g ? HIGH : LOW); digitalWrite(LED2_STATUS_RED, r ? HIGH : LOW); break;
+        case 3: digitalWrite(LED3_STATUS_GREEN, g ? HIGH : LOW); digitalWrite(LED3_STATUS_RED, r ? HIGH : LOW); break;
     }
 }
 
@@ -42,35 +31,34 @@ void rgb_all_off(void) {
 }
 
 void rgb_set_all(const char* command) {
-    String cmd(command);
-    cmd.trim(); cmd.toLowerCase();
-    bool seen[4] = {false,false,false,false};
-    int cols[4] = {0,0,0,0};
-    int pos = 0;
-    while (pos < (int)cmd.length()) {
-        int comma = cmd.indexOf(',', pos);
-        String part = (comma == -1) ? cmd.substring(pos) : cmd.substring(pos, comma);
-        pos = (comma == -1) ? cmd.length() : comma + 1;
-        part.trim();
-        int us = part.indexOf('_');
-        if (us <= 0) { Serial.println("[RGB] bad command"); return; }
-        int n = part.substring(0, us).toInt();
-        String c = part.substring(us + 1);
-        if (n < 1 || n > 3 || (c != "green" && c != "yellow" && c != "red")) {
+    char buf[64];
+    strncpy(buf, command, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    for (int i = 0; buf[i]; i++) buf[i] = tolower((unsigned char)buf[i]);
+
+    bool seen[4] = {false, false, false, false};
+    int  cols[4] = {0, 0, 0, 0};
+
+    char* part = strtok(buf, ",");
+    while (part) {
+        char* us = strchr(part, '_');
+        if (!us || us == part) { Serial.println("[RGB] bad command"); return; }
+        *us = '\0';
+        int n = atoi(part);
+        const char* c = us + 1;
+        if (n < 1 || n > 3 || (strcmp(c, "green") != 0 && strcmp(c, "yellow") != 0 && strcmp(c, "red") != 0)) {
             Serial.println("[RGB] bad command"); return;
         }
         if (seen[n]) { Serial.println("[RGB] duplicate LED"); return; }
         seen[n] = true;
-        if (c == "green")      cols[n] = 1;
-        else if (c == "yellow") cols[n] = 2;
-        else if (c == "red")    cols[n] = 3;
+        if      (strcmp(c, "green")  == 0) cols[n] = 1;
+        else if (strcmp(c, "yellow") == 0) cols[n] = 2;
+        else if (strcmp(c, "red")    == 0) cols[n] = 3;
+        part = strtok(NULL, ",");
     }
     for (int i = 1; i <= 3; i++) {
         if (seen[i]) {
-            const char* colour =
-                cols[i] == 1 ? "green" :
-                cols[i] == 2 ? "yellow" :
-                cols[i] == 3 ? "red" : "";
+            const char* colour = (cols[i] == 1) ? "green" : (cols[i] == 2) ? "yellow" : "red";
             set_one(i, colour);
         }
     }

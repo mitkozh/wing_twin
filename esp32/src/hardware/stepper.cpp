@@ -11,11 +11,14 @@ static bool s_pos_saved = false;
 static unsigned long s_last_move_save = 0;
 
 static const char* PREFS_NS = "stepper";
+static Preferences s_prefs;
+static bool s_prefs_open = false;
 
 void stepper_init(void) {
     pinMode(ENABLE_PIN, OUTPUT);
     digitalWrite(ENABLE_PIN, HIGH);          // start disabled - let driver supply stabilize
     delay(100);                              // brief settling window
+    s_prefs_open = s_prefs.begin(PREFS_NS, false);
     s_stepper.setMaxSpeed(STEPPER_MAX_SPEED);
     s_stepper.setAcceleration(STEPPER_ACCELERATION);
     s_stepper.setCurrentPosition(0);
@@ -85,35 +88,22 @@ void stepper_loop(void) {
 }
 
 bool stepper_save_position(void) {
-    Preferences prefs;
-    if (!prefs.begin(PREFS_NS, false)) return false;
-    bool ok = prefs.putLong("pos", s_stepper.currentPosition());
-    prefs.end();
-    return ok;
+    if (!s_prefs_open) return false;
+    return s_prefs.putLong("pos", s_stepper.currentPosition());
 }
 
 bool stepper_load_position(long* out_pos) {
-    Preferences prefs;
-    if (!prefs.begin(PREFS_NS, true)) return false;
-    long val = prefs.getLong("pos", 0);
-    bool found = prefs.isKey("pos");
-    prefs.end();
-    if (!found) return false;
-    *out_pos = val;
-    return true;
+    if (!s_prefs_open) return false;
+    *out_pos = s_prefs.getLong("pos", 0);
+    return s_prefs.isKey("pos");
 }
 
 void stepper_set_dirty(bool dirty) {
-    Preferences prefs;
-    if (!prefs.begin(PREFS_NS, false)) return;
-    prefs.putBool("dirty", dirty);
-    prefs.end();
+    if (!s_prefs_open) return;
+    s_prefs.putBool("dirty", dirty);
 }
 
 bool stepper_was_mid_move(void) {
-    Preferences prefs;
-    if (!prefs.begin(PREFS_NS, true)) return false;
-    bool dirty = prefs.getBool("dirty", false);
-    prefs.end();
-    return dirty;
+    if (!s_prefs_open) return false;
+    return s_prefs.getBool("dirty", false);
 }

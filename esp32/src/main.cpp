@@ -45,15 +45,16 @@ static void on_mqtt_message(const char* topic, const char* payload) {
     }
     Serial.printf("[MQTT] << %s\n", payload);
 
-    if (doc.containsKey("position")) {
-        long pos = doc["position"].as<long>();
-        if (pos == 0 && !s_zeroCalibrated) {
+    if (doc.containsKey("calibrate") && doc["calibrate"].as<bool>()) {
+        s_zeroCalibrated = false;
+        if (zero_run()) {
             s_zeroCalibrated = true;
-            zero_run();
             stepper_reset_position(0);
-        } else {
-            stepper_set_target(pos);
+            stepper_save_position();
+            stepper_set_dirty(false);
         }
+    } else if (doc.containsKey("position")) {
+        stepper_set_target(doc["position"].as<long>());
     }
 
     if (doc.containsKey("leds")) {
@@ -62,12 +63,14 @@ static void on_mqtt_message(const char* topic, const char* payload) {
             leds[0].is<const char*>() &&
             leds[1].is<const char*>() &&
             leds[2].is<const char*>()) {
-            char buf[64];
-            snprintf(buf, sizeof(buf), "1_%s,2_%s,3_%s",
-                     leds[0].as<const char*>(),
-                     leds[1].as<const char*>(),
-                     leds[2].as<const char*>());
-            rgb_set_all(buf);
+            const char* c0 = leds[0].as<const char*>();
+            const char* c1 = leds[1].as<const char*>();
+            const char* c2 = leds[2].as<const char*>();
+            if (c0 && c1 && c2) {
+                char buf[64];
+                snprintf(buf, sizeof(buf), "1_%s,2_%s,3_%s", c0, c1, c2);
+                rgb_set_all(buf);
+            }
         }
     }
 }
@@ -136,8 +139,14 @@ static void cmd_hx711(int argc, char** argv) {
 
 static void cmd_stepper_cmd(int argc, char** argv) {
     if (argc > 2 && strcmp(argv[1], "set") == 0) {
-        stepper_set_target(atol(argv[2]));
-        Serial.printf("stepper target -> %ld\n", atol(argv[2]));
+        char* end;
+        long val = strtol(argv[2], &end, 10);
+        if (end == argv[2] || *end != '\0') {
+            Serial.println("Invalid number");
+        } else {
+            stepper_set_target(val);
+            Serial.printf("stepper target -> %ld\n", val);
+        }
     } else if (argc > 1 && strcmp(argv[1], "get") == 0) {
         Serial.printf("position=%ld target=%ld\n", stepper_get_position(), stepper_get_target());
     } else {
@@ -146,11 +155,14 @@ static void cmd_stepper_cmd(int argc, char** argv) {
 }
 
 static void cmd_home(int, char**) {
-    s_zeroCalibrated = true;
-    zero_run();
-    stepper_reset_position(0);
-    stepper_save_position();
-    stepper_set_dirty(false);
+    if (zero_run()) {
+        s_zeroCalibrated = true;
+        stepper_reset_position(0);
+        stepper_save_position();
+        stepper_set_dirty(false);
+    } else {
+        Serial.println("[MAIN] Home calibration failed");
+    }
 }
 
 static void cmd_leds(int argc, char** argv) {
@@ -176,6 +188,7 @@ static void wait_for_stepper(unsigned long timeout_ms) {
     unsigned long start = millis();
     while (stepper_is_moving() && millis() - start < timeout_ms) {
         stepper_loop();
+        watchdog_feed();
         delay(1);
     }
 }

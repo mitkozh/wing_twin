@@ -27,6 +27,7 @@ static float  strainValues[HX711_NUM_ACTIVE] = {0.0};
 static bool   s_saturated[HX711_NUM_ACTIVE] = {false};
 static int    s_readErrorCount = 0;
 static long   s_lastDummy = 0;
+static bool   s_lastDummyValid = false;
 
 // Calibration storage
 typedef struct {
@@ -165,17 +166,19 @@ bool hx711_read_all(void) {
         delay(1);
     }
     for (int i = 0; i < HX711_NUM_CHANNELS; i++) rawValues[i] = 0;
-    noInterrupts();
+    // Keep interrupts enabled for GPIO writes; only mask them during the
+    // brief digitalRead window so WiFi / FreeRTOS tasks are not starved.
     for (int bit = 23; bit >= 0; bit--) {
         digitalWrite(HX711_SCK, HIGH); delayMicroseconds(1);
+        noInterrupts();
         for (int i = 0; i < HX711_NUM_CHANNELS; i++)
             if (digitalRead(HX711_DT_PINS[i]) == HIGH)
                 rawValues[i] |= (1L << bit);
+        interrupts();
         digitalWrite(HX711_SCK, LOW);  delayMicroseconds(1);
     }
     digitalWrite(HX711_SCK, HIGH); delayMicroseconds(1);
     digitalWrite(HX711_SCK, LOW);  delayMicroseconds(1);
-    interrupts();
     for (int i = 0; i < HX711_NUM_CHANNELS; i++) {
         if (rawValues[i] & 0x800000) rawValues[i] |= 0xFF000000;
     }
@@ -187,15 +190,24 @@ bool hx711_read_all(void) {
     long dummyRaw = rawValues[HX711_NUM_CHANNELS - 1];
     bool dummyStuck = (dummyRaw == 0) || (dummyRaw >= 8388607) || (dummyRaw <= -8388608);
     if (dummyStuck) {
-        Serial.println("[HX711] WARNING: dummy stuck - using last valid dummy value");
-        dummyRaw = s_lastDummy;
+        if (!s_lastDummyValid) {
+            Serial.println("[HX711] WARNING: dummy stuck and no prior valid value — compensation disabled");
+        } else {
+            dummyRaw = s_lastDummy;
+        }
     } else {
         s_lastDummy = dummyRaw;
+        s_lastDummyValid = true;
     }
     long dummy = dummyRaw;
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
-        compensatedRaw[i] = rawValues[i] - dummy;
-        strainValues[i] = (compensatedRaw[i] - g_cal.offset[i]) * g_cal.scale[i];
+        if (s_saturated[i]) {
+            compensatedRaw[i] = 0;
+            strainValues[i] = 0.0f;
+        } else {
+            compensatedRaw[i] = rawValues[i] - dummy;
+            strainValues[i] = (compensatedRaw[i] - g_cal.offset[i]) * g_cal.scale[i];
+        }
     }
     return true;
 }

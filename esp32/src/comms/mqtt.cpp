@@ -17,9 +17,11 @@ static bool          s_connected = false;
 
 static void handle_message(char* topic, byte* payload, unsigned int len) {
     if (!s_callback) return;
-    String jsonStr;
-    for (unsigned int i = 0; i < len; i++) jsonStr += (char)payload[i];
-    s_callback(topic, jsonStr.c_str());
+    static char s_msgBuf[MQTT_MAX_PACKET_SIZE];
+    unsigned int copyLen = (len < sizeof(s_msgBuf) - 1) ? len : (sizeof(s_msgBuf) - 1);
+    memcpy(s_msgBuf, payload, copyLen);
+    s_msgBuf[copyLen] = '\0';
+    s_callback(topic, s_msgBuf);
 }
 
 void mqtt_init(const char* server, int port, const char* subscribe_topic) {
@@ -69,9 +71,10 @@ void mqtt_loop(void) {
     if (now - s_lastAttempt < s_retryMs) return;
     s_lastAttempt = now;
     watchdog_feed();
-    String clientId = "ESP32-Wing-" + String(random(0xffff), HEX);
+    uint64_t chipId = ESP.getEfuseMac();
+    String clientId = "ESP32-Wing-" + String((uint32_t)(chipId >> 32), HEX) + String((uint32_t)chipId, HEX);
     Serial.printf("[MQTT] connecting to %s:%d...\n", s_server.c_str(), s_port);
-    if (s_mqtt.connect(clientId.c_str(), "wing/control", 1, false, "{\"position\":0}")) {
+    if (s_mqtt.connect(clientId.c_str(), "wing/status", 1, false, "{\"position\":0}")) {
         s_retryMs = MQTT_RETRY_BASE_MS;
     } else {
         Serial.printf("[MQTT] rc=%d, retry in %ums\n", s_mqtt.state(), s_retryMs);
