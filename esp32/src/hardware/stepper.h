@@ -9,5 +9,7 @@ long stepper_get_position(void);
 long stepper_get_target(void);
 bool stepper_is_moving(void);
 void stepper_enable(bool on);
+bool stepper_save_position(void);
+bool stepper_load_position(long* out_pos);
 
 #endif

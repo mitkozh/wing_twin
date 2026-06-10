@@ -134,6 +134,7 @@ static void cmd_home(int, char**) {
     s_zeroCalibrated = true;
     zero_run();
     stepper_reset_position(0);
+    stepper_save_position();
 }
 
 static void cmd_leds(int argc, char** argv) {
@@ -186,8 +187,16 @@ void setup() {
         wait_for_stepper
     };
     zero_init(cbs);
+
+    // Restore last known physical position before calibrating
+    long savedPos = 0;
+    if (stepper_load_position(&savedPos)) {
+        stepper_reset_position(savedPos);
+        Serial.printf("[MAIN] Restored stepper position: %ld\n", savedPos);
+    }
     zero_run();
     stepper_reset_position(0);
+    stepper_save_position();
     s_zeroCalibrated = true;
 
     shell_init();
