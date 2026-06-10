@@ -26,6 +26,7 @@ static long   compensatedRaw[HX711_NUM_ACTIVE] = {0};
 static float  strainValues[HX711_NUM_ACTIVE] = {0.0};
 static bool   s_saturated[HX711_NUM_ACTIVE] = {false};
 static int    s_readErrorCount = 0;
+static long   s_lastDummy = 0;
 
 // Calibration storage
 typedef struct {
@@ -181,7 +182,17 @@ bool hx711_read_all(void) {
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
         s_saturated[i] = (rawValues[i] >= 8388607) || (rawValues[i] <= -8388608);
     }
-    long dummy = rawValues[HX711_NUM_CHANNELS - 1];
+
+    // Detect stuck dummy gauge by value rather than pin voltage
+    long dummyRaw = rawValues[HX711_NUM_CHANNELS - 1];
+    bool dummyStuck = (dummyRaw == 0) || (dummyRaw >= 8388607) || (dummyRaw <= -8388608);
+    if (dummyStuck) {
+        Serial.println("[HX711] WARNING: dummy stuck - using last valid dummy value");
+        dummyRaw = s_lastDummy;
+    } else {
+        s_lastDummy = dummyRaw;
+    }
+    long dummy = dummyRaw;
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
         compensatedRaw[i] = rawValues[i] - dummy;
         strainValues[i] = (compensatedRaw[i] - g_cal.offset[i]) * g_cal.scale[i];
