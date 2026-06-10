@@ -135,6 +135,7 @@ static void cmd_home(int, char**) {
     zero_run();
     stepper_reset_position(0);
     stepper_save_position();
+    stepper_set_dirty(false);
 }
 
 static void cmd_leds(int argc, char** argv) {
@@ -190,13 +191,22 @@ void setup() {
 
     // Restore last known physical position before calibrating
     long savedPos = 0;
-    if (stepper_load_position(&savedPos)) {
+    bool hadSavedPos = stepper_load_position(&savedPos);
+    if (hadSavedPos) {
         stepper_reset_position(savedPos);
         Serial.printf("[MAIN] Restored stepper position: %ld\n", savedPos);
     }
+
+    // If position was last saved mid-move, position may be unreliable
+    if (stepper_was_mid_move()) {
+        Serial.println("[MAIN] WARNING: previous shutdown during stepper movement — position may be inaccurate");
+        Serial.println("[MAIN] Type 'home' to re-calibrate if needed, or continue");
+    }
+
     zero_run();
     stepper_reset_position(0);
     stepper_save_position();
+    stepper_set_dirty(false);
     s_zeroCalibrated = true;
 
     shell_init();

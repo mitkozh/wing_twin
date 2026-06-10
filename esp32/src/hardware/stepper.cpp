@@ -8,8 +8,10 @@ static AccelStepper s_stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
 static long s_target = 0;
 static bool s_enabled = true;
 static bool s_pos_saved = false;
+static unsigned long s_last_move_save = 0;
 
 static const char* STEPPER_STATE_FILE = "/stepper_pos.txt";
+static const char* STEPPER_DIRTY_FILE = "/stepper_dirty.txt";
 
 void stepper_init(void) {
     pinMode(ENABLE_PIN, OUTPUT);
@@ -26,6 +28,7 @@ void stepper_set_target(long steps) {
     if (steps > STEPPER_MAX_POSITION) steps = STEPPER_MAX_POSITION;
     s_target = steps;
     s_stepper.moveTo(steps);
+    stepper_set_dirty(true);
 }
 
 void stepper_reset_position(long pos) {
@@ -61,12 +64,21 @@ void stepper_loop(void) {
         s_target = pos;
     }
 
-    // Persist position when idle at target
-    if (!stepper_is_moving() && !s_pos_saved) {
-        stepper_save_position();
-        s_pos_saved = true;
-    } else if (stepper_is_moving()) {
+    // Periodic save during motion (every 500ms)
+    if (stepper_is_moving()) {
         s_pos_saved = false;
+        if (millis() - s_last_move_save > 500) {
+            stepper_save_position();
+            s_last_move_save = millis();
+        }
+        return;
+    }
+
+    // Persist position when idle at target
+    if (!s_pos_saved) {
+        stepper_save_position();
+        stepper_set_dirty(false);
+        s_pos_saved = true;
     }
 }
 
@@ -90,4 +102,25 @@ bool stepper_load_position(long* out_pos) {
     if (line.length() == 0) return false;
     *out_pos = line.toInt();
     return true;
+}
+
+void stepper_set_dirty(bool dirty) {
+    if (!LittleFS.begin(false)) return;
+    if (dirty) {
+        File f = LittleFS.open(STEPPER_DIRTY_FILE, "w");
+        if (f) { f.println("1"); f.close(); }
+    } else {
+        LittleFS.remove(STEPPER_DIRTY_FILE);
+    }
+    LittleFS.end();
+}
+
+bool stepper_was_mid_move(void) {
+    if (!LittleFS.begin(false)) return false;
+    if (!LittleFS.exists(STEPPER_DIRTY_FILE)) { LittleFS.end(); return false; }
+    File f = LittleFS.open(STEPPER_DIRTY_FILE, "r");
+    if (!f) { LittleFS.end(); return false; }
+    String line = f.readStringUntil('\n'); line.trim();
+    f.close(); LittleFS.end();
+    return line == "1";
 }
