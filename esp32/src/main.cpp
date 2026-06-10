@@ -113,10 +113,24 @@ static void cmd_hx711(int argc, char** argv) {
         hx711_tare();
         hx711_save_calibration();
     } else if (argc > 1 && strcmp(argv[1], "read") == 0) {
-        hx711_read_all();
-        hx711_print_values();
+        if (argc > 2 && (strcmp(argv[2], "-c") == 0 || strcmp(argv[2], "--continuous") == 0)) {
+            Serial.println("HX711 continuous — press any key to stop");
+            while (true) {
+                if (Serial.available() > 0) {
+                    while (Serial.available()) Serial.read();
+                    Serial.println();
+                    break;
+                }
+                hx711_read_all();
+                hx711_print_values();
+                delay(200);
+            }
+        } else {
+            hx711_read_all();
+            hx711_print_values();
+        }
     } else {
-        Serial.println("usage: hx711 read|tare");
+        Serial.println("usage: hx711 read [-c|--continuous] | tare");
     }
 }
 
@@ -221,7 +235,7 @@ void setup() {
 
     shell_init();
     shell_register("stepper", "set <steps> | get", cmd_stepper_cmd);
-    shell_register("hx711",   "read | tare",       cmd_hx711);
+    shell_register("hx711",   "read [-c|--continuous] | tare", cmd_hx711);
     shell_register("home",    "run zero calibration", cmd_home);
     shell_register("leds",    "<r,g,b>",          cmd_leds);
     shell_register("status",  "show all states",  cmd_status);

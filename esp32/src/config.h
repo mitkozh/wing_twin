@@ -11,7 +11,7 @@
 // HX711
 #define HX711_NUM_ACTIVE         9
 #define HX711_NUM_CHANNELS       10
-#define HX711_READ_TIMEOUT_MS    1000
+#define HX711_READ_TIMEOUT_MS    100
 
 // Zero calibration
 #define ZERO_NUM_SAMPLES         10
@@ -35,6 +35,6 @@
 #define WATCHDOG_TIMEOUT_S       5
 
 // Sensor publish
-#define PUBLISH_INTERVAL_MS      1000
+#define PUBLISH_INTERVAL_MS      100
 
 #endif
