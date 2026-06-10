@@ -634,7 +634,11 @@ class DigitalTwinEngine:
             raw = np.array(reading.raw_values, dtype=np.float64)
             off_vals = reading.offset_values if reading.offset_values is not None else []
             off = np.array(off_vals, dtype=np.float64)
-            strain_vec = (raw - reading.dummy_raw - off) * cal.adc_to_strain_scale
+            if cal.per_channel_adc_to_strain_scale is not None:
+                scale = np.array(cal.per_channel_adc_to_strain_scale, dtype=np.float64)
+            else:
+                scale = cal.adc_to_strain_scale
+            strain_vec = (raw - reading.dummy_raw - off) * scale
         elif reading.strain_vector is not None:
             strain_vec = np.array(reading.strain_vector, dtype=np.float64)
         else:

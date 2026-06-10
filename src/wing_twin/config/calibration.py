@@ -23,6 +23,24 @@ class CalibrationConfig:
     #
     adc_to_strain_scale: float = 1.862645149230957e-9
 
+    # Per-channel ADC-to-strain scale factors.
+    # When set (length 9, one per active channel), these replace the global
+    # adc_to_strain_scale for each channel individually.
+    #
+    # Calibrated 2026-06-10 with 92 g hung at wing tip after fresh tare.
+    #
+    per_channel_adc_to_strain_scale: tuple[float, ...] | None = (
+        1.7246629579162173e-10,   # root_0
+        1.8626451492309570e-09,   # root_45    saturated, imputed
+        4.3833757605498874e-11,   # root_90
+        1.6722100590263809e-10,   # middle_0
+        -1.0782705093762275e-10,  # middle_45  sign inverted
+        2.5700575309710537e-11,   # middle_90
+        7.0790170900430788e-10,   # tip_0
+        1.8626451492309570e-09,   # tip_45     dead, imputed
+        2.7396806673080781e-10,   # tip_90
+    )
+
     # Force reconstruction
     H_matrix_scale: float = 1.0
 
@@ -50,3 +68,9 @@ class CalibrationConfig:
         check_gt(self.stepper_max_steps, "CalibrationConfig.stepper_max_steps", 0)
         check_gt(self.stepper_max_frequency, "CalibrationConfig.stepper_max_frequency", 0)
         check_gt(self.H_matrix_scale, "CalibrationConfig.H_matrix_scale", 0)
+        if self.per_channel_adc_to_strain_scale is not None:
+            if len(self.per_channel_adc_to_strain_scale) != 9:
+                raise ValueError(
+                    f"per_channel_adc_to_strain_scale must have 9 elements, "
+                    f"got {len(self.per_channel_adc_to_strain_scale)}"
+                )

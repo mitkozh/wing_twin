@@ -27,8 +27,8 @@
 #define WIFI_CONNECT_COOLDOWN_MS 2000
 
 // MQTT
-#define MQTT_MAX_RETRY_MS        60000
-#define MQTT_RETRY_BASE_MS        2000
+#define MQTT_MAX_RETRY_MS        5000U
+#define MQTT_RETRY_BASE_MS        200U
 #define MQTT_POSITION_TIMEOUT_MS  5000
 
 // Watchdog
