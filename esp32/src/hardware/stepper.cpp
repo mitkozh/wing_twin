@@ -14,11 +14,13 @@ static const char* PREFS_NS = "stepper";
 
 void stepper_init(void) {
     pinMode(ENABLE_PIN, OUTPUT);
-    digitalWrite(ENABLE_PIN, LOW);
+    digitalWrite(ENABLE_PIN, HIGH);          // start disabled - let driver supply stabilize
+    delay(100);                              // brief settling window
     s_stepper.setMaxSpeed(STEPPER_MAX_SPEED);
     s_stepper.setAcceleration(STEPPER_ACCELERATION);
     s_stepper.setCurrentPosition(0);
     s_target = 0;
+    digitalWrite(ENABLE_PIN, LOW);            // enable driver now
     Serial.println("[STEPPER] init done");
 }
 

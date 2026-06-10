@@ -3,7 +3,7 @@
 
 // Stepper motor
 #define STEPPER_MAX_SPEED        1000.0f   // steps/sec
-#define STEPPER_ACCELERATION     2500.0f   // steps/sec^2
+#define STEPPER_ACCELERATION     600.0f    // steps/sec^2
 #define STEPPER_POSITION_TOLERANCE 5
 #define STEPPER_MIN_POSITION     -500
 #define STEPPER_MAX_POSITION     2720
