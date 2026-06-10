@@ -78,7 +78,10 @@ static void on_mqtt_message(const char* topic, const char* payload) {
 // Sensor data publishing
 // ---------------------------------------------------------------------------
 static void publish_sensor_data(void) {
-    hx711_read_all();
+    if (!hx711_read_all()) {
+        Serial.println("[MAIN] HX711 read failed - skipping publish");
+        return;
+    }
 
     StaticJsonDocument<1024> doc;
 
@@ -219,6 +222,18 @@ void loop() {
         Serial.println("[MAIN] MQTT timeout — zeroing stepper");
         stepper_set_target(0);
         s_lastMqttMsg = millis();
+    }
+
+    // Connection-state LED feedback
+    static bool s_prev_mqtt_connected = false;
+    bool mqtt_ok = mqtt_is_connected();
+    if (mqtt_ok != s_prev_mqtt_connected) {
+        s_prev_mqtt_connected = mqtt_ok;
+        if (mqtt_ok) {
+            rgb_set_all("1_green,2_green,3_green");
+        } else {
+            rgb_set_all("1_red,2_red,3_red");
+        }
     }
 
     // Periodic publish

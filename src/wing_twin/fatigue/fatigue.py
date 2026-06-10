@@ -37,7 +37,7 @@ class FatigueState:
     node_res_sigs: dict = field(default_factory=dict)
     per_channel_residual: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float64))
     per_channel_confidence: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float64))
-    saturated_channels: list[int] = field(default_factory=list)
+    bad_channels: list[int] = field(default_factory=list)
     per_channel_low_frames: dict[int, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -55,7 +55,7 @@ class FatigueState:
             },
             "per_channel_residual": self.per_channel_residual.tolist(),
             "per_channel_confidence": self.per_channel_confidence.tolist(),
-            "saturated_channels": self.saturated_channels,
+            "bad_channels": self.bad_channels,
             "per_channel_low_frames": dict(self.per_channel_low_frames),
         }
 
@@ -80,7 +80,7 @@ class FatigueState:
         state.per_channel_residual = np.array(pcr, dtype=np.float64) if pcr else np.array([], dtype=np.float64)
         pcc = data.get("per_channel_confidence", [])
         state.per_channel_confidence = np.array(pcc, dtype=np.float64) if pcc else np.array([], dtype=np.float64)
-        state.saturated_channels = data.get("saturated_channels", [])
+        state.bad_channels = data.get("bad_channels", [])
         pclf = data.get("per_channel_low_frames", {})
         state.per_channel_low_frames = {int(k): int(v) for k, v in pclf.items()}
         return state

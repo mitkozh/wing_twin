@@ -72,7 +72,6 @@ class MqttHandler(MqttClientBase):
         super().__init__(config)
         self._sensor_buffers: dict[str, deque] = {}
         self._num_gauges = 3
-        self._latest_saturated: Optional[list[bool]] = None
         self._latest_esp32_stepper: Optional[int] = None
         self._latest_esp32_home_offset: Optional[int] = None
 
@@ -103,16 +102,16 @@ class MqttHandler(MqttClientBase):
             raw_vals = np.array(payload["raw"], dtype=np.int64)
             dummy_raw = int(payload.get("dummy_raw", 0))
             offset_vals = np.array(payload.get("offset", []), dtype=np.float64)
+            saturated = payload.get("saturated")
             self._num_gauges = len(raw_vals)
             key = "esp32"
             if key not in self._sensor_buffers:
                 self._sensor_buffers[key] = deque(maxlen=1)
             self._sensor_buffers[key].clear()
             self._sensor_buffers[key].append(
-                (raw_vals, offset_vals, dummy_raw, timestamp)
+                (raw_vals, offset_vals, dummy_raw, saturated, timestamp)
             )
 
-            self._latest_saturated = payload.get("saturated")
             self._latest_esp32_stepper = payload.get("stepper_position")
             self._latest_esp32_home_offset = payload.get("home_offset")
 
@@ -157,12 +156,12 @@ class MqttSource(DataSource):
         if "esp32" not in buffers or not buffers["esp32"]:
             return None
 
-        raw_vals, offset_vals, dummy_raw, ts = buffers["esp32"].popleft()
+        raw_vals, offset_vals, dummy_raw, saturated, ts = buffers["esp32"].popleft()
         return SensorReading(
             raw_values=raw_vals,
             offset_values=offset_vals,
             dummy_raw=dummy_raw,
-            saturated_flags=self._handler._latest_saturated,
+            saturated_flags=saturated,
             accel_z=0.0,
             timestamp=ts,
             gauge_id="esp32_raw",

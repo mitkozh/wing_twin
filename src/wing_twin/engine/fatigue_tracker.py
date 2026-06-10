@@ -130,7 +130,7 @@ class FatigueTracker:
     def _check_notifications(self, twin_state: TwinState) -> None:
         low_conf = self.state.low_confidence_frames >= self.config.confidence_frames_threshold
         if low_conf and not self._prev_low_confidence:
-            bad = self.state.saturated_channels or sorted(
+            bad = self.state.bad_channels or sorted(
                 i for i, c in self.state.per_channel_low_frames.items()
                 if c >= self.config.confidence_frames_threshold
             )

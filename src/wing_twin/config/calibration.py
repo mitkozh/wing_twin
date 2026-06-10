@@ -11,12 +11,10 @@ from wing_twin.config.types import check_ge, check_gt
 
 @dataclass
 class CalibrationConfig:
-    # ADC -> unitless strain conversion.
+    # Raw ADC -> unitless strain conversion.
     #
-    # ESP32 firmware publishes strain_vector = (raw - dummy - tare_offset) * scale
-    # with scale = 1.0 (stored in ESP32 calibration file after tare).
-    # This constant converts those firmware strain values (in ADC count space)
-    # to unitless strain.
+    # ESP32 firmware publishes raw ADC values + tare offsets + dummy_raw.
+    # Python computes: strain = (raw - dummy_raw - offset) * adc_to_strain_scale
     #
     #   \epsilon = ADC_count * 4 / (GAIN * 2^23 * GF)
     #     = ADC_count * 4 / (128 * 8_388_608 * 2.0)
