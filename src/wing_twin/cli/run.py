@@ -94,7 +94,7 @@ async def run_production(
     process_task = asyncio.create_task(process_loop())
 
     try:
-        await asyncio.gather(ws_task, process_task, stop_event.wait())
+        await stop_event.wait()
     except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Shutting down...")
     finally:
