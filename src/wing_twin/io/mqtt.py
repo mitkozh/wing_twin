@@ -101,9 +101,14 @@ class MqttHandler(MqttClientBase):
 
             raw_vals = np.array(payload["raw"], dtype=np.int64)
             dummy_raw = int(payload.get("dummy_raw", 0))
-            offset_vals = np.array(payload.get("offset", []), dtype=np.float64)
+            n = len(raw_vals)
+            offset_raw = payload.get("offset", [])
+            if len(offset_raw) != n:
+                logger.warning("offset length %d != raw length %d - using zeros", len(offset_raw), n)
+                offset_raw = [0.0] * n
+            offset_vals = np.array(offset_raw, dtype=np.float64)
             saturated = payload.get("saturated")
-            self._num_gauges = len(raw_vals)
+            self._num_gauges = n
             key = "esp32"
             if key not in self._sensor_buffers:
                 self._sensor_buffers[key] = deque(maxlen=1)
