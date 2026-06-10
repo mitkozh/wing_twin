@@ -22,7 +22,5 @@ bool   hx711_save_calibration(void);
 bool   hx711_load_calibration(void);
 
 bool   hx711_get_saturated(int active_index);
-void   hx711_print_values(void);
-void   hx711_print_pin_info(void);
 
 #endif

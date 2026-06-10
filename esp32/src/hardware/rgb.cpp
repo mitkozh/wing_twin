@@ -65,9 +65,4 @@ void rgb_set_all(const char* command) {
     Serial.printf("[RGB] set: %s\n", command);
 }
 
-void rgb_print_pins(void) {
-    Serial.println("RGB pins:");
-    Serial.printf("  LED1/tip   green=GPIO%d red=GPIO%d\n", LED1_STATUS_GREEN, LED1_STATUS_RED);
-    Serial.printf("  LED2/span  green=GPIO%d red=GPIO%d\n", LED2_STATUS_GREEN, LED2_STATUS_RED);
-    Serial.printf("  LED3/root  green=GPIO%d red=GPIO%d\n", LED3_STATUS_GREEN, LED3_STATUS_RED);
-}
+

@@ -1,45 +1,48 @@
 """
 Calibration configuration for physical model parameters.
-
-Values here are tuned per physical wing unit after experimental calibration
 """
 
+import json
+import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 from wing_twin.config.types import check_ge, check_gt
+
+logger = logging.getLogger(__name__)
+
+
+def _find_project_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in [current.parent] + list(current.parents):
+        if (parent / "pyproject.toml").exists():
+            return parent
+    return current.parent.parent.parent
+
+
+def _load_calibration_file() -> tuple[float, ...] | None:
+    calib_path = _find_project_root() / "calibration_regression" / "calibration_data.json"
+    if not calib_path.exists():
+        logger.warning("Calibration file not found at %s — using global scale", calib_path)
+        return None
+    try:
+        with open(calib_path) as f:
+            data = json.load(f)
+        raw = data.get("per_channel_adc_to_strain_scale")
+        if raw is None or len(raw) != 9:
+            logger.warning("Invalid calibration data in %s — using global scale", calib_path)
+            return None
+        return tuple(float(v) for v in raw)
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to load %s: %s — using global scale", calib_path, exc)
+        return None
 
 
 @dataclass
 class CalibrationConfig:
-    # Raw ADC -> unitless strain conversion.
-    #
-    # ESP32 firmware publishes raw ADC values + tare offsets + dummy_raw.
-    # Python computes: strain = (raw - dummy_raw - offset) * adc_to_strain_scale
-    #
-    #   \epsilon = ADC_count * 4 / (GAIN * 2^23 * GF)
-    #     = ADC_count * 4 / (128 * 8_388_608 * 2.0)
-    #     = ADC_count / 536_870_912
-    #     \approx ADC_count * 1.8626e-9
-    #
     adc_to_strain_scale: float = 1.862645149230957e-9
 
-    # Per-channel ADC-to-strain scale factors.
-    # When set (length 9, one per active channel), these replace the global
-    # adc_to_strain_scale for each channel individually.
-    #
-    # Calibrated 2026-06-10 with 92 g hung at wing tip after fresh tare.
-    #
-    per_channel_adc_to_strain_scale: tuple[float, ...] | None = (
-        1.7246629579162173e-10,   # root_0
-        1.8626451492309570e-09,   # root_45    saturated, imputed
-        4.3833757605498874e-11,   # root_90
-        1.6722100590263809e-10,   # middle_0
-        -1.0782705093762275e-10,  # middle_45  sign inverted
-        2.5700575309710537e-11,   # middle_90
-        7.0790170900430788e-10,   # tip_0
-        1.8626451492309570e-09,   # tip_45     dead, imputed
-        2.7396806673080781e-10,   # tip_90
-    )
+    per_channel_adc_to_strain_scale: tuple[float, ...] | None = None
 
     # Force reconstruction
     H_matrix_scale: float = 1.0
@@ -68,9 +71,15 @@ class CalibrationConfig:
         check_gt(self.stepper_max_steps, "CalibrationConfig.stepper_max_steps", 0)
         check_gt(self.stepper_max_frequency, "CalibrationConfig.stepper_max_frequency", 0)
         check_gt(self.H_matrix_scale, "CalibrationConfig.H_matrix_scale", 0)
+
         if self.per_channel_adc_to_strain_scale is not None:
             if len(self.per_channel_adc_to_strain_scale) != 9:
                 raise ValueError(
                     f"per_channel_adc_to_strain_scale must have 9 elements, "
                     f"got {len(self.per_channel_adc_to_strain_scale)}"
                 )
+        else:
+            loaded = _load_calibration_file()
+            if loaded is not None:
+                object.__setattr__(self, "per_channel_adc_to_strain_scale", loaded)
+                logger.info("Loaded per-channel calibration from file")

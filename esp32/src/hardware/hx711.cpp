@@ -245,19 +245,4 @@ const char* hx711_get_channel_name(int i) {
     return CHANNEL_NAMES[i];
 }
 
-void hx711_print_values(void) {
-    Serial.println("HX711:");
-    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
-        Serial.printf("  %s | raw=%ld comp=%ld strain=%.3f\n",
-                      CHANNEL_NAMES[i], rawValues[i], compensatedRaw[i], strainValues[i]);
-    }
-    Serial.printf("  %s | raw=%ld\n", CHANNEL_NAMES[HX711_NUM_CHANNELS - 1],
-                  rawValues[HX711_NUM_CHANNELS - 1]);
-}
 
-void hx711_print_pin_info(void) {
-    Serial.println("HX711 pins:");
-    Serial.printf("  SCK -> GPIO %d\n", HX711_SCK);
-    for (int i = 0; i < HX711_NUM_CHANNELS; i++)
-        Serial.printf("  %s DT -> GPIO %d\n", CHANNEL_NAMES[i], HX711_DT_PINS[i]);
-}
