@@ -2,7 +2,7 @@
 Fatigue analysis module for digital twin.
 
 Provides per-node rainflow cycle counting, Miner's Rule damage accumulation
-using the FEA stress field, and confidence monitoring via EMA-filtered residuals.
+using the FEA stress field, and 3-component sensor confidence monitoring.
 
 Units:
   - Stress: MPa
@@ -39,6 +39,13 @@ class FatigueState:
     per_channel_confidence: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float64))
     bad_channels: list[int] = field(default_factory=list)
     per_channel_low_frames: dict[int, int] = field(default_factory=dict)
+
+    # Group cross-validation (3 groups: root, middle, tip)
+    group_consistency: np.ndarray = field(
+        default_factory=lambda: np.array([], dtype=np.float64)
+    )
+    # Expected strain ratios per group, computed from H matrix
+    group_expected_ratios: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -95,42 +102,237 @@ def sn_curve_for_material(material: str = "aluminum") -> SNCurve:
     return curves.get(material.lower(), curves["aluminum"])
 
 
+def _safe_ratio(num: float, den: float, eps: float = 1e-12) -> float:
+    """Compute num/den with sign preservation and division-by-zero guard."""
+    if abs(den) < eps:
+        return 0.0
+    return num / den
+
+
+def compute_group_expected_ratios(H: np.ndarray) -> dict:
+    """Pre-compute expected pairwise strain ratios within each 3-gauge group.
+
+    Returns a dict keyed by section name ('root', 'middle', 'tip') with
+    the expected ratios r45_0, r90_0, r45_90 and the raw H matrix entries.
+    """
+    groups = {0: "root", 3: "middle", 6: "tip"}
+    ratios = {}
+    for start, name in groups.items():
+        h0 = float(H[start, 0])
+        h45 = float(H[start + 1, 0])
+        h90 = float(H[start + 2, 0])
+        ratios[name] = {
+            "h0": h0,
+            "h45": h45,
+            "h90": h90,
+            "r45_0": _safe_ratio(h45, h0),
+            "r90_0": _safe_ratio(h90, h0),
+            "r45_90": _safe_ratio(h45, h90),
+        }
+    return ratios
+
+
+def _group_consistency_score(
+    observed_strain: np.ndarray,
+    expected_ratios: dict,
+) -> np.ndarray:
+    """Compute per-group consistency scores (0–100) for the 3 section groups.
+
+    Checks that sign and pairwise strain ratios within each 3-gauge triplet
+    match the expected pattern from the FEA model (H matrix).  This check is
+    force-magnitude-independent, catching drift or failure in individual gauges
+    even when the load is small.
+    """
+    groups = [(0, "root"), (3, "middle"), (6, "tip")]
+    scores = np.zeros(3, dtype=np.float64)
+
+    for gi, (start, name) in enumerate(groups):
+        chunk = observed_strain[start:start + 3]
+        e = expected_ratios.get(name)
+        if e is None or np.any(np.isnan(chunk)):
+            scores[gi] = 100.0
+            continue
+
+        obs_0, obs_45, obs_90 = chunk[0], chunk[1], chunk[2]
+
+        if max(np.abs(chunk)) < 1e-10:
+            scores[gi] = 100.0
+            continue
+
+        sign_ok = 0
+        for obs_val, exp_key in [(obs_0, "h0"), (obs_45, "h45"), (obs_90, "h90")]:
+            if abs(obs_val) > 1e-10 and abs(e[exp_key]) > 1e-10:
+                if np.sign(obs_val) == np.sign(e[exp_key]):
+                    sign_ok += 1
+        sign_score = sign_ok / 3.0
+
+        r45_0_meas = _safe_ratio(obs_45, obs_0)
+        r90_0_meas = _safe_ratio(obs_90, obs_0)
+        r45_90_meas = _safe_ratio(obs_45, obs_90)
+
+        ratio_errors = []
+        for r_meas, exp_key in [
+            (r45_0_meas, "r45_0"),
+            (r90_0_meas, "r90_0"),
+            (r45_90_meas, "r45_90"),
+        ]:
+            exp_val = e[exp_key]
+            if abs(exp_val) > 1e-10 and abs(r_meas) > 1e-10:
+                rel_err = abs(r_meas - exp_val) / abs(exp_val)
+                ratio_errors.append(rel_err)
+
+        if ratio_errors:
+            ratio_score = 100.0 * np.exp(-2.0 * np.mean(ratio_errors))
+        else:
+            ratio_score = 100.0
+
+        scores[gi] = 0.4 * sign_score * 100.0 + 0.6 * ratio_score
+
+    return scores
+
+
+def _force_consistency_score(
+    observed_strain: np.ndarray,
+    H: np.ndarray,
+    eps: float = 1e-10,
+    groups: tuple = (
+        (0, 1, 2), (3, 4, 5), (6, 7, 8),
+        (0, 3, 6), (1, 4, 7), (2, 5, 8),
+    ),
+) -> float:
+    """Score (0–100) how consistently different gauge subsets estimate F."""
+    F_groups = []
+    for idxs in groups:
+        H_sub = H[list(idxs), 0]
+        obs_sub = observed_strain[list(idxs)]
+        H2 = float(H_sub @ H_sub)
+        if H2 > eps:
+            F_g = float(H_sub @ obs_sub) / H2
+            if abs(F_g) > eps:
+                F_groups.append(F_g)
+
+    if len(F_groups) < 2:
+        return 100.0
+
+    F_ref = float(np.median(F_groups))
+    if abs(F_ref) < eps:
+        return 100.0
+
+    deviations = [abs(f - F_ref) / abs(F_ref) for f in F_groups]
+    mean_dev = float(np.mean(deviations))
+
+    return float(np.clip(100.0 * np.exp(-3.0 * mean_dev), 0.0, 100.0))
+
+
+def _compute_model_fit(
+    observed_strain: np.ndarray,
+    expected_strain: np.ndarray,
+    noise_floor: float = 1e-10,
+    s_curve_threshold: float = 0.15,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Per-channel residual and S-curve confidence from |obs − exp| / |exp|.
+
+    Returns (per_channel_residual, per_channel_confidence, model_score).
+    """
+    denom = np.maximum(np.abs(expected_strain), noise_floor)
+    residual = np.abs(observed_strain - expected_strain) / denom
+    confidence = 100.0 / (1.0 + (residual / s_curve_threshold) ** 2)
+    score = float(np.mean(confidence))
+    return residual, confidence, score
+
+
+def _compute_group_consistency(
+    observed_strain: np.ndarray,
+    H: Optional[np.ndarray],
+    group_expected_ratios: dict,
+    expected_norm: float,
+    noise_floor: float = 1e-10,
+) -> tuple[np.ndarray, float]:
+    """Per-group ratio consistency score, or 100 if no load / no H."""
+    if H is not None and expected_norm > noise_floor * 10:
+        scores = _group_consistency_score(observed_strain, group_expected_ratios)
+        return scores, float(np.mean(scores))
+    return np.full(3, 100.0, dtype=np.float64), 100.0
+
+
+def _track_low_confidence_frames(
+    state: FatigueState,
+    per_channel_confidence: np.ndarray,
+    overall_confidence: float,
+    threshold: float,
+) -> None:
+    """Update per-channel and overall low-confidence frame counters."""
+    if overall_confidence < threshold:
+        state.low_confidence_frames += 1
+    else:
+        state.low_confidence_frames = 0
+
+    for i in range(len(per_channel_confidence)):
+        if per_channel_confidence[i] < threshold:
+            state.per_channel_low_frames[i] = state.per_channel_low_frames.get(i, 0) + 1
+        else:
+            state.per_channel_low_frames[i] = 0
+
+
 def update_confidence(
     state: FatigueState,
     observed_strain: np.ndarray,
     expected_strain: np.ndarray,
     config: Optional[FatigueConfig] = None,
+    H: Optional[np.ndarray] = None,
 ) -> float:
+    """Update per-channel and overall confidence from observed vs expected strain.
+    Returns the overall confidence (0–100).
+    """
     if config is None:
         config = FatigueConfig()
 
+    noise_floor = 1e-10
     expected_norm = float(np.linalg.norm(expected_strain))
-    if expected_norm < 1e-10:
+    if expected_norm < config.low_load_threshold:
+        state.confidence = 100.0
+        state.low_confidence_frames = 0
+        state.per_channel_low_frames = {}
         return state.confidence
 
-    diff = np.abs(observed_strain - expected_strain)
-    denom = np.maximum(np.abs(expected_strain), 1e-12)
-    per_channel = diff / denom
-    state.per_channel_residual = per_channel.copy()
-    state.per_channel_confidence = np.clip(100.0 * (1.0 - per_channel), 0.0, 100.0)
+    # Lazy-compute group ratios from H on first call
+    if H is not None and not state.group_expected_ratios:
+        state.group_expected_ratios = compute_group_expected_ratios(H)
 
-    global_residual = float(np.linalg.norm(diff)) / expected_norm
-    state.filtered_residual = (
-        config.ema_alpha * global_residual
-        + (1.0 - config.ema_alpha) * state.filtered_residual
+    # 1  Model-fit residual
+    residual, per_channel_conf, model_score = _compute_model_fit(
+        observed_strain, expected_strain, noise_floor,
     )
-    state.confidence = np.clip(100.0 * (1.0 - abs(state.filtered_residual)), 0.0, 100.0)
+    state.per_channel_residual = residual.copy()
+    state.per_channel_confidence = per_channel_conf.copy()
 
-    if state.confidence < config.confidence_threshold:
-        state.low_confidence_frames += 1
-    else:
-        state.low_confidence_frames = 0
+    # 2  Group ratio consistency
+    group_scores, group_score = _compute_group_consistency(
+        observed_strain, H, state.group_expected_ratios,
+        expected_norm, noise_floor,
+    )
+    state.group_consistency = group_scores.copy()
 
-    for i in range(len(per_channel)):
-        if state.per_channel_confidence[i] < config.confidence_threshold:
-            state.per_channel_low_frames[i] = state.per_channel_low_frames.get(i, 0) + 1
-        else:
-            state.per_channel_low_frames[i] = 0
+    # 3  Force-estimate cross-validation
+    force_score = (
+        _force_consistency_score(observed_strain, H)
+        if H is not None else 100.0
+    )
+
+    # 4  Blended overall confidence
+    state.filtered_residual = float(
+        np.linalg.norm(observed_strain - expected_strain)
+    ) / max(expected_norm, noise_floor)
+    state.confidence = float(np.clip(
+        0.30 * model_score + 0.30 * group_score + 0.40 * force_score,
+        0.0, 100.0,
+    ))
+
+    # 5  Low-confidence frame tracking
+    _track_low_confidence_frames(
+        state, per_channel_conf, state.confidence,
+        config.confidence_threshold,
+    )
 
     return state.confidence
 

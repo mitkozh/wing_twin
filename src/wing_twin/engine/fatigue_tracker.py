@@ -11,9 +11,13 @@ from wing_twin.fatigue.fatigue import (
     FatigueState,
     accumulate_damage_at_nodes,
     log_low_confidence_channels,
-    update_confidence, sn_curve_for_material,
+    sn_curve_for_material,
+    update_confidence,
     warmup_numba,
 )
+from wing_twin.fea.field_compute import compute_deformation_field, compute_stress_field
+from wing_twin.fea.force_reconstruct import solve_forces
+from wing_twin.io.sensor_validation import impute_channels
 from wing_twin.config.fatigue import FatigueConfig
 from wing_twin.config.calibration import CalibrationConfig
 from wing_twin.fatigue.life_prediction import LifePredictionState
@@ -64,44 +68,73 @@ class FatigueTracker:
             self.state.per_channel_confidence = np.array([], dtype=np.float64)
             self.state.bad_channels = []
             self.state.per_channel_low_frames = {}
+            self.state.group_consistency = np.array([], dtype=np.float64)
+            self.state.group_expected_ratios = {}
 
     def process(
         self,
+        pre_impute_strain: np.ndarray,
         strain_vector: np.ndarray,
         stress_field_pa: np.ndarray,
         expected_strain: np.ndarray,
         twin_state: TwinState,
+        H: Optional[np.ndarray] = None,
+        H_inv: Optional[np.ndarray] = None,
+        S: Optional[np.ndarray] = None,
+        U: Optional[np.ndarray] = None,
+        cal: Optional[CalibrationConfig] = None,
+        flight_phase: object = None,
     ) -> None:
-        """Process one frame of data through per-node fatigue analysis.
-
-        Updates twin_state with damage, confidence, node_damages,
-        and notifications.
-        """
+        """Process one frame through confidence -> re-imputation -> damage."""
         fatigue_cfg = self.config
         sn_curve = sn_curve_for_material(fatigue_cfg.material)
 
         update_confidence(
-            self.state, strain_vector, expected_strain,
-            config=fatigue_cfg,
+            self.state, pre_impute_strain, expected_strain,
+            config=fatigue_cfg, H=H,
         )
 
         log_low_confidence_channels(
             self.state, self._channel_names, config=fatigue_cfg,
         )
 
-        # Per-node fatigue using FEA stress field
-        stress_mpa = stress_field_pa / 1e6
-        accumulate_damage_at_nodes(stress_mpa, self.state, sn_curve=sn_curve, config=fatigue_cfg)
+        low_conf_idxs = [
+            i for i, c in enumerate(self.state.per_channel_confidence)
+            if c < fatigue_cfg.confidence_threshold
+        ]
+        existing_bad = set(self.state.bad_channels)
+        new_bad = sorted(set(low_conf_idxs) - existing_bad)
+        all_bad = sorted(existing_bad | set(new_bad))
+
+        if new_bad and H is not None and H_inv is not None and cal is not None:
+            self.state.bad_channels = all_bad
+            reimputed = impute_channels(pre_impute_strain.copy(), all_bad, H)
+            F = solve_forces(H_inv, reimputed)
+            F *= float(cal.H_matrix_scale)
+            expected_strain = H @ F
+
+            if S is not None:
+                stress_field_pa = compute_stress_field(S, F)
+            if U is not None:
+                twin_state.deformation_field = (
+                    compute_deformation_field(U, F).tolist()
+                )
+
+            twin_state.strain_vector = reimputed.tolist()
+            twin_state.forces = F.tolist()
+            twin_state.stress_field = stress_field_pa.tolist()
+        else:
+            self.state.bad_channels = all_bad
+
+        if flight_phase is not None and flight_phase.value != "on_ground":
+            stress_mpa = stress_field_pa / 1e6
+            accumulate_damage_at_nodes(
+                stress_mpa, self.state, sn_curve=sn_curve, config=fatigue_cfg,
+            )
 
         twin_state.node_damages = dict(self.state.node_damages)
-
-        # Damage tracking
-        self._update_damage_metrics(twin_state)
-
-        # Confidence to twin state
         twin_state.confidence = self.state.confidence
-
-        # Notifications
+        self._update_damage_metrics(twin_state)
         self._check_notifications(twin_state)
 
     def _update_damage_metrics(self, twin_state: TwinState) -> None:

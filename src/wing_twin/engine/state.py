@@ -270,7 +270,7 @@ class TwinState:
     def _compute_led_colors(self) -> list:
         sections = _get_section_nodes()
         colors = []
-        for section_name in ["root", "middle", "tip"]:
+        for section_name in ["tip", "middle", "root"]:
             node_ids = sections[section_name]
             if not node_ids:
                 colors.append("green")

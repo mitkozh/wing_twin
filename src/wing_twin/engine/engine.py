@@ -13,9 +13,9 @@ from wing_twin.fea.force_reconstruct import solve_forces
 from wing_twin.fea.field_compute import compute_stress_field, compute_deformation_field
 from wing_twin.fatigue.fatigue import FatigueState, set_random_seed
 from wing_twin.io.sensor_validation import (
+    ChannelHealthTracker,
     detect_bad_channels,
     impute_channels,
-    log_imputed_channels,
 )
 from wing_twin.physics.aero import (
     compute_aero_force,
@@ -151,6 +151,10 @@ class DigitalTwinEngine:
 
         if self.config.seed is not None:
             set_random_seed(self.config.seed)
+
+        self._channel_health = ChannelHealthTracker(
+            list(self.config.calibration.channel_names),
+        )
 
         if data_source:
             self.data_source = data_source
@@ -623,12 +627,12 @@ class DigitalTwinEngine:
         self._update_altitude_km(dt)
 
     def _process_reading(self, reading: SensorReading) -> None:
-        """Process a sensor reading through FEA -> fatigue -> control."""
+        """Process a sensor reading through -> FEA -> fatigue."""
         if self._matrices is None:
             raise RuntimeError("Call load_matrices() before processing readings")
 
         cal = self.config.calibration
-        fatigue_cfg = self.config.fatigue
+        H = self._matrices.H
 
         if reading.raw_values is not None:
             raw = np.array(reading.raw_values, dtype=np.float64)
@@ -644,7 +648,6 @@ class DigitalTwinEngine:
         else:
             raise ValueError("SensorReading has neither raw_values nor strain_vector")
 
-        # hardware saturation + strain threshold checks
         bad_idxs = detect_bad_channels(strain_vec, cal.strain_saturation_threshold)
         if reading.saturated_flags is not None:
             for i, flagged in enumerate(reading.saturated_flags):
@@ -653,60 +656,39 @@ class DigitalTwinEngine:
             bad_idxs.sort()
 
         pre_impute = strain_vec.copy()
-        strain_pass1 = strain_vec.copy()
+        strain_clean = strain_vec.copy()
         if bad_idxs:
-            strain_pass1 = impute_channels(strain_pass1, bad_idxs, self._matrices.H)
+            strain_clean = impute_channels(strain_clean, bad_idxs, H)
 
-        F = solve_forces(self._matrices.H_inv, strain_pass1)
+        F = solve_forces(self._matrices.H_inv, strain_clean)
         F *= cal.H_matrix_scale
-        expected = self._matrices.H @ F
+        expected_strain = H @ F
 
-        diff = np.abs(pre_impute - expected)
-        denom = np.maximum(np.abs(expected), 1e-12)
-        per_channel_residual = diff / denom
-        per_channel_confidence = np.clip(100.0 * (1.0 - per_channel_residual), 0.0, 100.0)
-
-        low_conf_idxs = [
-            i for i, c in enumerate(per_channel_confidence)
-            if c < fatigue_cfg.confidence_threshold
-        ]
-        new_bad = [i for i in low_conf_idxs if i not in bad_idxs]
-        # reimpute low-confidence channels
-        if new_bad:
-            bad_idxs = sorted(set(bad_idxs + new_bad))
-            strain_vec = pre_impute.copy()
-            strain_vec = impute_channels(strain_vec, bad_idxs, self._matrices.H)
-            if bad_idxs:
-                log_imputed_channels(pre_impute, strain_vec, bad_idxs, list(cal.channel_names))
-            F = solve_forces(self._matrices.H_inv, strain_vec)
-            F *= cal.H_matrix_scale
-            expected = self._matrices.H @ F
-        else:
-            if bad_idxs:
-                log_imputed_channels(pre_impute, strain_pass1, bad_idxs, list(cal.channel_names))
-            strain_vec = strain_pass1
+        self.fatigue.state.bad_channels = bad_idxs
 
         stress = compute_stress_field(self._matrices.S, F)
         deformation = compute_deformation_field(self._matrices.U, F)
 
-        self.fatigue.state.bad_channels = bad_idxs
-        self.state.strain_vector = strain_vec.tolist()
+        self.state.strain_vector = strain_clean.tolist()
         self.state.forces = F.tolist()
         self.state.stress_field = stress.tolist()
         self.state.deformation_field = deformation.tolist()
 
-        # Only accumulate fatigue during active flight phases
-        if self._flight_phase != FlightPhase.ON_GROUND:
-            self.fatigue.process(
-                strain_vector=pre_impute,
-                stress_field_pa=stress,
-                expected_strain=expected,
-                twin_state=self.state,
-            )
-        else:
-            nd = self.fatigue.state.node_damages
-            self.state.damage = max(nd.values()) if nd else self.fatigue.state.damage
-            self.state.confidence = self.fatigue.state.confidence
+        self.fatigue.process(
+            pre_impute_strain=pre_impute,
+            strain_vector=strain_clean,
+            stress_field_pa=stress,
+            expected_strain=expected_strain,
+            twin_state=self.state,
+            H=H,
+            H_inv=self._matrices.H_inv,
+            S=self._matrices.S,
+            U=self._matrices.U,
+            cal=cal,
+            flight_phase=self._flight_phase,
+        )
+
+        self._channel_health.update(self.fatigue.state.bad_channels)
 
     def _update_safe_targets(self) -> None:
         """Convert desired angle/speed into safe targets."""
