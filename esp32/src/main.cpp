@@ -14,7 +14,6 @@
 
 #include <LittleFS.h>
 #include "calibration/zero.h"
-#include "cli/shell.h"
 #include "utils/watchdog.h"
 
 // ---------------------------------------------------------------------------
@@ -131,79 +130,6 @@ static void publish_sensor_data(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Shell commands
-// ---------------------------------------------------------------------------
-static void cmd_hx711(int argc, char** argv) {
-    if (argc > 1 && strcmp(argv[1], "tare") == 0) {
-        hx711_tare();
-        hx711_save_calibration();
-    } else if (argc > 1 && strcmp(argv[1], "read") == 0) {
-        if (argc > 2 && (strcmp(argv[2], "-c") == 0 || strcmp(argv[2], "--continuous") == 0)) {
-            Serial.println("HX711 continuous — press any key to stop");
-            while (true) {
-                if (Serial.available() > 0) {
-                    while (Serial.available()) Serial.read();
-                    Serial.println();
-                    break;
-                }
-                hx711_read_all();
-                hx711_print_values();
-                delay(200);
-            }
-        } else {
-            hx711_read_all();
-            hx711_print_values();
-        }
-    } else {
-        Serial.println("usage: hx711 read [-c|--continuous] | tare");
-    }
-}
-
-static void cmd_stepper_cmd(int argc, char** argv) {
-    if (argc > 2 && strcmp(argv[1], "set") == 0) {
-        char* end;
-        long val = strtol(argv[2], &end, 10);
-        if (end == argv[2] || *end != '\0') {
-            Serial.println("Invalid number");
-        } else {
-            stepper_set_target(val);
-            Serial.printf("stepper target -> %ld\n", val);
-        }
-    } else if (argc > 1 && strcmp(argv[1], "get") == 0) {
-        Serial.printf("position=%ld target=%ld\n", stepper_get_position(), stepper_get_target());
-    } else {
-        Serial.println("usage: stepper set <steps> | get");
-    }
-}
-
-static void cmd_home(int, char**) {
-    if (zero_run()) {
-        s_zeroCalibrated = true;
-        stepper_reset_position(0);
-        stepper_save_position();
-        stepper_set_dirty(false);
-    } else {
-        Serial.println("[MAIN] Home calibration failed");
-    }
-}
-
-static void cmd_leds(int argc, char** argv) {
-    if (argc > 1) {
-        rgb_set_all(argv[1]);
-    } else {
-        Serial.println("usage: leds 1_green,2_yellow,3_red");
-    }
-}
-
-static void cmd_status(int, char**) {
-    Serial.printf("stepper: pos=%ld\n", stepper_get_position());
-    Serial.printf("wifi:    %s\n", wifi_mgr_is_connected() ? "connected" : "disconnected");
-    Serial.printf("mqtt:    %s\n", mqtt_is_connected() ? "connected" : "disconnected");
-    Serial.printf("hx711:   errors=%d\n", hx711_get_error_count());
-    Serial.printf("zero:    offset=%ld calibrated=%d\n", zero_get_offset(), s_zeroCalibrated);
-}
-
-// ---------------------------------------------------------------------------
 // Stepper wait helper (passed to zero calibrator via callbacks)
 // ---------------------------------------------------------------------------
 static void wait_for_stepper(unsigned long timeout_ms) {
@@ -259,7 +185,7 @@ void setup() {
     // If position was last saved mid-move, position may be unreliable
     if (stepper_was_mid_move()) {
         Serial.println("[MAIN] WARNING: previous shutdown during stepper movement — position may be inaccurate");
-        Serial.println("[MAIN] Type 'home' to re-calibrate if needed, or continue");
+        Serial.println("[MAIN] Send {\"calibrate\":true} via MQTT to re-calibrate, or continue");
     }
 
     zero_run();
@@ -267,13 +193,6 @@ void setup() {
     stepper_save_position();
     stepper_set_dirty(false);
     s_zeroCalibrated = true;
-
-    shell_init();
-    shell_register("stepper", "set <steps> | get", cmd_stepper_cmd);
-    shell_register("hx711",   "read [-c|--continuous] | tare", cmd_hx711);
-    shell_register("home",    "run zero calibration", cmd_home);
-    shell_register("leds",    "<r,g,b>",          cmd_leds);
-    shell_register("status",  "show all states",  cmd_status);
 
     watchdog_init(WATCHDOG_TIMEOUT_S);
     rgb_set_all("1_green,2_green,3_green");
@@ -288,7 +207,6 @@ void loop() {
     wifi_mgr_loop();
     mqtt_loop();
     stepper_loop();
-    shell_loop();
 
     // Auto-zero if no MQTT message for timeout period
     if (mqtt_is_connected() && s_mqttMsgSeen &&
