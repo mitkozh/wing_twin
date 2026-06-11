@@ -24,7 +24,8 @@
 
 // WiFi
 #define WIFI_TIMEOUT_MS          15000
-#define WIFI_CONNECT_COOLDOWN_MS 2000
+#define WIFI_CONNECT_COOLDOWN_MS 500
+#define WIFI_MAX_RETRY_MS        5000
 
 // MQTT
 #define MQTT_MAX_RETRY_MS        5000U

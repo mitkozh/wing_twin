@@ -28,6 +28,7 @@ static bool   s_saturated[HX711_NUM_ACTIVE] = {false};
 static int    s_readErrorCount = 0;
 static long   s_lastDummy = 0;
 static bool   s_lastDummyValid = false;
+static unsigned long s_lastDummyTime = 0;
 
 // Calibration storage
 typedef struct {
@@ -186,18 +187,25 @@ bool hx711_read_all(void) {
         s_saturated[i] = (rawValues[i] >= 8388607) || (rawValues[i] <= -8388608);
     }
 
-    // Detect stuck dummy gauge by value rather than pin voltage
     long dummyRaw = rawValues[HX711_NUM_CHANNELS - 1];
     bool dummyStuck = (dummyRaw == 0) || (dummyRaw >= 8388607) || (dummyRaw <= -8388608);
     if (dummyStuck) {
         if (!s_lastDummyValid) {
-            Serial.println("[HX711] WARNING: dummy stuck and no prior valid value — compensation disabled");
+            dummyRaw = 0;
+        } else if (millis() - s_lastDummyTime > 30000) {
+            Serial.println("[HX711] dummy stuck >30s — falling back to uncompensated");
+            s_lastDummyValid = false;
+            dummyRaw = 0;
         } else {
             dummyRaw = s_lastDummy;
         }
     } else {
+        if (!s_lastDummyValid) {
+            Serial.println("[HX711] dummy recovered");
+        }
         s_lastDummy = dummyRaw;
         s_lastDummyValid = true;
+        s_lastDummyTime = millis();
     }
     long dummy = dummyRaw;
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {

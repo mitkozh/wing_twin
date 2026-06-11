@@ -75,7 +75,12 @@ void mqtt_loop(void) {
     String clientId = "ESP32-Wing-" + String((uint32_t)(chipId >> 32), HEX) + String((uint32_t)chipId, HEX);
     Serial.printf("[MQTT] connecting to %s:%d...\n", s_server.c_str(), s_port);
     if (s_mqtt.connect(clientId.c_str(), "wing/status", 1, false, "{\"position\":0}")) {
+        s_connected = true;
         s_retryMs = MQTT_RETRY_BASE_MS;
+        s_mqtt.loop();
+        if (s_subTopic) {
+            s_mqtt.subscribe(s_subTopic);
+        }
     } else {
         Serial.printf("[MQTT] rc=%d, retry in %ums\n", s_mqtt.state(), s_retryMs);
         s_retryMs = min(s_retryMs * 2, MQTT_MAX_RETRY_MS);

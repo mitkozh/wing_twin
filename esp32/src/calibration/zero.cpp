@@ -1,6 +1,7 @@
 #include "zero.h"
 #include "../config.h"
 #include "../hardware/hx711.h"
+#include "../utils/watchdog.h"
 #include <Arduino.h>
 
 static zero_callbacks_t s_cbs;
@@ -21,6 +22,7 @@ static void sample_baselines(float* out, int num_samples) {
     double accum[HX711_NUM_ACTIVE] = {0};
     int count[HX711_NUM_ACTIVE] = {0};
     for (int s = 0; s < num_samples; s++) {
+        watchdog_feed();
         hx711_read_all();
         for (int ch = 0; ch < HX711_NUM_ACTIVE; ch++) {
             if (hx711_get_saturated(ch)) continue;

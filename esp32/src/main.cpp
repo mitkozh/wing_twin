@@ -28,6 +28,7 @@ static const char* SUBSCRIBE_TOPIC = "wing/control";
 static bool          s_zeroCalibrated = false;
 static unsigned long s_lastMqttMsg    = 0;
 static bool          s_mqttMsgSeen    = false;
+static bool          s_autoZeroFired  = false;
 
 // ---------------------------------------------------------------------------
 // MQTT message handler
@@ -35,6 +36,7 @@ static bool          s_mqttMsgSeen    = false;
 static void on_mqtt_message(const char* topic, const char* payload) {
     s_lastMqttMsg = millis();
     s_mqttMsgSeen = true;
+    s_autoZeroFired = false;
 
     StaticJsonDocument<256> doc;
     DeserializationError err = deserializeJson(doc, payload);
@@ -119,7 +121,7 @@ static void publish_sensor_data(void) {
     for (int i = 0; i < HX711_NUM_ACTIVE; i++)
         saturatedArr.add(hx711_get_saturated(i));
 
-    doc["dummy_raw"]  = hx711_get_raw(9);
+    doc["dummy_raw"]  = hx711_get_raw(HX711_NUM_CHANNELS - 1);
     doc["stepper_position"] = stepper_get_position();
     doc["home_offset"]      = zero_get_offset();
     doc["timestamp"]        = millis();
@@ -182,10 +184,11 @@ void setup() {
         Serial.printf("[MAIN] Restored stepper position: %ld\n", savedPos);
     }
 
-    // If position was last saved mid-move, position may be unreliable
     if (stepper_was_mid_move()) {
-        Serial.println("[MAIN] WARNING: previous shutdown during stepper movement — position may be inaccurate");
-        Serial.println("[MAIN] Send {\"calibrate\":true} via MQTT to re-calibrate, or continue");
+        Serial.println("[MAIN] WARNING: previous shutdown mid-move - resetting to 0");
+        stepper_reset_position(0);
+        stepper_save_position();
+        stepper_set_dirty(false);
     }
 
     zero_run();
@@ -208,13 +211,12 @@ void loop() {
     mqtt_loop();
     stepper_loop();
 
-    // Auto-zero if no MQTT message for timeout period
-    if (mqtt_is_connected() && s_mqttMsgSeen &&
+    if (mqtt_is_connected() && s_mqttMsgSeen && !s_autoZeroFired &&
         millis() - s_lastMqttMsg > MQTT_POSITION_TIMEOUT_MS &&
         !stepper_is_moving()) {
         Serial.println("[MAIN] MQTT timeout — zeroing stepper");
         stepper_set_target(0);
-        s_lastMqttMsg = millis();
+        s_autoZeroFired = true;
     }
 
     // Connection-state LED feedback

@@ -7,6 +7,7 @@ static bool s_connected = false;
 static bool s_pending = false;
 static unsigned long s_lastAttempt = 0;
 static unsigned int s_retryMs = WIFI_CONNECT_COOLDOWN_MS;
+static unsigned int s_maxRetryMs = WIFI_MAX_RETRY_MS;
 
 void wifi_mgr_init(void) {
     WiFi.mode(WIFI_STA);
@@ -41,6 +42,7 @@ void wifi_mgr_loop(void) {
     }
     if (st == WL_CONNECT_FAILED || st == WL_NO_SSID_AVAIL) {
         s_pending = false;
+        s_retryMs = min(s_retryMs * 2, s_maxRetryMs);
     }
     if (now - s_lastAttempt < s_retryMs) return;
     Serial.printf("[WIFI] Connecting to %s...\n", WIFI_SSID);
