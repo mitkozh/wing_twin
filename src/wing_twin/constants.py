@@ -14,5 +14,4 @@ CHORD: float = 0.0491         # m
 ASPECT_RATIO: float = 7.27
 OSWALD_E: float = 0.85
 
-# Actuator limits
-MAX_STEPPER_STEPS: int = 2720
+

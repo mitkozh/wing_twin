@@ -11,7 +11,7 @@ import numpy as np
 
 from wing_twin.constants import (
     AIR_DENSITY, AIR_VISCOSITY, WING_AREA, CHORD,
-    ASPECT_RATIO, OSWALD_E, MAX_STEPPER_STEPS,
+    ASPECT_RATIO, OSWALD_E,
 )
 from wing_twin.config.calibration import CalibrationConfig
 
@@ -140,6 +140,6 @@ def force_to_steps(
     max_steps: Optional[int] = None,
 ) -> int:
     if max_steps is None:
-        max_steps = MAX_STEPPER_STEPS
+        max_steps = 2500  # default wing safe limit if no config loaded
     raw = int(round(abs(F_newtons) * steps_per_newton))
     return min(raw, max_steps)

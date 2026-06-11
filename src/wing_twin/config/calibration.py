@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from wing_twin.config.types import check_ge, check_gt
+from wing_twin.config.types import check_ge, check_gt, check_range
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def _find_project_root() -> Path:
 
 
 def _load_calibration_file() -> tuple[float, ...] | None:
-    calib_path = _find_project_root() / "calibration_regression" / "calibration_data.json"
+    calib_path = _find_project_root() / "calibration" / "strain" / "calibration_data.json"
     if not calib_path.exists():
         logger.warning("Calibration file not found at %s — using global scale", calib_path)
         return None
@@ -38,6 +38,25 @@ def _load_calibration_file() -> tuple[float, ...] | None:
         return None
 
 
+def _load_stepper_calibration() -> dict[str, float | int] | None:
+    calib_path = _find_project_root() / "calibration" / "stepper" / "stepper_calibration.json"
+    if not calib_path.exists():
+        logger.info("Stepper calibration file not found at %s — using defaults", calib_path)
+        return None
+    try:
+        with open(calib_path) as f:
+            data = json.load(f)
+        return {
+            "steps_per_newton": data.get("steps_per_newton"),
+            "stepper_motor_max_steps": data.get("stepper_motor_max_steps"),
+            "stepper_wing_safe_limit": data.get("stepper_wing_safe_limit"),
+            "stepper_max_frequency": data.get("stepper_max_frequency"),
+        }
+    except (json.JSONDecodeError, OSError, KeyError) as exc:
+        logger.warning("Failed to load %s: %s — using defaults", calib_path, exc)
+        return None
+
+
 @dataclass
 class CalibrationConfig:
     adc_to_strain_scale: float = 1.862645149230957e-9
@@ -49,8 +68,9 @@ class CalibrationConfig:
 
     # Stepper motor
     steps_per_newton: float = 204.0
-    stepper_max_steps: int = 2720
-    stepper_max_frequency: float = 1000.0  # Hz (max step rate)
+    stepper_motor_max_steps: int = 2720        # physical limit of the stepper motor
+    stepper_wing_safe_limit: int = 2500        # hard limit to prevent wing damage (<= motor max)
+    stepper_max_frequency: float = 1000.0      # Hz (max step rate)
 
     # Aerodynamic force biases (additive corrections)
     lift_bias: float = 0.0
@@ -68,9 +88,17 @@ class CalibrationConfig:
     def __post_init__(self) -> None:
         check_ge(self.adc_to_strain_scale, "CalibrationConfig.adc_to_strain_scale", 0)
         check_ge(self.steps_per_newton, "CalibrationConfig.steps_per_newton", 0)
-        check_gt(self.stepper_max_steps, "CalibrationConfig.stepper_max_steps", 0)
+        check_gt(self.stepper_motor_max_steps, "CalibrationConfig.stepper_motor_max_steps", 0)
+        check_gt(self.stepper_wing_safe_limit, "CalibrationConfig.stepper_wing_safe_limit", 0)
         check_gt(self.stepper_max_frequency, "CalibrationConfig.stepper_max_frequency", 0)
         check_gt(self.H_matrix_scale, "CalibrationConfig.H_matrix_scale", 0)
+
+        if self.stepper_wing_safe_limit > self.stepper_motor_max_steps:
+            logger.warning(
+                "stepper_wing_safe_limit (%d) exceeds stepper_motor_max_steps (%d) — clamping",
+                self.stepper_wing_safe_limit, self.stepper_motor_max_steps,
+            )
+            object.__setattr__(self, "stepper_wing_safe_limit", self.stepper_motor_max_steps)
 
         if self.per_channel_adc_to_strain_scale is not None:
             if len(self.per_channel_adc_to_strain_scale) != 9:
@@ -83,3 +111,36 @@ class CalibrationConfig:
             if loaded is not None:
                 object.__setattr__(self, "per_channel_adc_to_strain_scale", loaded)
                 logger.info("Loaded per-channel calibration from file")
+
+        # Auto-load stepper calibration file, overriding defaults
+        stepper_cal = _load_stepper_calibration()
+        if stepper_cal is not None:
+            for key, default_val in [
+                ("steps_per_newton", self.steps_per_newton),
+                ("stepper_motor_max_steps", self.stepper_motor_max_steps),
+                ("stepper_wing_safe_limit", self.stepper_wing_safe_limit),
+                ("stepper_max_frequency", self.stepper_max_frequency),
+            ]:
+                val = stepper_cal.get(key)
+                if val is not None:
+                    expected_type = type(default_val)
+                    if isinstance(val, expected_type):
+                        object.__setattr__(self, key, val)
+                    else:
+                        logger.warning(
+                            "stepper_cal.json key '%s' has wrong type (expected %s, got %s) — skipping",
+                            key, expected_type.__name__, type(val).__name__,
+                        )
+            # Re-check wing safe limit ≤ motor max after loading
+            if self.stepper_wing_safe_limit > self.stepper_motor_max_steps:
+                logger.warning(
+                    "Calibrated stepper_wing_safe_limit (%d) exceeds motor max (%d) - clamping",
+                    self.stepper_wing_safe_limit, self.stepper_motor_max_steps,
+                )
+                object.__setattr__(self, "stepper_wing_safe_limit", self.stepper_motor_max_steps)
+
+            logger.info(
+                "Loaded stepper calibration: steps/N=%.1f, motor_max=%d, wing_limit=%d, freq=%.0f Hz",
+                self.steps_per_newton, self.stepper_motor_max_steps,
+                self.stepper_wing_safe_limit, self.stepper_max_frequency,
+            )

@@ -6,7 +6,7 @@ performs per-channel linear regression, and saves the
 calibration data file.
 
 Usage:
-    python -m calibration_regression.analyze --data-dir calibration_regression/data
+    python -m calibration.strain.analyze --data-dir calibration/strain/data
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent
 
 
 def _find_project_root() -> Path:
@@ -43,7 +43,6 @@ def load_h_matrix(transfer_dir: Path) -> np.ndarray:
     H = np.load(transfer_dir / "H.npy")
     if H.shape != (9, 1):
         raise ValueError(f"Expected H shape (9, 1), got {H.shape}")
-    # Convert float32 → float64 for precision
     return H.astype(np.float64)
 
 
@@ -56,7 +55,6 @@ def load_data_files(data_dir: Path) -> dict[float, np.ndarray]:
     results: dict[float, np.ndarray] = {}
     for fp in csv_files:
         stem = fp.stem
-        # Parse weight from filename like "20260610T120000Z_500g"
         try:
             weight_part = stem.split("_")[-1]
             weight_g = float(weight_part.replace("g", ""))
@@ -73,7 +71,6 @@ def load_data_files(data_dir: Path) -> dict[float, np.ndarray]:
                     for i in range(9)
                 ], dtype=np.float64)
                 saturated = [row.get(f"saturated_{i}", "False").strip().lower() == "true" for i in range(9)]
-                # Zero out saturated channels
                 for i in range(9):
                     if saturated[i]:
                         compensated[i] = 0.0
@@ -108,7 +105,6 @@ def compute_scale_factors(
     weights_g = sorted(weight_data.keys())
     n_channels = 9
 
-    # Remove tare from all readings
     if 0.0 in weight_data:
         tare_raw = weight_data[0.0]
     else:
@@ -125,14 +121,14 @@ def compute_scale_factors(
 
         for w_g in weights_g:
             if w_g == 0.0:
-                continue  # tare is subtracted, not a data point
+                continue
             comp_raw = weight_data[w_g][ch] - tare_raw[ch]
             h_val = float(H[ch, 0])
-            w_n = w_g / 1000.0 * G  # grams → Newtons
+            w_n = w_g / 1000.0 * G
             expected_strain = h_val * w_n
 
             if abs(comp_raw) < 1e-9:
-                continue  # saturated or dead channel
+                continue
 
             x_vals.append(comp_raw)
             y_vals.append(expected_strain)
@@ -147,7 +143,6 @@ def compute_scale_factors(
         x = np.array(x_vals, dtype=np.float64)
         y = np.array(y_vals, dtype=np.float64)
 
-        # Constrained through origin: y = x * scale
         s = np.dot(x, y) / np.dot(x, x) if np.dot(x, x) > 0 else 0.0
         scale[ch] = s
 
@@ -169,7 +164,7 @@ def compute_scale_factors(
 
 
 def save_calibration(scale: np.ndarray, weights_used: list[float]):
-    calib_path = HERE / "calibration_data.json"
+    calib_path = HERE / "strain" / "calibration_data.json"
 
     calib_data = {
         "version": 1,
@@ -181,7 +176,7 @@ def save_calibration(scale: np.ndarray, weights_used: list[float]):
     with open(calib_path, "w") as f:
         json.dump(calib_data, f, indent=4)
 
-    print(f"\n  Calibration saved → {calib_path}")
+    print(f"\n  Calibration saved to {calib_path}")
     print("  Copy the per_channel_adc_to_strain_scale values for reference:")
     print(f"    scale = {calib_data['per_channel_adc_to_strain_scale']}")
 
@@ -191,7 +186,7 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=HERE / "data",
+        default=HERE / "strain" / "data",
         help="Directory with collected CSV files",
     )
     parser.add_argument(

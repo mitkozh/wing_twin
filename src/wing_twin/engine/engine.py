@@ -93,7 +93,7 @@ class DigitalTwinEngine:
         self.state.stress_limit_pa = self.config.stress_limit
         self.state.max_angle_deg = self.config.max_aoa
         self.state.max_speed_kmh = self.config.reference_speed
-        self.state.max_stepper_steps = self.config.calibration.stepper_max_steps
+        self.state.max_stepper_steps = self.config.calibration.stepper_wing_safe_limit
         self.state.max_landing_altitude = self.config.max_landing_altitude
 
         # Flight state machine
@@ -476,7 +476,7 @@ class DigitalTwinEngine:
         self.state.stepper_position = force_to_steps(
             F_aero,
             self.config.calibration.steps_per_newton,
-            max_steps=self.config.calibration.stepper_max_steps,
+            max_steps=self.config.calibration.stepper_wing_safe_limit,
         )
 
     def _sample_wind(self, current_airspeed_kmh: float) -> tuple[float, float]:

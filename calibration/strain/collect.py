@@ -1,8 +1,8 @@
 """
-MQTT-based sensor data collection for calibration regression.
+MQTT-based sensor data collection for strain gauge calibration.
 
 Usage:
-    python -m calibration_regression.collect \\
+    python -m calibration.strain.collect \\
         --mqtt-host localhost --weights 0,100,200,500,1000 --duration 10
 
 For each weight the script prompts you to hang it at the wing tip,
@@ -22,7 +22,7 @@ from pathlib import Path
 
 import paho.mqtt.client as mqtt
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent
 SENSOR_TOPIC = "wing/sensors"
 
 _sensor_topic = "wing/sensors"
@@ -115,7 +115,7 @@ def collect_for_weight(
                 row.extend(sat[:9])
                 w.writerow(row)
 
-        print(f"  Saved {len(_records)} samples → {filename.name}")
+        print(f"  Saved {len(_records)} samples to {filename.name}")
     finally:
         client.loop_stop()
         client.disconnect()
@@ -140,11 +140,11 @@ def main():
         "--data-dir",
         type=Path,
         default=None,
-        help="Output directory for CSV files (default: calibration_regression/data)",
+        help="Output directory for CSV files (default: calibration/strain/data)",
     )
     args = parser.parse_args()
 
-    data_dir = args.data_dir or (HERE / "data")
+    data_dir = args.data_dir or (HERE / "strain" / "data")
     data_dir.mkdir(parents=True, exist_ok=True)
 
     weights = [float(w.strip()) for w in args.weights.split(",")]
@@ -169,7 +169,7 @@ def main():
 
     print("\n=== Collection complete ===")
     print(f"Data files in: {data_dir}/")
-    print("Run: python -m calibration_regression.analyze")
+    print("Run: python -m calibration.strain.analyze")
 
 
 if __name__ == "__main__":
