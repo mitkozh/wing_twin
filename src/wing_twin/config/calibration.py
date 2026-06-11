@@ -85,10 +85,6 @@ class CalibrationConfig:
         "tip_0", "tip_45", "tip_90",
     )
 
-    # Indices of channels that are physically unavailable (e.g. broken amplifiers).
-    # These are forcibly treated as bad and imputed via the FEA H matrix.
-    disabled_channels: tuple[int, ...] = (2, 7)
-
     def __post_init__(self) -> None:
         check_ge(self.adc_to_strain_scale, "CalibrationConfig.adc_to_strain_scale", 0)
         check_ge(self.steps_per_newton, "CalibrationConfig.steps_per_newton", 0)
@@ -148,12 +144,3 @@ class CalibrationConfig:
                 self.steps_per_newton, self.stepper_motor_max_steps,
                 self.stepper_wing_safe_limit, self.stepper_max_frequency,
             )
-
-        if self.disabled_channels:
-            n = len(self.channel_names)
-            for ch in self.disabled_channels:
-                if ch < 0 or ch >= n:
-                    raise ValueError(
-                        f"disabled_channels index {ch} out of range [0, {n})"
-                    )
-            logger.info("Disabled channels: %s", self.disabled_channels)

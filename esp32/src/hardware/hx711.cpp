@@ -215,17 +215,9 @@ void hx711_init(void) {
 // ---------------------------------------------------------------------------
 // Read all channels
 // ---------------------------------------------------------------------------
-static bool is_disabled(int channel) {
-    for (int i = 0; i < HX711_NUM_DISABLED; i++)
-        if (HX711_DISABLED[i] == channel) return true;
-    return false;
-}
-
 static bool hx711_all_ready(void) {
-    for (int i = 0; i < HX711_NUM_CHANNELS; i++) {
-        if (is_disabled(i)) continue;
+    for (int i = 0; i < HX711_NUM_CHANNELS; i++)
         if (digitalRead(HX711_DT_PINS[i]) != LOW) return false;
-    }
     return true;
 }
 
@@ -233,15 +225,10 @@ bool hx711_read_all(void) {
     unsigned long start = millis();
     while (!hx711_all_ready()) {
         if (millis() - start > HX711_READ_TIMEOUT_MS) {
-            bool anyRealFailure = false;
-            for (int i = 0; i < HX711_NUM_CHANNELS; i++) {
-                if (is_disabled(i)) continue;
-                if (digitalRead(HX711_DT_PINS[i]) != LOW) {
+            s_readErrorCount++;
+            for (int i = 0; i < HX711_NUM_CHANNELS; i++)
+                if (digitalRead(HX711_DT_PINS[i]) != LOW)
                     Serial.printf("[HX711] channel %d not ready\n", i);
-                    anyRealFailure = true;
-                }
-            }
-            if (anyRealFailure) s_readErrorCount++;
             return false;
         }
         delay(1);
@@ -252,11 +239,9 @@ bool hx711_read_all(void) {
     for (int bit = 23; bit >= 0; bit--) {
         digitalWrite(HX711_SCK, HIGH); delayMicroseconds(1);
         noInterrupts();
-        for (int i = 0; i < HX711_NUM_CHANNELS; i++) {
-            if (is_disabled(i)) continue;
+        for (int i = 0; i < HX711_NUM_CHANNELS; i++)
             if (digitalRead(HX711_DT_PINS[i]) == HIGH)
                 rawValues[i] |= (1L << bit);
-        }
         interrupts();
         digitalWrite(HX711_SCK, LOW);  delayMicroseconds(1);
     }
@@ -266,11 +251,7 @@ bool hx711_read_all(void) {
         if (rawValues[i] & 0x800000) rawValues[i] |= 0xFF000000;
     }
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
-        if (is_disabled(i)) {
-            s_saturated[i] = true;
-        } else {
-            s_saturated[i] = (rawValues[i] >= 8388607) || (rawValues[i] <= -8388608);
-        }
+        s_saturated[i] = (rawValues[i] >= 8388607) || (rawValues[i] <= -8388608);
     }
 
     long dummyRaw = rawValues[HX711_NUM_CHANNELS - 1];

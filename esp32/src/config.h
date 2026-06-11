@@ -12,8 +12,6 @@
 #define HX711_NUM_ACTIVE         9
 #define HX711_NUM_CHANNELS       10
 #define HX711_READ_TIMEOUT_MS    100
-#define HX711_NUM_DISABLED       2
-static const int HX711_DISABLED[HX711_NUM_DISABLED] = {2, 7};
 
 // Zero calibration
 #define ZERO_NUM_SAMPLES         10
