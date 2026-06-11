@@ -133,7 +133,6 @@ class DigitalTwinEngine:
         self._w_var: float = 0.0
         self._wind_ema_initialised: bool = False
         self._prev_step_t: float = -1.0
-        self._pending_zero_calibration: bool = False
 
         if engine_snapshot and engine_snapshot.wind:
             w_snap = engine_snapshot.wind
@@ -444,7 +443,6 @@ class DigitalTwinEngine:
             self.state.airspeed = 0.0
             self.state.angle_of_attack = 0.0
             self.state.stepper_position = 0
-            self._pending_zero_calibration = True
             self._complete_flight()
             self.flight_phase = FlightPhase.ON_GROUND
             self.state.add_notification(
