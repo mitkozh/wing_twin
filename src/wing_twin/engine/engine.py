@@ -653,6 +653,11 @@ class DigitalTwinEngine:
                     bad_idxs.append(i)
             bad_idxs.sort()
 
+        for ch in cal.disabled_channels:
+            if ch not in bad_idxs:
+                bad_idxs.append(ch)
+        bad_idxs.sort()
+
         pre_impute = strain_vec.copy()
         strain_clean = strain_vec.copy()
         if bad_idxs:
