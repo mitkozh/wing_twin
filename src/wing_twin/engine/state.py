@@ -297,11 +297,16 @@ class TwinState:
 
         return colors
 
-    def for_esp32(self) -> dict:
-        """Format state for ESP32 control."""
+    def for_esp32_leds(self) -> dict:
+        """Format LED state for main ESP."""
+        return {
+            "leds": self._compute_led_colors(),
+        }
+
+    def for_stepper_esp(self) -> dict:
+        """Format position command for stepper ESP."""
         return {
             "position": self.stepper_position,
-            "leds": self._compute_led_colors(),
         }
 
     def to_snapshot_dict(self) -> dict:

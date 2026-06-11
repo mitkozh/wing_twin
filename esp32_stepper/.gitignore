@@ -1,0 +1,12 @@
+.pio/
+.pioenvs/
+.piolib/
+.piotest/
+.pioide/
+__pycache__/
+*.o
+*.d
+*.elf
+.vscode/
+.idea/
+secrets.h

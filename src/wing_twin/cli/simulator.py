@@ -184,10 +184,12 @@ async def run_simulator(
             mqtt_bridge.publish_engine_state(engine)
 
             loop.run_in_executor(
-                None,
-                mqtt_publisher.publish,
-                mqtt_config.control_topic,
-                engine.state.for_esp32(),
+                None, mqtt_publisher.publish,
+                mqtt_config.stepper_command_topic, engine.state.for_stepper_esp(),
+            )
+            loop.run_in_executor(
+                None, mqtt_publisher.publish,
+                mqtt_config.control_topic, engine.state.for_esp32_leds(),
             )
 
             if broadcaster and broadcaster._clients:

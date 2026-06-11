@@ -13,6 +13,7 @@ class MqttConfig:
     port: int = 1883
     sensors_topic: str = "wing/sensors"
     control_topic: str = "wing/control"
+    stepper_command_topic: str = "wing/stepper/command"
 
     def __post_init__(self) -> None:
         check_range(self.port, "MqttConfig.port", 1, 65535)

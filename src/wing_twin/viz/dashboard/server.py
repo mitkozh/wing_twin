@@ -49,6 +49,7 @@ _state = DashboardState()
 _mqtt_client: Optional[mqtt.Client] = None
 _sensor_topic = "wing/sensors"
 _control_topic = "wing/control"
+_stepper_topic = "wing/stepper/command"
 
 _buf: deque = deque(maxlen=_MAX_RECORDS)
 _buf_lock = threading.Lock()
@@ -167,11 +168,18 @@ def create_app(broker: str = "localhost", port: int = 1883):
         # Track stepper enable locally
         if "stepper_enable" in data:
             _state.stepper_enabled = bool(data["stepper_enable"])
-        payload = json.dumps(data)
         c = _mqtt_client
         if c is None or not c.is_connected():
             return jsonify({"ok": False, "error": "MQTT not connected"}), 503
-        c.publish(_control_topic, payload, qos=1)
+        # Route stepper commands to wing/stepper/command, others to wing/control
+        # calibrate stays on wing/control (main ESP orchestrates it over MQTT)
+        stepper_keys = {"position", "stepper_enable", "reset_position"}
+        if stepper_keys & data.keys():
+            topic = _stepper_topic
+        else:
+            topic = _control_topic
+        payload = json.dumps(data)
+        c.publish(topic, payload, qos=1)
         return jsonify({"ok": True})
 
     @app.route("/api/export.csv")

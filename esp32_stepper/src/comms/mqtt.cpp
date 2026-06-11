@@ -4,13 +4,11 @@
 #include "../utils/watchdog.h"
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <vector>
-#include <string>
 
 static WiFiClient    s_wifiClient;
 static PubSubClient  s_mqtt(s_wifiClient);
-static void (*s_callback)(const char* topic, const char* payload) = NULL;
-static std::vector<std::string> s_subTopics;
+static mqtt_msg_cb_t s_callback = NULL;
+static const char*   s_subTopic = NULL;
 static String        s_server;
 static int           s_port = 0;
 static unsigned long s_lastAttempt = 0;
@@ -26,28 +24,16 @@ static void handle_message(char* topic, byte* payload, unsigned int len) {
     s_callback(topic, s_msgBuf);
 }
 
-void mqtt_init(const char* server, int port, const char* subscribe_topics) {
+void mqtt_init(const char* server, int port, const char* subscribe_topic) {
+    s_subTopic = subscribe_topic;
     s_server = server;
     s_port = port;
     s_mqtt.setServer(server, port);
     s_mqtt.setCallback(handle_message);
-
-    // Parse comma-separated subscription topics
-    s_subTopics.clear();
-    const char* p = subscribe_topics;
-    while (p && *p) {
-        const char* start = p;
-        while (*p && *p != ',') p++;
-        if (p > start) {
-            s_subTopics.push_back(std::string(start, p - start));
-        }
-        if (*p == ',') p++;
-    }
-
-    Serial.printf("[MQTT] init %s:%d subs: %s\n", server, port, subscribe_topics);
+    Serial.printf("[MQTT] init %s:%d sub=%s\n", server, port, subscribe_topic);
 }
 
-void mqtt_set_callback(void (*cb)(const char* topic, const char* payload)) {
+void mqtt_set_callback(mqtt_msg_cb_t cb) {
     s_callback = cb;
 }
 
@@ -69,9 +55,9 @@ void mqtt_loop(void) {
             s_connected = true;
             s_retryMs = MQTT_RETRY_BASE_MS;
             Serial.println("[MQTT] connected");
-            for (const auto& t : s_subTopics) {
-                s_mqtt.subscribe(t.c_str());
-                Serial.printf("[MQTT] subscribed to %s\n", t.c_str());
+            if (s_subTopic) {
+                s_mqtt.subscribe(s_subTopic);
+                Serial.printf("[MQTT] subscribed to %s\n", s_subTopic);
             }
         }
         s_mqtt.loop();
@@ -86,15 +72,14 @@ void mqtt_loop(void) {
     s_lastAttempt = now;
     watchdog_feed();
     uint64_t chipId = ESP.getEfuseMac();
-    String clientId = "ESP32-Wing-" + String((uint32_t)(chipId >> 32), HEX) + String((uint32_t)chipId, HEX);
+    String clientId = "ESP32-Stepper-" + String((uint32_t)(chipId >> 32), HEX) + String((uint32_t)chipId, HEX);
     Serial.printf("[MQTT] connecting to %s:%d...\n", s_server.c_str(), s_port);
     if (s_mqtt.connect(clientId.c_str(), "wing/status", 1, false, "{\"position\":0}")) {
         s_connected = true;
         s_retryMs = MQTT_RETRY_BASE_MS;
         s_mqtt.loop();
-        for (const auto& t : s_subTopics) {
-            s_mqtt.subscribe(t.c_str());
-            Serial.printf("[MQTT] subscribed to %s\n", t.c_str());
+        if (s_subTopic) {
+            s_mqtt.subscribe(s_subTopic);
         }
     } else {
         Serial.printf("[MQTT] rc=%d, retry in %ums\n", s_mqtt.state(), s_retryMs);

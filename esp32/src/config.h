@@ -1,17 +1,17 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// Stepper motor
-#define STEPPER_MAX_SPEED        1000.0f   // steps/sec
-#define STEPPER_ACCELERATION     600.0f    // steps/sec^2
-#define STEPPER_POSITION_TOLERANCE 5
-#define STEPPER_MIN_POSITION     -500
-#define STEPPER_MAX_POSITION     2720
-
 // HX711
 #define HX711_NUM_ACTIVE         9
 #define HX711_NUM_CHANNELS       10
 #define HX711_READ_TIMEOUT_MS    100
+
+// Stepper over MQTT
+#define STEPPER_COMMAND_TOPIC    "wing/stepper/command"
+#define STEPPER_STATUS_TOPIC     "wing/stepper/status"
+#define STEPPER_MIN_POSITION     -500
+#define STEPPER_MAX_POSITION     2720
+#define STEPPER_MQTT_POLL_MS     50
 
 // Zero calibration
 #define ZERO_NUM_SAMPLES         10
@@ -36,12 +36,12 @@
 #define WATCHDOG_TIMEOUT_S       5
 
 // Drift correction for strain gauges
-#define DRIFT_EMA_ALPHA             0.001f    // ~100s baseline tracking time constant at 100ms
-#define DRIFT_VAR_ALPHA             0.01f     // ~10s variance tracking
-#define DRIFT_STABLE_VAR            3.0f      // Max compensatedRaw variance for idle detection
-#define DRIFT_IDLE_MIN_CYCLES       300       // ~30s idle before correction starts
-#define DRIFT_CORRECT_RATE          0.0001f   // ~16min full correction
-#define DRIFT_CORRECT_MIN_DELTA     1.0f      // Minimum offset change to bother applying
+#define DRIFT_EMA_ALPHA             0.001f
+#define DRIFT_VAR_ALPHA             0.01f
+#define DRIFT_STABLE_VAR            3.0f
+#define DRIFT_IDLE_MIN_CYCLES       300
+#define DRIFT_CORRECT_RATE          0.0001f
+#define DRIFT_CORRECT_MIN_DELTA     1.0f
 
 // Tare
 #define TARE_GROUPS                 5

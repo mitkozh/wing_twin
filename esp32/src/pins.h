@@ -1,11 +1,6 @@
 #ifndef PINS_H
 #define PINS_H
 
-// Stepper motor
-#define STEP_PIN      13
-#define DIR_PIN       21
-#define ENABLE_PIN    23
-
 // HX711 strain gauges - shared SCK + 10 independent DT pins
 #define HX711_SCK          18
 

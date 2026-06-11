@@ -85,7 +85,11 @@ async def run_production(
 
             loop.run_in_executor(
                 None, mqtt_publisher.publish,
-                config.mqtt.control_topic, engine.state.for_esp32(),
+                config.mqtt.stepper_command_topic, engine.state.for_stepper_esp(),
+            )
+            loop.run_in_executor(
+                None, mqtt_publisher.publish,
+                config.mqtt.control_topic, engine.state.for_esp32_leds(),
             )
             await asyncio.sleep(0.05)
             await broadcaster.broadcast()

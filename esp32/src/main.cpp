@@ -7,7 +7,6 @@
 
 #include "hardware/rgb.h"
 #include "hardware/hx711.h"
-#include "hardware/stepper.h"
 
 #include "comms/wifi_mgr.h"
 #include "comms/mqtt.h"
@@ -19,11 +18,23 @@
 // ---------------------------------------------------------------------------
 // MQTT topics
 // ---------------------------------------------------------------------------
-static const char* PUBLISH_TOPIC   = "wing/sensors";
-static const char* SUBSCRIBE_TOPIC = "wing/control";
+static const char* PUBLISH_TOPIC    = "wing/sensors";
+static const char* SUBSCRIBE_TOPICS = "wing/control,wing/stepper/status";
 
 // ---------------------------------------------------------------------------
-// Stepper state tracking
+// Stepper state (tracked from wing/stepper/status MQTT messages)
+// ---------------------------------------------------------------------------
+static struct {
+    long   position = 0;
+    long   target   = 0;
+    bool   enabled  = true;
+    bool   moving   = false;
+    bool   online   = false;
+    bool   midMove  = false;
+} s_stepper;
+
+// ---------------------------------------------------------------------------
+// State tracking
 // ---------------------------------------------------------------------------
 static bool          s_zeroCalibrated = false;
 static unsigned long s_lastMqttMsg    = 0;
@@ -31,9 +42,29 @@ static bool          s_mqttMsgSeen    = false;
 static bool          s_autoZeroFired  = false;
 
 // ---------------------------------------------------------------------------
+// Forward declarations
+// ---------------------------------------------------------------------------
+static void mqtt_send_stepper_command(const char* json);
+
+// ---------------------------------------------------------------------------
 // MQTT message handler
 // ---------------------------------------------------------------------------
 static void on_mqtt_message(const char* topic, const char* payload) {
+    if (strcmp(topic, "wing/stepper/status") == 0) {
+        StaticJsonDocument<256> doc;
+        DeserializationError err = deserializeJson(doc, payload);
+        if (err) return;
+        s_stepper.position = doc["position"] | s_stepper.position;
+        s_stepper.target   = doc["target"]   | s_stepper.target;
+        s_stepper.enabled  = doc["enabled"]  | s_stepper.enabled;
+        s_stepper.moving   = doc["moving"]   | s_stepper.moving;
+        s_stepper.midMove  = doc["mid_move"] | s_stepper.midMove;
+        s_stepper.online   = true;
+        zero_update_stepper_state(s_stepper.position, s_stepper.moving, s_stepper.online);
+        return;
+    }
+
+    // wing/control messages
     s_lastMqttMsg = millis();
     s_mqttMsgSeen = true;
     s_autoZeroFired = false;
@@ -50,12 +81,7 @@ static void on_mqtt_message(const char* topic, const char* payload) {
         s_zeroCalibrated = false;
         if (zero_run()) {
             s_zeroCalibrated = true;
-            stepper_reset_position(0);
-            stepper_save_position();
-            stepper_set_dirty(false);
         }
-    } else if (doc.containsKey("position")) {
-        stepper_set_target(doc["position"].as<long>());
     }
 
     if (doc.containsKey("tare") && doc["tare"].as<bool>()) {
@@ -67,14 +93,10 @@ static void on_mqtt_message(const char* topic, const char* payload) {
         }
     }
 
-    if (doc.containsKey("stepper_enable")) {
-        stepper_enable(doc["stepper_enable"].as<bool>());
-    }
-
     if (doc.containsKey("status") && doc["status"].as<bool>()) {
-        Serial.printf("[MQTT] status: wifi=%d mqtt=%d stepper_pos=%ld target=%ld enabled=%d\n",
+        Serial.printf("[MQTT] status: wifi=%d mqtt=%d stepper_pos=%ld target=%ld enabled=%d moving=%d online=%d\n",
                       wifi_mgr_is_connected(), mqtt_is_connected(),
-                      stepper_get_position(), stepper_get_target(), stepper_is_enabled());
+                      s_stepper.position, s_stepper.target, s_stepper.enabled, s_stepper.moving, s_stepper.online);
         for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
             Serial.printf("  hx711[%d] raw=%ld sat=%d\n", i, hx711_get_raw(i), hx711_get_saturated(i));
         }
@@ -96,6 +118,11 @@ static void on_mqtt_message(const char* topic, const char* payload) {
             }
         }
     }
+}
+
+static void mqtt_send_stepper_command(const char* json) {
+    if (!mqtt_is_connected()) return;
+    mqtt_publish(STEPPER_COMMAND_TOPIC, json);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +150,7 @@ static void publish_sensor_data(void) {
         saturatedArr.add(hx711_get_saturated(i));
 
     doc["dummy_raw"]  = hx711_get_raw(HX711_NUM_CHANNELS - 1);
-    doc["stepper_position"] = stepper_get_position();
+    doc["stepper_position"] = s_stepper.position;
     doc["home_offset"]      = zero_get_offset();
     doc["timestamp"]        = millis();
 
@@ -133,28 +160,15 @@ static void publish_sensor_data(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Stepper wait helper (passed to zero calibrator via callbacks)
-// ---------------------------------------------------------------------------
-static void wait_for_stepper(unsigned long timeout_ms) {
-    unsigned long start = millis();
-    while (stepper_is_moving() && millis() - start < timeout_ms) {
-        stepper_loop();
-        watchdog_feed();
-        delay(1);
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 void setup() {
     Serial.begin(115200);
     delay(500);
-    Serial.println("\n=== Wing Digital Twin Node ===");
+    Serial.println("\n=== Wing Digital Twin Node (Dual-ESP) ===");
 
     rgb_init();
 
-    // Mount LittleFS once at startup for all components
     if (!LittleFS.begin(false)) {
         Serial.println("[MAIN] LittleFS mount failed, trying format...");
         if (!LittleFS.begin(true)) {
@@ -163,40 +177,45 @@ void setup() {
     }
 
     hx711_init();
-    stepper_init();
 
     wifi_mgr_init();
-    mqtt_init(MQTT_SERVER, MQTT_PORT, SUBSCRIBE_TOPIC);
+    mqtt_init(MQTT_SERVER, MQTT_PORT, SUBSCRIBE_TOPICS);
     mqtt_set_callback(on_mqtt_message);
 
-    zero_callbacks_t cbs = {
-        hx711_get_strain,
-        stepper_set_target,
-        stepper_get_position,
-        wait_for_stepper
-    };
-    zero_init(cbs);
+    zero_init();
 
-    // Restore last known physical position before calibrating
-    long savedPos = 0;
-    bool hadSavedPos = stepper_load_position(&savedPos);
-    if (hadSavedPos) {
-        stepper_reset_position(savedPos);
-        Serial.printf("[MAIN] Restored stepper position: %ld\n", savedPos);
+    // Wait for MQTT connection and stepper status
+    Serial.println("[MAIN] Waiting for MQTT and stepper...");
+    unsigned long mqttStart = millis();
+    while (millis() - mqttStart < 30000) {
+        watchdog_feed();
+        wifi_mgr_loop();
+        mqtt_loop();
+        if (mqtt_is_connected() && zero_is_stepper_ready()) {
+            Serial.println("[MAIN] MQTT + Stepper online");
+            break;
+        }
+        delay(10);
     }
 
-    if (stepper_was_mid_move()) {
-        Serial.println("[MAIN] WARNING: previous shutdown mid-move - resetting to 0");
-        stepper_reset_position(0);
-        stepper_save_position();
-        stepper_set_dirty(false);
+    if (zero_is_stepper_ready()) {
+        if (s_stepper.midMove) {
+            Serial.println("[MAIN] Stepper was mid-move — running calibration");
+        } else {
+            Serial.printf("[MAIN] Stepper restored to position %ld\n", s_stepper.position);
+        }
+
+        zero_run();
+        s_zeroCalibrated = true;
+    } else {
+        Serial.println("[MAIN] WARNING: stepper not available — skipping calibration");
     }
 
-    zero_run();
-    stepper_reset_position(0);
-    stepper_save_position();
-    stepper_set_dirty(false);
-    s_zeroCalibrated = true;
+    // After calibration, ensure stepper is reset to 0 at home
+    char buf[64];
+    snprintf(buf, sizeof(buf), "{\"reset_position\":0}");
+    mqtt_send_stepper_command(buf);
+    s_stepper.position = 0;
 
     watchdog_init(WATCHDOG_TIMEOUT_S);
     rgb_set_all("1_green,2_green,3_green");
@@ -210,13 +229,12 @@ void loop() {
     watchdog_feed();
     wifi_mgr_loop();
     mqtt_loop();
-    stepper_loop();
 
     if (mqtt_is_connected() && s_mqttMsgSeen && !s_autoZeroFired &&
         millis() - s_lastMqttMsg > MQTT_POSITION_TIMEOUT_MS &&
-        !stepper_is_moving()) {
+        !s_stepper.moving) {
         Serial.println("[MAIN] MQTT timeout — zeroing stepper");
-        stepper_set_target(0);
+        mqtt_send_stepper_command("{\"position\":0}");
         s_autoZeroFired = true;
     }
 
