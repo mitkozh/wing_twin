@@ -23,4 +23,9 @@ bool   hx711_load_calibration(void);
 
 bool   hx711_get_saturated(int active_index);
 
+void   hx711_update_drift(void);
+void   hx711_reset_baseline(void);
+float  hx711_get_baseline(int active_index);
+bool   hx711_is_drift_correcting(void);
+
 #endif

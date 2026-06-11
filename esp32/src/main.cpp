@@ -106,6 +106,7 @@ static void publish_sensor_data(void) {
         Serial.println("[MAIN] HX711 read failed - skipping publish");
         return;
     }
+    hx711_update_drift();
 
     StaticJsonDocument<1024> doc;
 
@@ -236,5 +237,12 @@ void loop() {
     if (millis() - lastPub >= PUBLISH_INTERVAL_MS) {
         lastPub = millis();
         publish_sensor_data();
+    }
+
+    // Periodic drift correction status log (every 30s)
+    static unsigned long lastDriftLog = 0;
+    if (hx711_is_drift_correcting() && millis() - lastDriftLog > 30000) {
+        lastDriftLog = millis();
+        Serial.println("[HX711] drift correction active");
     }
 }

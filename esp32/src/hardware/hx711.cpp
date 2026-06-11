@@ -1,6 +1,8 @@
 #include "hx711.h"
 #include "../pins.h"
 #include <LittleFS.h>
+#include <stdlib.h>
+#include <math.h>
 
 // Shared SCK + 10 independent DT pins - all 10 HX711 modules share one SCK.
 // 9 active channels = wing root/middle/tip × (0°/45°/90°)
@@ -29,6 +31,16 @@ static int    s_readErrorCount = 0;
 static long   s_lastDummy = 0;
 static bool   s_lastDummyValid = false;
 static unsigned long s_lastDummyTime = 0;
+
+// Drift tracking state
+static float  s_baseline[HX711_NUM_ACTIVE] = {0.0f};
+static float  s_baselineVar[HX711_NUM_ACTIVE] = {0.0f};
+static int    s_idleCount = 0;
+static bool   s_driftCorrecting = false;
+
+// Dummy gauge baseline for smoother fallback
+static long   s_dummyBaseline = 0;
+static bool   s_dummyBaselineValid = false;
 
 // Calibration storage
 typedef struct {
@@ -78,37 +90,85 @@ bool hx711_save_calibration(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Tare
+// Tare helpers
 // ---------------------------------------------------------------------------
+static int sort_compare_f(const void* a, const void* b) {
+    float fa = *(const float*)a;
+    float fb = *(const float*)b;
+    return (fa > fb) - (fa < fb);
+}
+
+static float median_of(float* arr, int n) {
+    if (n <= 0) return 0.0f;
+    qsort(arr, n, sizeof(float), sort_compare_f);
+    return arr[n / 2];
+}
+
 bool hx711_tare(void) {
     Serial.println("[HX711] Taring...");
-    const int TARE_SAMPLES = 10;
-    float accum[HX711_NUM_ACTIVE] = {0};
-    int perChannelValid[HX711_NUM_ACTIVE] = {0};
-    int totalValid = 0;
-    for (int s = 0; s < TARE_SAMPLES; s++) {
-        if (hx711_read_all()) {
-            long dummy = rawValues[HX711_NUM_CHANNELS - 1];
+
+    // Collect TARE_GROUPS groups of TARE_SAMPLES_PER_GROUP samples each
+    float groupMeans[HX711_NUM_ACTIVE][TARE_GROUPS];
+    int   groupCounts[TARE_GROUPS] = {0};
+    for (int g = 0; g < TARE_GROUPS; g++) {
+        float accum[HX711_NUM_ACTIVE] = {0};
+        int valid = 0;
+        for (int s = 0; s < TARE_SAMPLES_PER_GROUP; s++) {
+            if (hx711_read_all()) {
+                long dummy = rawValues[HX711_NUM_CHANNELS - 1];
+                for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+                    if (!s_saturated[i]) {
+                        accum[i] += (float)(rawValues[i] - dummy);
+                    }
+                }
+                valid++;
+            }
+            delay(50);
+        }
+        if (valid > 0) {
             for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
-                if (!s_saturated[i]) {
-                    accum[i] += (float)(rawValues[i] - dummy);
-                    perChannelValid[i]++;
+                groupMeans[i][g] = accum[i] / valid;
+            }
+            groupCounts[g] = valid;
+        }
+        // Extra delay between groups
+        delay(100);
+    }
+
+    // Check variance within each channel across groups
+    int totalValidGroups = 0;
+    for (int g = 0; g < TARE_GROUPS; g++) {
+        if (groupCounts[g] > 0) totalValidGroups++;
+    }
+    if (totalValidGroups == 0) {
+        Serial.println("[HX711] Tare failed - no valid reads");
+        return false;
+    }
+
+    // Compute per-channel offset as median of group means
+    float tmp[TARE_GROUPS];
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        int n = 0;
+        for (int g = 0; g < TARE_GROUPS; g++) {
+            if (groupCounts[g] > 0) {
+                // NaN / Inf guard
+                float v = groupMeans[i][g];
+                if (!isnan(v) && !isinf(v)) {
+                    tmp[n++] = v;
                 }
             }
-            totalValid++;
         }
-        delay(50);
-    }
-    if (totalValid == 0) { Serial.println("[HX711] Tare failed"); return false; }
-    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
-        if (perChannelValid[i] > 0) {
-            g_cal.offset[i] = accum[i] / perChannelValid[i];
+        if (n > 0) {
+            g_cal.offset[i] = median_of(tmp, n);
         } else {
             g_cal.offset[i] = 0.0f;
-            Serial.printf("[HX711] WARNING: channel %d saturated - offset set to 0, strain=comp\n", i);
+            Serial.printf("[HX711] WARNING: channel %d saturated - offset set to 0\n", i);
         }
         if (g_cal.scale[i] <= 0.0f) g_cal.scale[i] = 1.0f;
     }
+
+    // Reset drift tracking after fresh tare
+    hx711_reset_baseline();
     g_cal.valid = true;
     Serial.println("[HX711] Tare complete");
     return true;
@@ -143,6 +203,13 @@ void hx711_init(void) {
         delay(200);
     }
     if (!g_cal.valid) { hx711_tare(); hx711_save_calibration(); }
+
+    // Seed baselines with current offsets so drift correction converges quickly
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        if (!s_saturated[i]) {
+            s_baseline[i] = g_cal.offset[i];
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -190,22 +257,32 @@ bool hx711_read_all(void) {
     long dummyRaw = rawValues[HX711_NUM_CHANNELS - 1];
     bool dummyStuck = (dummyRaw == 0) || (dummyRaw >= 8388607) || (dummyRaw <= -8388608);
     if (dummyStuck) {
+        // Hold last known good dummy value indefinitely.
         if (!s_lastDummyValid) {
-            dummyRaw = 0;
-        } else if (millis() - s_lastDummyTime > 30000) {
-            Serial.println("[HX711] dummy stuck >30s — falling back to uncompensated");
-            s_lastDummyValid = false;
-            dummyRaw = 0;
+            if (s_dummyBaselineValid) {
+                dummyRaw = s_dummyBaseline;
+            } else {
+                dummyRaw = 0;
+            }
         } else {
             dummyRaw = s_lastDummy;
         }
     } else {
         if (!s_lastDummyValid) {
             Serial.println("[HX711] dummy recovered");
+            // Reset baselines when dummy recovers to avoid stale offsets
+            hx711_reset_baseline();
         }
         s_lastDummy = dummyRaw;
         s_lastDummyValid = true;
         s_lastDummyTime = millis();
+        // Update slow dummy baseline for fallback use
+        if (!s_dummyBaselineValid) {
+            s_dummyBaseline = dummyRaw;
+            s_dummyBaselineValid = true;
+        } else {
+            s_dummyBaseline += (long)(0.01f * (dummyRaw - s_dummyBaseline));
+        }
     }
     long dummy = dummyRaw;
     for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
@@ -217,6 +294,20 @@ bool hx711_read_all(void) {
             strainValues[i] = (compensatedRaw[i] - g_cal.offset[i]) * g_cal.scale[i];
         }
     }
+
+    // ------------------------------------------------------------------
+    // Drift tracking: update slow baseline and variance per channel
+    // ------------------------------------------------------------------
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        if (s_saturated[i]) continue;
+        float cur = (float)compensatedRaw[i];
+        // Slow exponential moving average (baseline)
+        s_baseline[i] += DRIFT_EMA_ALPHA * (cur - s_baseline[i]);
+        // Absolute deviation for variance estimate
+        float dev = fabsf(cur - s_baseline[i]);
+        s_baselineVar[i] += DRIFT_VAR_ALPHA * (dev - s_baselineVar[i]);
+    }
+
     return true;
 }
 
@@ -251,6 +342,66 @@ float hx711_get_offset(int i) {
 const char* hx711_get_channel_name(int i) {
     if (i < 0 || i >= HX711_NUM_CHANNELS) return "invalid";
     return CHANNEL_NAMES[i];
+}
+
+// ---------------------------------------------------------------------------
+// Drift correction
+// ---------------------------------------------------------------------------
+void hx711_update_drift(void) {
+    if (!g_cal.valid) return;
+
+    // Check if all active (non-saturated) channels are stable
+    bool allStable = true;
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        if (s_saturated[i]) continue;
+        if (s_baselineVar[i] > DRIFT_STABLE_VAR) {
+            allStable = false;
+            break;
+        }
+    }
+
+    if (allStable) {
+        s_idleCount++;
+        if (s_idleCount >= DRIFT_IDLE_MIN_CYCLES) {
+            // Slowly correct offsets toward current baseline
+            bool anyCorrected = false;
+            for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+                if (s_saturated[i]) continue;
+                float target = s_baseline[i];
+                float delta  = target - g_cal.offset[i];
+                if (fabsf(delta) >= DRIFT_CORRECT_MIN_DELTA) {
+                    g_cal.offset[i] += DRIFT_CORRECT_RATE * delta;
+                    anyCorrected = true;
+                }
+            }
+            if (anyCorrected) {
+                s_driftCorrecting = true;
+                // Reset idle counter to prevent overcorrection in one burst
+                s_idleCount = DRIFT_IDLE_MIN_CYCLES / 2;
+            }
+        }
+    } else {
+        s_idleCount = 0;
+        s_driftCorrecting = false;
+    }
+}
+
+void hx711_reset_baseline(void) {
+    for (int i = 0; i < HX711_NUM_ACTIVE; i++) {
+        s_baseline[i] = 0.0f;
+        s_baselineVar[i] = 0.0f;
+    }
+    s_idleCount = 0;
+    s_driftCorrecting = false;
+}
+
+float hx711_get_baseline(int i) {
+    if (i < 0 || i >= HX711_NUM_ACTIVE) return 0.0f;
+    return s_baseline[i];
+}
+
+bool hx711_is_drift_correcting(void) {
+    return s_driftCorrecting;
 }
 
 

@@ -35,6 +35,19 @@
 // Watchdog
 #define WATCHDOG_TIMEOUT_S       5
 
+// Drift correction for strain gauges
+#define DRIFT_EMA_ALPHA             0.001f    // ~100s baseline tracking time constant at 100ms
+#define DRIFT_VAR_ALPHA             0.01f     // ~10s variance tracking
+#define DRIFT_STABLE_VAR            3.0f      // Max compensatedRaw variance for idle detection
+#define DRIFT_IDLE_MIN_CYCLES       300       // ~30s idle before correction starts
+#define DRIFT_CORRECT_RATE          0.0001f   // ~16min full correction
+#define DRIFT_CORRECT_MIN_DELTA     1.0f      // Minimum offset change to bother applying
+
+// Tare
+#define TARE_GROUPS                 5
+#define TARE_SAMPLES_PER_GROUP      10
+#define TARE_TOTAL_SAMPLES          (TARE_GROUPS * TARE_SAMPLES_PER_GROUP)
+
 // Sensor publish
 #define PUBLISH_INTERVAL_MS      100
 
