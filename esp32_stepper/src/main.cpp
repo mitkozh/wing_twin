@@ -47,6 +47,16 @@ static void on_mqtt_message(const char* topic, const char* payload) {
         s_statusDirty = true;
     }
 
+    if (doc.containsKey("speed")) {
+        stepper_set_max_speed(doc["speed"].as<float>());
+        s_statusDirty = true;
+    }
+
+    if (doc.containsKey("acceleration")) {
+        stepper_set_acceleration(doc["acceleration"].as<float>());
+        s_statusDirty = true;
+    }
+
     if (doc.containsKey("enable")) {
         stepper_enable(doc["enable"].as<bool>());
         s_statusDirty = true;

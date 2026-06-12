@@ -35,6 +35,15 @@ void stepper_set_target(long steps) {
     stepper_set_dirty(true);
 }
 
+void stepper_set_max_speed(float steps_per_sec) {
+    s_stepper.setMaxSpeed(steps_per_sec);
+}
+
+void stepper_set_acceleration(float steps_per_sec2) {
+    s_stepper.setAcceleration(steps_per_sec2);
+}
+
+
 void stepper_reset_position(long pos) {
     s_stepper.setCurrentPosition(pos);
     s_target = pos;

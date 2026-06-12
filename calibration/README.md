@@ -31,17 +31,41 @@ python -m calibration.strain.analyze
 
 You will need: a set of known weights (e.g. 0g, 100g, 200g, 500g, 1000g).
 
-### 2. Stepper Range Test — motor physical limits
+### 2. Stepper Range Calibration — motor physical limits
 
-**Setup:** Disconnect the stepper cable from the wing (no load).
+**Setup:** Stepper disconnected from the wing (no mechanical load).
 
 ```bash
 python -m calibration.stepper.range_test
 ```
 
-This sweeps the stepper through its full range (min to max) and records
-commanded vs actual positions. Saves `stepper_motor_max_steps` and
-`stepper_motor_min_steps` to `stepper_calibration.json`.
+The TB6600 driver has no position feedback (no encoder), so the physical
+limits are calculated from mechanical measurements.
+
+Drive system: **direct-drive winch** — the motor shaft has a stepped
+drum (16/26/40 mm sections), and the fishing wire wraps directly around
+one of the sections. No belts, no gears.
+
+Two methods are provided:
+
+**Calculate:** The script asks for the drum diameter and total linear
+travel:
+
+    steps_per_mm = (200 × microstepping) / (π × drum_diameter)
+    max_steps    = travel_mm × steps_per_mm
+
+**Empirical:** Command a known number of steps (e.g. 1000), measure
+how far the wire actually moves with a ruler, then measure total travel:
+
+    steps_per_mm = steps_commanded / measured_travel_mm
+    max_steps    = total_travel_mm × steps_per_mm
+
+The empirical method accounts for wire layers on the drum. Add
+`--verify` to command the motor to the calculated limits so you can
+visually confirm they are safe before saving.
+
+**Update firmware:** After running, update the ESP32 firmware limits
+in `esp32_stepper/src/config.h` and reflash.
 
 ### 3. Stepper Max Frequency Test — reliable step rate
 
@@ -89,18 +113,22 @@ and writes it back. The file lives at `calibration/stepper/stepper_calibration.j
 | Field | Source Test | Description |
 |---|---|---|
 | `steps_per_newton` | `steps_per_newton.py` | Steps per Newton of aerodynamic force |
-| `stepper_motor_max_steps` | `range_test.py` | Physical max steps the motor can reach |
-| `stepper_motor_min_steps` | `range_test.py` | Physical min steps the motor can reach |
+| `stepper_motor_max_steps` | `range_test.py` | Physical max steps (fully wound) |
+| `stepper_motor_min_steps` | `range_test.py` | Physical min steps (always 0 for winch) |
 | `stepper_wing_safe_limit` | `steps_per_newton.py` | Hard limit to protect the wing (≤ motor max) |
 | `stepper_max_frequency` | `max_frequency.py` | Max reliable step rate in Hz |
+| `drum_diameter_mm` | `range_test.py` | Wire drum diameter for reference |
+| `microstepping` | `range_test.py` | TB6600 microstepping setting for reference |
+| `linear_travel_mm` | `range_test.py` | Measured linear travel for reference |
+| `steps_per_mm` | `range_test.py` | Calculated steps-per-mm for reference |
 
 ---
 
 ## Recovery
 
 ### Test was interrupted mid-run
-Re-run the test. Data from the interrupted run may be in
-`calibration/stepper/data/` and can be ignored or deleted.
+Re-run the test. Partial CSVs in `calibration/stepper/data/` can be
+ignored or deleted.
 
 ### MQTT connection failed
 - Verify Mosquitto is running: `netstat -an | findstr 1883`
@@ -114,9 +142,11 @@ Re-run the test. Data from the interrupted run may be in
 - Check the sensor topic string in the scripts matches your config
 
 ### Calibration file (`stepper_calibration.json`) is corrupt
-Delete it. The engine will use hardcoded defaults (steps_per_newton=204,
-stepper_wing_safe_limit=2500, stepper_max_frequency=1000).
-Re-run the three stepper tests to regenerate.
+Delete it. The engine will use hardcoded defaults.
+Re-run the stepper calibrations to regenerate:
+    python -m calibration.stepper.range_test
+    python -m calibration.stepper.max_frequency
+    python -m calibration.stepper.steps_per_newton
 
 ### Strain calibration file (`calibration/strain/calibration_data.json`) is corrupt
 Delete it. The engine falls back to a global ADC-to-strain scale.

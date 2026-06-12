@@ -42,6 +42,7 @@ def _load_stepper_calibration() -> dict[str, float | int] | None:
         return {
             "steps_per_newton": data.get("steps_per_newton"),
             "stepper_motor_max_steps": data.get("stepper_motor_max_steps"),
+            "stepper_motor_min_steps": data.get("stepper_motor_min_steps"),
             "stepper_wing_safe_limit": data.get("stepper_wing_safe_limit"),
             "stepper_max_frequency": data.get("stepper_max_frequency"),
         }
@@ -65,10 +66,10 @@ class CalibrationConfig:
 
     # Stepper motor
     steps_per_newton: float = 204.0
-    stepper_motor_max_steps: int = 2720        # physical limit of the stepper motor
-    stepper_wing_safe_limit: int = 2500        # hard limit to prevent wing damage (<= motor max)
-    stepper_max_frequency: float = 1000.0      # Hz (max step rate)
-    stepper_min_position: int = -500           # software min (safe retract, neg = reverse)
+    stepper_motor_max_steps: int = 2720        # physical limit of the stepper motor (override via stepper_calibration.json)
+    stepper_wing_safe_limit: int = 2500        # hard limit to prevent wing damage, clamped to motor_max (override via stepper_calibration.json)
+    stepper_max_frequency: float = 1000.0      # Hz, max step rate (override via stepper_calibration.json)
+    stepper_min_position: int = 0              # winch: fully retracted = 0, overwritten by stepper_motor_min_steps from calibration if present
     stepper_coarse_step: int = 20              # coarse search increment during zero cal
     stepper_strain_threshold: float = 5000.0   # ADC delta that indicates contact
     stepper_slack_threshold: float = 500.0     # ADC delta that indicates free movement
@@ -122,17 +123,19 @@ class CalibrationConfig:
         # Auto-load stepper calibration file, overriding defaults
         stepper_cal = _load_stepper_calibration()
         if stepper_cal is not None:
-            for key, default_val in [
-                ("steps_per_newton", self.steps_per_newton),
-                ("stepper_motor_max_steps", self.stepper_motor_max_steps),
-                ("stepper_wing_safe_limit", self.stepper_wing_safe_limit),
-                ("stepper_max_frequency", self.stepper_max_frequency),
-            ]:
+            attr_map: dict[str, str] = {
+                "steps_per_newton": "steps_per_newton",
+                "stepper_motor_max_steps": "stepper_motor_max_steps",
+                "stepper_wing_safe_limit": "stepper_wing_safe_limit",
+                "stepper_max_frequency": "stepper_max_frequency",
+                "stepper_motor_min_steps": "stepper_min_position",
+            }
+            for key, attr in attr_map.items():
                 val = stepper_cal.get(key)
                 if val is not None:
-                    expected_type = type(default_val)
+                    expected_type = type(getattr(self, attr))
                     if isinstance(val, expected_type):
-                        object.__setattr__(self, key, val)
+                        object.__setattr__(self, attr, val)
                     else:
                         logger.warning(
                             "stepper_cal.json key '%s' has wrong type (expected %s, got %s) - skipping",
