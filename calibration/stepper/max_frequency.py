@@ -22,9 +22,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -118,7 +116,7 @@ def run_test(
     print("  2. Make sure the ESP32 is powered and connected to MQTT.")
     print("  3. The stepper should be enabled and at position 0.")
     print()
-    print(f"Current ESP32 config:")
+    print("Current ESP32 config:")
     print(f"  STEPPER_MAX_SPEED      = {CONFIG_MAX_SPEED} steps/sec")
     print(f"  STEPPER_ACCELERATION   = {CONFIG_ACCEL} steps/sec²")
     print(f"  STEPPER_MAX_POSITION   = {CONFIG_MAX_POS}")

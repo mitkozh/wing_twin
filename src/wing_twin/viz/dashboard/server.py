@@ -13,7 +13,6 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from threading import Lock, Thread
 from typing import Optional
 
 import paho.mqtt.client as mqtt

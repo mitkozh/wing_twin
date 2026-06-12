@@ -31,7 +31,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -239,7 +238,7 @@ def analyze(results_csv: Path, data_dir: Path) -> float | None:
         "data_points": len(forces),
         "force_step_pairs": [(round(f, 4), int(s)) for f, s in zip(forces, positions)],
     })
-    print(f"\n  steps_per_newton saved to stepper_calibration.json")
+    print("\n  steps_per_newton saved to stepper_calibration.json")
     print()
 
     return m
@@ -367,7 +366,7 @@ def main():
     if args.max_newtons is not None:
         max_n = args.max_newtons
     else:
-        max_n_input = input(f"  Enter max Newtons for wing (default 5.0): ")
+        max_n_input = input("  Enter max Newtons for wing (default 5.0): ")
         max_n = float(max_n_input) if max_n_input.strip() else 5.0
 
     wing_limit = int(round(max_n * spn))
@@ -380,7 +379,7 @@ def main():
             print(f"\n Calculated limit ({wing_limit}) exceeds motor max ({motor_max}) — clamping")
             wing_limit = motor_max
     else:
-        print(f"\n  Motor max not yet calibrated (run range_test first)")
+        print("\n  Motor max not yet calibrated (run range_test first)")
         print(f"     Wing limit set to {wing_limit} — verify manually")
 
     print(f"\n  Max force:          {max_n:.2f} N")

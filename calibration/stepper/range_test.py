@@ -159,8 +159,8 @@ def run_test(
     })
     print()
     print("  Next steps:")
-    print(f"    Run: python -m calibration.stepper.max_frequency       (stepper disconnected)")
-    print(f"    Run: python -m calibration.stepper.steps_per_newton   (wing attached, weights)")
+    print("    Run: python -m calibration.stepper.max_frequency       (stepper disconnected)")
+    print("    Run: python -m calibration.stepper.steps_per_newton   (wing attached, weights)")
 
     session.disconnect()
 

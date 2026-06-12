@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from wing_twin.config.types import check_ge, check_gt, check_range
+from wing_twin.config.types import check_ge, check_gt
 
 logger = logging.getLogger(__name__)
 
