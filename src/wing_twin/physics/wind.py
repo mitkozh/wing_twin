@@ -14,7 +14,7 @@ import numpy as np
 from wing_twin.config.wind import WindConfig
 
 
-def apparent_wind(
+def compute_apparent_wind(
     airspeed_kmh: float,
     alpha_geom_deg: float,
     u_wind_ms: float,

@@ -100,24 +100,13 @@ class MqttConnection:
 
 
 class MqttSensorSource(DataSource):
-    """Receives ESP32 sensor data via MQTT.
-
-    One of two consumers sharing a subscriber MqttConnection
-    (the other being MqttStepperMonitor).
-
-    Device-level metadata (``home_offset``, ``last_seen``) is
-    exposed directly on this source rather than in a separate
-    state object — the ``SensorReading`` dataclass is for
-    measurement payloads only.
-    """
+    """Receives ESP32 sensor data via MQTT."""
 
     def __init__(self, connection: MqttConnection):
         self._connection = connection
         self._buffer: deque = deque(maxlen=1)
         self._last_seen: float = 0.0
         self._home_offset: Optional[int] = None
-
-    # ── DataSource interface ────────────────────────────────────
 
     def connect(self) -> bool:
         self._connection.subscribe(SENSOR_DATA_TOPIC, self._on_message)
@@ -175,8 +164,6 @@ class MqttSensorSource(DataSource):
 
     def is_device_connected(self, timeout_s: float = 5.0) -> bool:
         return (time.monotonic() - self._last_seen) < timeout_s
-
-    # ── internal ────────────────────────────────────────────────
 
     def _on_message(self, topic: str, payload: bytes) -> None:
         try:

@@ -30,8 +30,8 @@ class EngineConfig:
 
     neuralfoil_model_size: str = "xlarge"
 
-    angle_accel: float = 15.0
-    speed_accel: float = 60.0
+    max_angle_rate: float = 15.0
+    max_speed_rate: float = 60.0
 
     # Flight lifecycle parameters
     takeoff_speed: float = 70.0
@@ -60,8 +60,8 @@ class EngineConfig:
                 f"<= yield_point ({self.yield_point})"
             )
         check_range(self.max_aoa, "EngineConfig.max_aoa", -90, 90)
-        check_gt(self.angle_accel, "EngineConfig.angle_accel", 0)
-        check_gt(self.speed_accel, "EngineConfig.speed_accel", 0)
+        check_gt(self.max_angle_rate, "EngineConfig.max_angle_rate (deg/s)", 0)
+        check_gt(self.max_speed_rate, "EngineConfig.max_speed_rate (km/h/s)", 0)
         check_gt(self.takeoff_speed, "EngineConfig.takeoff_speed", 0)
         check_gt(self.landing_approach_speed, "EngineConfig.landing_approach_speed", 0)
         check_ge(self.landing_touchdown_speed, "EngineConfig.landing_touchdown_speed", 0)

@@ -27,6 +27,7 @@ class SimulatorMqttBridge:
         self._connection = MqttConnection(self._config)
         self._engine = engine
         self._control_topic = self._config.control_topic
+        self._cmd_handler = EngineCommandHandler(engine)
 
     def connect(self) -> bool:
         self._connection.subscribe(self._control_topic, self._on_control)
@@ -36,43 +37,7 @@ class SimulatorMqttBridge:
         self._connection.disconnect()
 
     def _on_control(self, topic: str, payload: bytes) -> None:
-        try:
-            data = json.loads(payload)
-        except json.JSONDecodeError:
-            return
-
-        cmd = data.get("cmd", "")
-        engine = self._engine
-
-        if cmd == "set_steps":
-            steps = data.get("steps")
-            if steps is not None:
-                engine.state.stepper_position = int(steps)
-                speed = data.get("speed", engine.state.target_airspeed)
-                engine.state.target_airspeed = speed
-
-        elif cmd == "set_flight_state":
-            if engine.flight_phase.value == "in_flight":
-                angle = data.get("angle")
-                speed = data.get("speed")
-                if angle is not None:
-                    engine.state.desired_angle_of_attack = float(angle)
-                if speed is not None:
-                    engine.state.desired_airspeed = float(speed)
-
-        elif cmd == "takeoff":
-            engine.request_takeoff()
-
-        elif cmd == "land":
-            engine.request_landing()
-
-        elif cmd == "set_heatmap_mode":
-            mode = data.get("mode", "damage")
-            if mode in ("stress", "damage"):
-                engine.state.heatmap_mode = mode
-
-        elif cmd == "set_maintenance_assist":
-            engine.state.maintenance_assist = bool(data.get("enabled", True))
+        self._cmd_handler.handle(payload.decode())
 
     def publish_engine_state(self, engine: DigitalTwinEngine) -> None:
         if not self._connection.is_connected:
@@ -135,13 +100,13 @@ async def run_simulator(
         raise
 
     sim_config = SimulationConfig()
-    simulator = SimulatorSource(sim_config, wind_model=engine._wind)
+    simulator = SimulatorSource(sim_config, wind_model=engine.wind_model)
     simulator.set_matrices(engine.matrices)
     engine.data_source = simulator
 
     mqtt_bridge = SimulatorMqttBridge(engine, mqtt_config)
     if not mqtt_bridge.connect():
-        logger.warning("MQTT connection failed – running without MQTT bridge")
+        logger.warning("MQTT connection failed - running without MQTT bridge")
     else:
         logger.info("MQTT bridge connected to %s:%d", mqtt_config.broker, mqtt_config.port)
 

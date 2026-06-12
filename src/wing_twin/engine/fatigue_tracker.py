@@ -13,12 +13,7 @@ from wing_twin.fatigue.fatigue import (
     log_low_confidence_channels,
     sn_curve_for_material,
     update_confidence,
-    warmup_numba,
 )
-from wing_twin.fea.field_compute import compute_deformation_field, compute_stress_field
-from wing_twin.fea.force_reconstruct import solve_forces
-from wing_twin.fea.matrices import FeaContext
-from wing_twin.io.sensor_validation import impute_channels
 from wing_twin.config.fatigue import FatigueConfig
 from wing_twin.config.calibration import CalibrationConfig
 from wing_twin.fatigue.life_prediction import LifePredictionState
@@ -49,8 +44,6 @@ class FatigueTracker:
             initial_remaining_km=config.initial_remaining_km,
         )
 
-        warmup_numba()
-
     def tracker_snapshot(self) -> dict:
         return {
             "prev_low_confidence": self._prev_low_confidence,
@@ -75,17 +68,21 @@ class FatigueTracker:
     def process(
         self,
         pre_impute_strain: np.ndarray,
-        strain_vector: np.ndarray,
         stress_field_pa: np.ndarray,
         expected_strain: np.ndarray,
         twin_state: TwinState,
-        fea: Optional[FeaContext] = None,
+        H: Optional[np.ndarray] = None,
         flight_phase: object = None,
-    ) -> None:
-        """Process one frame through confidence -> re-imputation -> damage."""
+    ) -> tuple[bool, list[int]]:
+        """Process one frame: confidence monitoring -> damage accumulation.
+
+        The engine owns all FEA computation; this method only performs
+        confidence tracking and fatigue accumulation.  Returns
+        ``(has_new_bad_channels, all_bad_channels)`` so the engine can
+        re-impute and recompute fields if needed.
+        """
         fatigue_cfg = self.config
         sn_curve = sn_curve_for_material(fatigue_cfg.material)
-        H = fea.matrices.H if fea else None
 
         update_confidence(
             self.state, pre_impute_strain, expected_strain,
@@ -102,26 +99,8 @@ class FatigueTracker:
         ]
         existing_bad = set(self.state.bad_channels)
         new_bad = sorted(set(low_conf_idxs) - existing_bad)
-        all_bad = sorted(existing_bad | set(new_bad))
-
-        if new_bad and fea is not None:
-            self.state.bad_channels = all_bad
-            mat = fea.matrices
-            reimputed = impute_channels(pre_impute_strain.copy(), all_bad, mat.H)
-            F = solve_forces(mat.H_inv, reimputed)
-            F *= float(fea.calibration.H_matrix_scale)
-            expected_strain = mat.H @ F
-
-            stress_field_pa = compute_stress_field(mat.S, F)
-            twin_state.deformation_field = (
-                compute_deformation_field(mat.U, F).tolist()
-            )
-
-            twin_state.strain_vector = reimputed.tolist()
-            twin_state.forces = F.tolist()
-            twin_state.stress_field = stress_field_pa.tolist()
-        else:
-            self.state.bad_channels = all_bad
+        all_bad = sorted(set(low_conf_idxs))
+        self.state.bad_channels = all_bad
 
         if flight_phase is not None and flight_phase.value != "on_ground":
             stress_mpa = stress_field_pa / 1e6
@@ -133,6 +112,31 @@ class FatigueTracker:
         twin_state.confidence = self.state.confidence
         self._update_damage_metrics(twin_state)
         self._check_notifications(twin_state)
+        return bool(new_bad), all_bad
+
+    def reaccumulate_damage(
+        self,
+        stress_field_pa: np.ndarray,
+        twin_state: TwinState,
+        flight_phase: object = None,
+    ) -> None:
+        """Re-run damage accumulation with an updated stress field.
+
+        Called by the engine after re-imputing channels and recomputing
+        the FEA fields.  Skips confidence re-check since that was already
+        done in the main ``process()`` call.
+        """
+        fatigue_cfg = self.config
+        sn_curve = sn_curve_for_material(fatigue_cfg.material)
+
+        if flight_phase is not None and flight_phase.value != "on_ground":
+            stress_mpa = stress_field_pa / 1e6
+            accumulate_damage_at_nodes(
+                stress_mpa, self.state, sn_curve=sn_curve, config=fatigue_cfg,
+            )
+
+        twin_state.node_damages = dict(self.state.node_damages)
+        self._update_damage_metrics(twin_state)
 
     def _update_damage_metrics(self, twin_state: TwinState) -> None:
         if self.state.node_damages:

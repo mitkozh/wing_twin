@@ -9,7 +9,7 @@ from wing_twin.config.calibration import CalibrationConfig
 from wing_twin.types import DataSource, SensorReading
 from wing_twin.fea.matrices import TransferMatrices
 from wing_twin.physics.aero import compute_aero_force, NeuralFoilModel
-from wing_twin.physics.wind import WindModel, apparent_wind
+from wing_twin.physics.wind import WindModel, compute_apparent_wind
 
 
 @dataclass
@@ -83,7 +83,7 @@ class SimulatorSource(DataSource):
         if self._wind is not None:
             u_w, w_w = self._wind.sample(t, dt=dt)
 
-        v_eff, alpha_eff = apparent_wind(airspeed, angle_deg, u_w, w_w)
+        v_eff, alpha_eff = compute_apparent_wind(airspeed, angle_deg, u_w, w_w)
         return compute_aero_force(
             alpha_eff, v_eff,
             model=self._aero_model,

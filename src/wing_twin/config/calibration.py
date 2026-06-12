@@ -8,20 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from wing_twin.config.types import check_ge, check_gt
+from wing_twin.config.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
 
-def _find_project_root() -> Path:
-    current = Path(__file__).resolve()
-    for parent in [current.parent] + list(current.parents):
-        if (parent / "pyproject.toml").exists():
-            return parent
-    return current.parent.parent.parent
-
-
 def _load_calibration_file() -> tuple[float, ...] | None:
-    calib_path = _find_project_root() / "calibration" / "strain" / "calibration_data.json"
+    calib_path = PROJECT_ROOT / "calibration" / "strain" / "calibration_data.json"
     if not calib_path.exists():
         logger.warning("Calibration file not found at %s — using global scale", calib_path)
         return None
@@ -39,7 +32,7 @@ def _load_calibration_file() -> tuple[float, ...] | None:
 
 
 def _load_stepper_calibration() -> dict[str, float | int] | None:
-    calib_path = _find_project_root() / "calibration" / "stepper" / "stepper_calibration.json"
+    calib_path = PROJECT_ROOT / "calibration" / "stepper" / "stepper_calibration.json"
     if not calib_path.exists():
         logger.info("Stepper calibration file not found at %s — using defaults", calib_path)
         return None

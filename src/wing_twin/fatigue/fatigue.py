@@ -12,6 +12,7 @@ Units:
 
 import concurrent.futures
 import logging
+import threading
 import numpy as np
 from collections import deque
 from dataclasses import dataclass, field
@@ -39,6 +40,7 @@ class FatigueState:
     per_channel_confidence: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float64))
     bad_channels: list[int] = field(default_factory=list)
     per_channel_low_frames: dict[int, int] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     # Group cross-validation (3 groups: root, middle, tip)
     group_consistency: np.ndarray = field(
@@ -364,11 +366,9 @@ def log_low_confidence_channels(
         )
 
 
-def warmup_numba() -> None:
-    """Pre-compile numba-jitted py_fatigue functions (calc_pm, CycleCount)."""
+def _warmup_numba() -> None:
     import numba as _nb
     _nb.config.DISABLE_JIT = 0
-
     sn = sn_curve_for_material("demo")
     dummy_sr = np.array([10.0, 20.0, 30.0, 50.0, 100.0], dtype=np.float64)
     dummy_cc = np.array([1.0, 0.5, 0.2, 0.1, 0.05], dtype=np.float64)
@@ -383,6 +383,9 @@ def warmup_numba() -> None:
         )
     except Exception:
         pass
+
+
+_warmup_numba()
 
 
 def set_random_seed(seed: Optional[int] = None) -> None:
@@ -426,41 +429,46 @@ def _process_single_node(
     config: FatigueConfig,
 ) -> float:
     """Rainflow + Miner for one critical node. Returns incremental damage."""
-    if node_idx not in state.node_buffers:
-        state.node_buffers[node_idx] = deque(maxlen=config.node_buffer_size)
+    with state._lock:
+        if node_idx not in state.node_buffers:
+            state.node_buffers[node_idx] = deque(maxlen=config.node_buffer_size)
+            state.node_res_sigs[node_idx] = []
+            if node_idx not in state.node_damages:
+                state.node_damages[node_idx] = 0.0
+
+        state.node_buffers[node_idx].append(stress_val)
+
+        if len(state.node_buffers[node_idx]) < config.min_buffer_size:
+            return 0.0
+
+        pending = list(state.node_res_sigs[node_idx])
         state.node_res_sigs[node_idx] = []
-        if node_idx not in state.node_damages:
-            state.node_damages[node_idx] = 0.0
 
-    state.node_buffers[node_idx].append(stress_val)
+        stress_arr = np.array(state.node_buffers[node_idx], dtype=np.float64)
+        state.node_buffers[node_idx].clear()
 
-    if len(state.node_buffers[node_idx]) < config.min_buffer_size:
-        return 0.0
-
-    pending = list(state.node_res_sigs[node_idx])
-    state.node_res_sigs[node_idx] = []
-
-    stress_arr = np.array(state.node_buffers[node_idx], dtype=np.float64)
     combined = np.concatenate([np.array(pending), stress_arr]) if pending else stress_arr
-    state.node_buffers[node_idx].clear()
 
     try:
         cc = CycleCount.from_timeseries(
             combined, unit="MPa", range_bin_width=config.rainflow_range_bin_width,
         )
     except ValueError:
-        state.node_res_sigs[node_idx] = []
+        with state._lock:
+            state.node_res_sigs[node_idx] = []
         return 0.0
 
     result_dict = cc.as_dict()
-    state.node_res_sigs[node_idx] = result_dict.get("res_sig", [])
+    with state._lock:
+        state.node_res_sigs[node_idx] = result_dict.get("res_sig", [])
 
     if len(cc.stress_range) == 0:
         return 0.0
 
     damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
     node_damage = float(np.sum(damage_per_bin))
-    state.node_damages[node_idx] = min(state.node_damages[node_idx] + node_damage, 1.0)
+    with state._lock:
+        state.node_damages[node_idx] = min(state.node_damages[node_idx] + node_damage, 1.0)
     return node_damage
 
 

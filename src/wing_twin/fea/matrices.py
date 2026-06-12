@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import NamedTuple, Optional
 
 from wing_twin.config.calibration import CalibrationConfig
+from wing_twin.config.paths import PROJECT_ROOT
 
 
 class TransferMatrices(NamedTuple):
@@ -44,22 +45,14 @@ class TransferMatrices(NamedTuple):
 
 
 @dataclass
-class FeaContext:
+class ReconstructionContext:
     """Bundles FEA matrices + calibration needed to re-impute channels
     and recompute stress/deformation fields."""
     matrices: TransferMatrices
     calibration: CalibrationConfig
 
 
-def _find_project_root() -> Path:
-    current = Path(__file__).resolve()
-    for parent in [current.parent] + list(current.parents):
-        if (parent / "pyproject.toml").exists() or (parent / "transfer_matrices").exists():
-            return parent
-    return current.parent.parent.parent
-
-
-DEFAULT_MATRIX_DIR = _find_project_root() / "transfer_matrices"
+DEFAULT_MATRIX_DIR = PROJECT_ROOT / "transfer_matrices"
 
 
 def load_transfer_matrices(

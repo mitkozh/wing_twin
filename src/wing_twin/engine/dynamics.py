@@ -13,27 +13,27 @@ class FlightDynamics:
     isn't subjected to sudden step changes).
     """
 
-    def __init__(self, angle_accel: float = 15.0, speed_accel: float = 60.0):
-        self.angle_accel = angle_accel
-        self.speed_accel = speed_accel
-        self._angle_velocity: float = 0.0
-        self._speed_velocity: float = 0.0
+    def __init__(self, max_angle_rate: float = 15.0, max_speed_rate: float = 60.0):
+        self.max_angle_rate = max_angle_rate
+        self.max_speed_rate = max_speed_rate
+        self._angle_rate: float = 0.0
+        self._speed_rate: float = 0.0
         self.prev_angle_of_attack: float = 0.0
 
     def update(self, state, dt: float) -> None:
         """Smoothly move actual angle/speed toward targets."""
-        state.angle_of_attack, self._angle_velocity = self._accel_towards(
+        state.angle_of_attack, self._angle_rate = self._accel_towards(
             state.angle_of_attack,
-            self._angle_velocity,
+            self._angle_rate,
             state.target_angle_of_attack,
-            self.angle_accel,
+            self.max_angle_rate,
             dt,
         )
-        state.airspeed, self._speed_velocity = self._accel_towards(
+        state.airspeed, self._speed_rate = self._accel_towards(
             state.airspeed,
-            self._speed_velocity,
+            self._speed_rate,
             state.target_airspeed,
-            self.speed_accel,
+            self.max_speed_rate,
             dt,
         )
 
@@ -44,28 +44,28 @@ class FlightDynamics:
         return rate
 
     @property
-    def angle_velocity(self) -> float:
-        return self._angle_velocity
+    def angle_rate(self) -> float:
+        return self._angle_rate
 
     @property
-    def speed_velocity(self) -> float:
-        return self._speed_velocity
+    def speed_rate(self) -> float:
+        return self._speed_rate
 
     def to_dict(self) -> dict:
         return {
-            "angle_velocity": self._angle_velocity,
-            "speed_velocity": self._speed_velocity,
+            "angle_rate": self._angle_rate,
+            "speed_rate": self._speed_rate,
             "prev_angle_of_attack": self.prev_angle_of_attack,
         }
 
     def from_dict(self, data: dict) -> None:
-        self._angle_velocity = data.get("angle_velocity", 0.0)
-        self._speed_velocity = data.get("speed_velocity", 0.0)
+        self._angle_rate = data.get("angle_rate", 0.0)
+        self._speed_rate = data.get("speed_rate", 0.0)
         self.prev_angle_of_attack = data.get("prev_angle_of_attack", 0.0)
 
     def reset(self) -> None:
-        self._angle_velocity = 0.0
-        self._speed_velocity = 0.0
+        self._angle_rate = 0.0
+        self._speed_rate = 0.0
         self.prev_angle_of_attack = 0.0
 
     @staticmethod
