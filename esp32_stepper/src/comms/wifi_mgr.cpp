@@ -1,6 +1,7 @@
 #include "wifi_mgr.h"
 #include "../config.h"
 #include <WiFi.h>
+#include <esp_wpa2.h>
 #include "../secrets.h"
 
 static bool s_connected = false;
@@ -11,6 +12,12 @@ static unsigned int s_maxRetryMs = WIFI_MAX_RETRY_MS;
 
 void wifi_mgr_init(void) {
     WiFi.mode(WIFI_STA);
+#ifdef WIFI_EAP_IDENTITY
+    esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)WIFI_EAP_IDENTITY, strlen(WIFI_EAP_IDENTITY));
+    esp_wifi_sta_wpa2_ent_set_username((uint8_t *)WIFI_EAP_USERNAME, strlen(WIFI_EAP_USERNAME));
+    esp_wifi_sta_wpa2_ent_set_password((uint8_t *)WIFI_EAP_PASSWORD, strlen(WIFI_EAP_PASSWORD));
+    esp_wifi_sta_wpa2_ent_enable();
+#endif
     Serial.printf("[WIFI] Starting, SSID=%s\n", WIFI_SSID);
 }
 
@@ -46,7 +53,11 @@ void wifi_mgr_loop(void) {
     }
     if (now - s_lastAttempt < s_retryMs) return;
     Serial.printf("[WIFI] Connecting to %s...\n", WIFI_SSID);
+#ifdef WIFI_EAP_IDENTITY
+    WiFi.begin(WIFI_SSID);
+#else
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+#endif
     s_lastAttempt = now;
     s_pending = true;
 }
