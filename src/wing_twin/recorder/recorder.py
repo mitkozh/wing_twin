@@ -63,27 +63,27 @@ class DataRecorder:
 
         if self._frame % self.scalar_interval == 0:
             strain = (
-                float(np.mean(state.strain_vector))
-                if state.strain_vector
+                float(np.mean(state.structural.strain_vector))
+                if state.structural.strain_vector
                 else 0.0
             )
             self._buf["timestamps"].append(now)
             self._buf["scalars"].append([
                 strain,
-                state.damage,
-                state.confidence,
-                state.angle_of_attack,
-                state.airspeed,
-                state.stepper_position,
-                state.wind_horizontal_ms,
-                state.wind_vertical_ms,
-                state.wind_horizontal_smoothed_ms,
-                state.wind_vertical_smoothed_ms,
-                state.effective_airspeed_kmh,
-                state.effective_aoa_deg,
+                state.damage.damage,
+                state.damage.confidence,
+                state.control.angle_of_attack,
+                state.control.airspeed,
+                state.stepper.stepper_position,
+                state.wind.wind_horizontal_ms,
+                state.wind.wind_vertical_ms,
+                state.wind.wind_horizontal_smoothed_ms,
+                state.wind.wind_vertical_smoothed_ms,
+                state.wind.effective_airspeed_kmh,
+                state.wind.effective_aoa_deg,
             ])
 
-        if self._frame % self.field_interval == 0 and state.stress_field:
+        if self._frame % self.field_interval == 0 and state.structural.stress_field:
             self._buf["field_timestamps"].append(now)
             try:
                 unity = state.for_unity()

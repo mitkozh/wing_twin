@@ -28,12 +28,16 @@ class WindTracker:
 
     def sample(
         self, time_elapsed: float, airspeed_kmh: float, flight_phase: str,
+        takeoff_speed_kmh: float = 70.0,
     ) -> tuple[float, float]:
         """Sample wind, update EMA/variance, return ramped (u_w, w_w).
 
         The EMA tracks the *unramped* wind so its statistics reflect the
         true turbulence intensity.  The returned wind is ramped to zero
         during ground / early takeoff.
+
+        ``takeoff_speed_kmh`` controls the ramp rate — wind reaches full
+        intensity when airspeed reaches half the takeoff speed.
         """
         t = time_elapsed
         dt = 0.0 if self._prev_step_t < 0.0 else max(0.0, t - self._prev_step_t)
@@ -48,7 +52,7 @@ class WindTracker:
         if flight_phase == "on_ground":
             return 0.0, 0.0
 
-        ramp_denom = max(self._config.sample_rate_hint * 1.0, 1.0)
+        ramp_denom = max(takeoff_speed_kmh * 0.5, 1.0)
         if flight_phase == "taking_off":
             r = max(0.0, min(1.0, airspeed_kmh / ramp_denom))
         else:
@@ -76,19 +80,19 @@ class WindTracker:
         Used during initialisation and snapshot restore when we do not
         have instantaneous wind / apparent-flow values yet.
         """
-        state.wind_horizontal_smoothed_ms = self._u_ema
-        state.wind_vertical_smoothed_ms = self._w_ema
+        state.wind.wind_horizontal_smoothed_ms = self._u_ema
+        state.wind.wind_vertical_smoothed_ms = self._w_ema
 
     def update_state(
         self, state: TwinState, u_w: float, w_w: float,
         v_eff: float, alpha_eff: float,
     ) -> None:
-        state.wind_horizontal_ms = u_w
-        state.wind_vertical_ms = w_w
-        state.wind_horizontal_smoothed_ms = self._u_ema
-        state.wind_vertical_smoothed_ms = self._w_ema
-        state.effective_airspeed_kmh = v_eff
-        state.effective_aoa_deg = alpha_eff
+        state.wind.wind_horizontal_ms = u_w
+        state.wind.wind_vertical_ms = w_w
+        state.wind.wind_horizontal_smoothed_ms = self._u_ema
+        state.wind.wind_vertical_smoothed_ms = self._w_ema
+        state.wind.effective_airspeed_kmh = v_eff
+        state.wind.effective_aoa_deg = alpha_eff
 
     def to_dict(self) -> dict:
         return {

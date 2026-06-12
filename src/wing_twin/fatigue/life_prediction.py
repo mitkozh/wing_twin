@@ -40,7 +40,7 @@ class LifePredictionState:
                     setattr(state, key, value)
         return state
 
-    def update_after_flight(self, damage_delta: float, km_delta: float) -> None:
+    def update_after_flight(self, damage_delta: float, km_delta: float, count_as_flight: bool = True) -> None:
         if km_delta > 0 and damage_delta > 0:
             damage_per_km = damage_delta / km_delta
 
@@ -62,7 +62,8 @@ class LifePredictionState:
 
         self.total_damage += damage_delta
         self.total_km_flown += km_delta
-        self.total_flights += 1
+        if count_as_flight:
+            self.total_flights += 1
 
     def pre_flight_check(self, planned_km: float) -> dict:
         safe = planned_km <= self.remaining_km

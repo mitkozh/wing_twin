@@ -130,12 +130,12 @@ class EngineCommandHandler:
         if steps is None:
             return {"cmd": "error", "message": "Missing 'steps'"}
         steps = int(steps)
-        max_steps = self._engine.state.max_stepper_steps
+        max_steps = self._engine.state.control.max_stepper_steps
         if steps < 0 or steps > max_steps:
             return {"cmd": "error", "message": f"Steps out of range [0, {max_steps}]"}
-        speed = cmd.get("speed", float(self._engine.state.target_airspeed))
-        self._engine.state.stepper_position = steps
-        self._engine.state.target_airspeed = speed
+        speed = cmd.get("speed", float(self._engine.state.control.target_airspeed))
+        self._engine.state.stepper.stepper_position = steps
+        self._engine.state.control.target_airspeed = speed
         return {
             "cmd": "ack",
             "action": "set_steps",
@@ -157,16 +157,16 @@ class EngineCommandHandler:
         state = self._engine.state
 
         if angle is not None:
-            state.desired_angle_of_attack = float(angle)
+            state.control.desired_angle_of_attack = float(angle)
 
         if speed is not None:
-            state.desired_airspeed = float(speed)
+            state.control.desired_airspeed = float(speed)
 
         return {
             "cmd": "ack",
             "action": "set_flight_state",
-            "desired_angle": state.desired_angle_of_attack,
-            "desired_speed": state.desired_airspeed,
+            "desired_angle": state.control.desired_angle_of_attack,
+            "desired_speed": state.control.desired_airspeed,
         }
 
     def _cmd_plan_flight(self, cmd: dict) -> dict:
@@ -175,9 +175,9 @@ class EngineCommandHandler:
             return {"cmd": "error", "message": "Missing 'planned_km'"}
         planned_km = float(planned_km)
         result = self._engine.life_prediction_state.pre_flight_check(planned_km)
-        self._engine.state.planned_km = planned_km
-        self._engine.state.pre_flight_safe = result["safe"]
-        self._engine.state.pre_flight_warning = result["warning"]
+        self._engine.state.flight.planned_km = planned_km
+        self._engine.state.flight.pre_flight_safe = result["safe"]
+        self._engine.state.flight.pre_flight_warning = result["warning"]
         return {
             "cmd": "plan_flight_result",
             "safe": result["safe"],
@@ -190,7 +190,7 @@ class EngineCommandHandler:
         phase = self._engine.flight_phase.value
         if phase != "on_ground":
             return {"cmd": "error", "message": f"Cannot take off during '{phase}'"}
-        if not self._engine.state.flight_allowed:
+        if not self._engine.state.flight.flight_allowed:
             return {"cmd": "error", "message": "Flight not allowed - fatigue life too low"}
         ok = self._engine.request_takeoff()
         if not ok:
@@ -210,12 +210,12 @@ class EngineCommandHandler:
         mode = cmd.get("mode", "damage")
         if mode not in ("stress", "damage"):
             return {"cmd": "error", "message": f"Invalid mode: {mode}. Use 'stress' or 'damage'"}
-        self._engine.state.heatmap_mode = mode
+        self._engine.state.stepper.heatmap_mode = mode
         return {"cmd": "ack", "action": "set_heatmap_mode", "mode": mode}
 
     def _cmd_set_maintenance_assist(self, cmd: dict) -> dict:
         enabled = cmd.get("enabled", True)
-        self._engine.state.maintenance_assist = bool(enabled)
+        self._engine.state.notifications.maintenance_assist = bool(enabled)
         return {"cmd": "ack", "action": "set_maintenance_assist", "enabled": bool(enabled)}
 
     def _cmd_dismiss_notification(self, cmd: dict) -> dict:
@@ -224,5 +224,3 @@ class EngineCommandHandler:
             return {"cmd": "error", "message": "Missing 'notification_id'"}
         self._engine.state.dismiss_notification(nid)
         return {"cmd": "ack", "action": "dismiss_notification", "notification_id": nid}
-
-

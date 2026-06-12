@@ -108,8 +108,8 @@ class FatigueTracker:
                 stress_mpa, self.state, sn_curve=sn_curve, config=fatigue_cfg,
             )
 
-        twin_state.node_damages = dict(self.state.node_damages)
-        twin_state.confidence = self.state.confidence
+        twin_state.damage.node_damages = dict(self.state.node_damages)
+        twin_state.damage.confidence = self.state.confidence
         self._update_damage_metrics(twin_state)
         self._check_notifications(twin_state)
         return bool(new_bad), all_bad
@@ -135,27 +135,26 @@ class FatigueTracker:
                 stress_mpa, self.state, sn_curve=sn_curve, config=fatigue_cfg,
             )
 
-        twin_state.node_damages = dict(self.state.node_damages)
+        twin_state.damage.node_damages = dict(self.state.node_damages)
         self._update_damage_metrics(twin_state)
 
     def _update_damage_metrics(self, twin_state: TwinState) -> None:
         if self.state.node_damages:
             values = list(self.state.node_damages.values())
-            twin_state.damage = max(values)
+            twin_state.damage.damage = max(values)
             sorted_vals = sorted(values, reverse=True)
             top_10_pct = sorted_vals[: max(1, len(sorted_vals) // 10)]
-            twin_state.avg_damage = (
+            twin_state.damage.avg_damage = (
                 sum(top_10_pct) / len(top_10_pct) if top_10_pct else 0.0
             )
         else:
-            twin_state.damage = self.state.damage
-            twin_state.avg_damage = 0.0
+            twin_state.damage.damage = self.state.damage
+            twin_state.damage.avg_damage = 0.0
 
-        # Life prediction — read-only check; updates happen in _complete_flight
         rem = self.life_prediction.remaining_km
         avg_flight = self.life_prediction.ema_km_per_flight
         flight_allowed = rem >= avg_flight if avg_flight > 0 else rem > 0
-        twin_state.flight_allowed = flight_allowed
+        twin_state.flight.flight_allowed = flight_allowed
 
         if not flight_allowed and not self._prev_flight_blocked:
             twin_state.add_notification(

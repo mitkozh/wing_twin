@@ -1,5 +1,5 @@
 """
-Engine configuration — flight dynamics, lifecycle parameters, and physics defaults.
+Engine configuration - flight dynamics, lifecycle parameters, and physics defaults.
 """
 
 from dataclasses import dataclass, field

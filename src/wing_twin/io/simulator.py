@@ -6,7 +6,7 @@ import numpy as np
 
 from wing_twin.config import SimulationConfig
 from wing_twin.config.calibration import CalibrationConfig
-from wing_twin.types import DataSource, SensorReading
+from wing_twin.types import SensorReading, SimulatableDataSource, ProcessedSensorReading
 from wing_twin.fea.matrices import TransferMatrices
 from wing_twin.physics.aero import compute_aero_force, NeuralFoilModel
 from wing_twin.physics.wind import WindModel, compute_apparent_wind
@@ -20,7 +20,7 @@ class SimulatorState:
     angle_of_attack: float = 0.0
 
 
-class SimulatorSource(DataSource):
+class SimulatorSource(SimulatableDataSource):
 
     def __init__(
         self,
@@ -113,7 +113,7 @@ class SimulatorSource(DataSource):
         with self._lock:
             self._state.time_elapsed += dt
 
-        return SensorReading(
+        return ProcessedSensorReading(
             strain_vector=strain_vector,
             accel_z=accel_z,
             timestamp=int(t * 1000),

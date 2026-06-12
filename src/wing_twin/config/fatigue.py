@@ -1,5 +1,5 @@
 """
-Fatigue configuration — moved from fatigue/fatigue.py to the centralized config package.
+Fatigue configuration - moved from fatigue/fatigue.py to the centralized config package.
 """
 
 from dataclasses import dataclass

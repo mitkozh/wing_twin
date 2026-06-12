@@ -1,5 +1,5 @@
 """
-Stepper motor physics - aerodynamic force model.
+Aerodynamic force model - CL/CD via NeuralFoil LUT, force -> stepper steps.
 """
 
 import math

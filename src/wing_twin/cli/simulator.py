@@ -46,15 +46,15 @@ class SimulatorMqttBridge:
         state = engine.state
         msg: dict = {
             "timestamp": int(state.for_unity().get("timestamp", 0)),
-            "strain_vector": state.strain_vector,
+            "strain_vector": state.structural.strain_vector,
             "accel_z": 0.0,
-            "stepper_position": state.stepper_position,
-            "damage": round(state.damage, 4),
-            "confidence": round(state.confidence, 2),
-            "flight_phase": state.flight_phase,
-            "altitude": round(state.altitude, 2),
-            "airspeed": round(state.airspeed, 2),
-            "angle_of_attack": round(state.angle_of_attack, 2),
+            "stepper_position": state.stepper.stepper_position,
+            "damage": round(state.damage.damage, 4),
+            "confidence": round(state.damage.confidence, 2),
+            "flight_phase": state.flight.flight_phase,
+            "altitude": round(state.flight.altitude, 2),
+            "airspeed": round(state.control.airspeed, 2),
+            "angle_of_attack": round(state.control.angle_of_attack, 2),
         }
 
         try:
@@ -68,16 +68,16 @@ def _display_loop(engine: DigitalTwinEngine, stop_event: asyncio.Event) -> None:
 
     while not stop_event.is_set():
         s = engine.state
-        phase = s.flight_phase.upper()
+        phase = s.flight.flight_phase.upper()
         logger.info(
             "  [%s]  dmg=%.2f%%  conf=%.1f%%  alt=%.1fm  km=%.3f  speed=%.0f  aoa=%.1f",
             phase,
-            s.damage * 100.0,
-            s.confidence,
-            s.altitude,
-            s.km_this_flight,
-            s.airspeed,
-            s.angle_of_attack,
+            s.damage.damage * 100.0,
+            s.damage.confidence,
+            s.flight.altitude,
+            s.flight.km_this_flight,
+            s.control.airspeed,
+            s.control.angle_of_attack,
         )
         _time.sleep(1.0)
 
@@ -149,7 +149,7 @@ async def run_simulator(
 
             loop.run_in_executor(
                 None, publisher.publish_stepper_position,
-                engine.state.stepper_position,
+                engine.state.stepper.stepper_position,
             )
             loop.run_in_executor(
                 None, publisher.publish_led_command,

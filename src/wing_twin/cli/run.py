@@ -93,9 +93,9 @@ async def run_production(
                 logger.error("Engine step failed: %s", e)
                 stepped = False
 
-            engine.state.esp32_reported_position = stepper_monitor.state.position
+            engine.state.stepper.esp32_reported_position = stepper_monitor.state.position
             if sensor_source.home_offset is not None:
-                engine.state.esp32_reported_home_offset = sensor_source.home_offset
+                engine.state.stepper.esp32_reported_home_offset = sensor_source.home_offset
 
             if stepped and recorder is not None:
                 try:
@@ -105,7 +105,7 @@ async def run_production(
 
             loop.run_in_executor(
                 None, publisher.publish_stepper_position,
-                engine.state.stepper_position,
+                engine.state.stepper.stepper_position,
             )
             loop.run_in_executor(
                 None, publisher.publish_led_command,

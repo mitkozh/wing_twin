@@ -22,17 +22,17 @@ class FlightDynamics:
 
     def update(self, state, dt: float) -> None:
         """Smoothly move actual angle/speed toward targets."""
-        state.angle_of_attack, self._angle_rate = self._accel_towards(
-            state.angle_of_attack,
+        state.control.angle_of_attack, self._angle_rate = self._accel_towards(
+            state.control.angle_of_attack,
             self._angle_rate,
-            state.target_angle_of_attack,
+            state.control.target_angle_of_attack,
             self.max_angle_rate,
             dt,
         )
-        state.airspeed, self._speed_rate = self._accel_towards(
-            state.airspeed,
+        state.control.airspeed, self._speed_rate = self._accel_towards(
+            state.control.airspeed,
             self._speed_rate,
-            state.target_airspeed,
+            state.control.target_airspeed,
             self.max_speed_rate,
             dt,
         )

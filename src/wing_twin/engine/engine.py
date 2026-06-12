@@ -37,7 +37,7 @@ from wing_twin.engine.flight_profile import (
     landing_desired,
 )
 from wing_twin.fatigue.life_prediction import LifePredictionState
-from wing_twin.types import DataSource, SensorReading
+from wing_twin.types import DataSource, RawSensorReading, ProcessedSensorReading, SensorReading, SimulatableDataSource
 
 
 class FlightPhase(str, Enum):
@@ -96,12 +96,12 @@ class DigitalTwinEngine:
             channel_names=list(self.config.calibration.channel_names),
         )
 
-        self.state.yield_point_pa = self.config.yield_point
-        self.state.stress_limit_pa = self.config.stress_limit
-        self.state.max_angle_deg = self.config.max_aoa
-        self.state.max_speed_kmh = self.config.reference_speed
-        self.state.max_stepper_steps = self.config.calibration.stepper_wing_safe_limit
-        self.state.max_landing_altitude = self.config.max_landing_altitude
+        self.state.structural.yield_point_pa = self.config.yield_point
+        self.state.structural.stress_limit_pa = self.config.stress_limit
+        self.state.control.max_angle_deg = self.config.max_aoa
+        self.state.control.max_speed_kmh = self.config.reference_speed
+        self.state.control.max_stepper_steps = self.config.calibration.stepper_wing_safe_limit
+        self.state.flight.max_landing_altitude = self.config.max_landing_altitude
 
         # Flight state machine
         if engine_snapshot and engine_snapshot.flight:
@@ -111,8 +111,8 @@ class DigitalTwinEngine:
             self._flight_phase = FlightPhase(phase_str)
             self._takeoff_timer = engine_snapshot.flight.get("takeoff_timer", 0.0)
             self._landing_timer = engine_snapshot.flight.get("landing_timer", 0.0)
-            self._prev_altitude = self.state.altitude
-            self._altitude_recovery_active = self.state.altitude < self.config.min_safe_altitude
+            self._prev_altitude = self.state.flight.altitude
+            self._altitude_recovery_active = self.state.flight.altitude < self.config.min_safe_altitude
             self._time_elapsed = engine_snapshot.flight.get("time_elapsed", 0.0)
         else:
             self._flight_phase: FlightPhase = FlightPhase.ON_GROUND
@@ -160,7 +160,7 @@ class DigitalTwinEngine:
     @flight_phase.setter
     def flight_phase(self, phase: FlightPhase) -> None:
         self._flight_phase = phase
-        self.state.flight_phase = phase.value
+        self.state.flight.flight_phase = phase.value
 
     @property
     def data_source(self) -> Optional[DataSource]:
@@ -172,6 +172,11 @@ class DigitalTwinEngine:
         self._data_source.connect()
         if self._matrices is not None:
             self._num_gauges = self._matrices.n_gauges
+
+    def _push_flight_state_to_source(self) -> None:
+        if isinstance(self._data_source, SimulatableDataSource):
+            self._data_source.set_airspeed(self.state.control.airspeed)
+            self._data_source.set_angle_of_attack(self.state.control.angle_of_attack)
 
     @property
     def fatigue_state(self) -> FatigueState:
@@ -202,35 +207,35 @@ class DigitalTwinEngine:
     def reset(self, target: str = "all") -> None:
         self.fatigue.reset(target)
         if target in ("strain", "all"):
-            self.state.strain_vector = []
-            self.state.forces = []
-            self.state.stress_field = []
-            self.state.deformation_field = []
+            self.state.structural.strain_vector = []
+            self.state.structural.forces = []
+            self.state.structural.stress_field = []
+            self.state.structural.deformation_field = []
         if target in ("damage", "all"):
-            self.state.damage = 0.0
-            self.state.cycles_histogram.clear()
+            self.state.damage.damage = 0.0
+            self.state.structural.cycles_histogram.clear()
         if target in ("flight", "all"):
             self._km_this_flight = 0.0
             self._last_flight_damage = 0.0
-            self.state.altitude = 0.0
-            self.state.km_this_flight = 0.0
+            self.state.flight.altitude = 0.0
+            self.state.flight.km_this_flight = 0.0
             self.flight_phase = FlightPhase.ON_GROUND
             self._altitude_recovery_active = False
             self._wind_tracker.reset()
-            self.state.wind_horizontal_ms = 0.0
-            self.state.wind_vertical_ms = 0.0
-            self.state.wind_horizontal_smoothed_ms = 0.0
-            self.state.wind_vertical_smoothed_ms = 0.0
-            self.state.effective_airspeed_kmh = 0.0
-            self.state.effective_aoa_deg = 0.0
+            self.state.wind.wind_horizontal_ms = 0.0
+            self.state.wind.wind_vertical_ms = 0.0
+            self.state.wind.wind_horizontal_smoothed_ms = 0.0
+            self.state.wind.wind_vertical_smoothed_ms = 0.0
+            self.state.wind.effective_airspeed_kmh = 0.0
+            self.state.wind.effective_aoa_deg = 0.0
 
     def _sync_twin_from_life_prediction(self) -> None:
-        self.state.total_km_flown = self.life_prediction_state.total_km_flown
-        self.state.flight_number = self.life_prediction_state.total_flights
-        self.state.remaining_km = self.life_prediction_state.remaining_km
-        rem = self.state.remaining_km
+        self.state.flight.total_km_flown = self.life_prediction_state.total_km_flown
+        self.state.flight.flight_number = self.life_prediction_state.total_flights
+        self.state.flight.remaining_km = self.life_prediction_state.remaining_km
+        rem = self.state.flight.remaining_km
         avg_flight = self.life_prediction_state.ema_km_per_flight
-        self.state.flight_allowed = rem >= avg_flight if avg_flight > 0 else rem > 0
+        self.state.flight.flight_allowed = rem >= avg_flight if avg_flight > 0 else rem > 0
 
     def _resolve_aborted_flight(self, flight_state: dict) -> None:
         km = flight_state.get("km_this_flight", 0.0)
@@ -242,6 +247,7 @@ class DigitalTwinEngine:
         self.life_prediction_state.update_after_flight(
             damage_delta=damage_delta,
             km_delta=km,
+            count_as_flight=False,
         )
 
     def save_snapshot(self) -> EngineSnapshot:
@@ -267,30 +273,30 @@ class DigitalTwinEngine:
     def request_takeoff(self) -> bool:
         if self._flight_phase != FlightPhase.ON_GROUND:
             return False
-        if not self.state.flight_allowed:
+        if not self.state.flight.flight_allowed:
             return False
         self.dynamics.reset()
         self.fatigue.reset(target="confidence")
         self._takeoff_timer = 0.0
         self._km_this_flight = 0.0
-        self._last_flight_damage = self.state.damage
-        self.state.altitude = 0.0
-        self.state.airspeed = 0.0
-        self.state.angle_of_attack = 0.0
-        self.state.stepper_position = 0
-        self.state.km_this_flight = 0.0
-        self.state.desired_angle_of_attack = 0.0
-        self.state.desired_airspeed = 0.0
-        self.state.target_angle_of_attack = 0.0
-        self.state.target_airspeed = 0.0
+        self._last_flight_damage = self.state.damage.damage
+        self.state.flight.altitude = 0.0
+        self.state.control.airspeed = 0.0
+        self.state.control.angle_of_attack = 0.0
+        self.state.stepper.stepper_position = 0
+        self.state.flight.km_this_flight = 0.0
+        self.state.control.desired_angle_of_attack = 0.0
+        self.state.control.desired_airspeed = 0.0
+        self.state.control.target_angle_of_attack = 0.0
+        self.state.control.target_airspeed = 0.0
         self._altitude_recovery_active = False
         self._wind_tracker.reset()
-        self.state.wind_horizontal_ms = 0.0
-        self.state.wind_vertical_ms = 0.0
-        self.state.wind_horizontal_smoothed_ms = 0.0
-        self.state.wind_vertical_smoothed_ms = 0.0
-        self.state.effective_airspeed_kmh = 0.0
-        self.state.effective_aoa_deg = 0.0
+        self.state.wind.wind_horizontal_ms = 0.0
+        self.state.wind.wind_vertical_ms = 0.0
+        self.state.wind.wind_horizontal_smoothed_ms = 0.0
+        self.state.wind.wind_vertical_smoothed_ms = 0.0
+        self.state.wind.effective_airspeed_kmh = 0.0
+        self.state.wind.effective_aoa_deg = 0.0
         self.flight_phase = FlightPhase.TAKING_OFF
         self.state.add_notification(
             "takeoff_started", "info", "Takeoff",
@@ -301,7 +307,7 @@ class DigitalTwinEngine:
     def request_landing(self) -> bool:
         if self._flight_phase != FlightPhase.IN_FLIGHT:
             return False
-        if self.state.altitude > self.config.max_landing_altitude:
+        if self.state.flight.altitude > self.config.max_landing_altitude:
             return False
         self._landing_timer = 0.0
         self.flight_phase = FlightPhase.LANDING
@@ -312,7 +318,7 @@ class DigitalTwinEngine:
         return True
 
     def _complete_flight(self) -> None:
-        damage_delta = self.state.damage - self._last_flight_damage
+        damage_delta = self.state.damage.damage - self._last_flight_damage
         km_delta = self._km_this_flight
         if km_delta > 0:
             self.life_prediction_state.update_after_flight(
@@ -320,7 +326,7 @@ class DigitalTwinEngine:
                 km_delta=km_delta,
             )
         self._km_this_flight = 0.0
-        self._last_flight_damage = self.state.damage
+        self._last_flight_damage = self.state.damage.damage
         self._altitude_recovery_active = False
         self._sync_twin_from_life_prediction()
 
@@ -334,16 +340,15 @@ class DigitalTwinEngine:
         )
         desired_angle, desired_speed = takeoff_desired(self._takeoff_timer, profile)
 
-        self.state.desired_angle_of_attack = desired_angle
-        self.state.desired_airspeed = desired_speed
+        self.state.control.desired_angle_of_attack = desired_angle
+        self.state.control.desired_airspeed = desired_speed
         self._update_safe_targets()
         self.dynamics.update(self.state, dt)
         self._update_stepper()
-        self._data_source.set_airspeed(self.state.airspeed)
-        self._data_source.set_angle_of_attack(self.state.angle_of_attack)
+        self._push_flight_state_to_source()
         self._update_altitude_km(dt)
 
-        if self.state.altitude >= self.config.min_safe_altitude or self._takeoff_timer > 30.0:
+        if self.state.flight.altitude >= self.config.min_safe_altitude or self._takeoff_timer > 30.0:
             self.flight_phase = FlightPhase.IN_FLIGHT
             self.state.add_notification(
                 "in_flight_reached", "info", "In Flight",
@@ -352,7 +357,7 @@ class DigitalTwinEngine:
 
     def _update_landing(self, dt: float) -> None:
         self._landing_timer += dt
-        alt = self.state.altitude
+        alt = self.state.flight.altitude
 
         profile = LandingProfile(
             approach_speed_kmh=self.config.landing_approach_speed,
@@ -366,38 +371,37 @@ class DigitalTwinEngine:
         )
         desired_angle, desired_speed = landing_desired(alt, profile)
 
-        self.state.desired_angle_of_attack = desired_angle
-        self.state.desired_airspeed = desired_speed
+        self.state.control.desired_angle_of_attack = desired_angle
+        self.state.control.desired_airspeed = desired_speed
         self._update_safe_targets()
         self.dynamics.update(self.state, dt)
         self._update_stepper()
-        self._data_source.set_airspeed(self.state.airspeed)
-        self._data_source.set_angle_of_attack(self.state.angle_of_attack)
+        self._push_flight_state_to_source()
 
         touchdown_alt = profile.flare_altitude_m
         if alt <= touchdown_alt:
-            self.state.altitude = max(0.0, self.state.altitude - 0.1 * dt)
+            self.state.flight.altitude = max(0.0, self.state.flight.altitude - 0.1 * dt)
         else:
             self._update_altitude_km(dt)
 
-        if self.state.altitude <= 0.01 and self.state.airspeed < self.config.landing_touchdown_speed:
-            self.state.altitude = 0.0
-            self.state.airspeed = 0.0
-            self.state.angle_of_attack = 0.0
-            self.state.stepper_position = 0
+        if self.state.flight.altitude <= 0.01 and self.state.control.airspeed < self.config.landing_touchdown_speed:
+            self.state.flight.altitude = 0.0
+            self.state.control.airspeed = 0.0
+            self.state.control.angle_of_attack = 0.0
+            self.state.stepper.stepper_position = 0
             self._complete_flight()
             self.flight_phase = FlightPhase.ON_GROUND
             self.state.add_notification(
                 "flight_completed", "info", "Flight Complete",
-                f"Flight {self.state.flight_number} completed. "
+                f"Flight {self.state.flight.flight_number} completed. "
                 f"{self._km_this_flight:.2f} km flown.",
             )
 
     def _update_stepper(self) -> None:
-        u_w, w_w = self._sample_wind(self.state.airspeed)
+        u_w, w_w = self._sample_wind(self.state.control.airspeed)
         v_eff, alpha_eff = compute_apparent_wind(
-            self.state.airspeed,
-            self.state.angle_of_attack,
+            self.state.control.airspeed,
+            self.state.control.angle_of_attack,
             u_w,
             w_w,
         )
@@ -410,7 +414,7 @@ class DigitalTwinEngine:
             model=self._aero_model,
             calibration=self.config.calibration,
         )
-        self.state.stepper_position = force_to_steps(
+        self.state.stepper.stepper_position = force_to_steps(
             F_aero,
             self.config.calibration.steps_per_newton,
             max_steps=self.config.calibration.stepper_wing_safe_limit,
@@ -419,6 +423,7 @@ class DigitalTwinEngine:
     def _sample_wind(self, current_airspeed_kmh: float) -> tuple[float, float]:
         return self._wind_tracker.sample(
             self._time_elapsed, current_airspeed_kmh, self._flight_phase.value,
+            takeoff_speed_kmh=self.config.takeoff_speed,
         )
 
     def _safe_apparent(
@@ -428,13 +433,13 @@ class DigitalTwinEngine:
 
     # this is a synthetic altitude, used for simulating the different transitions. Don't treat it too seriously!
     def _update_altitude_km(self, dt: float) -> None:
-        self._prev_altitude = self.state.altitude
-        V_ms = self.state.airspeed / 3.6
+        self._prev_altitude = self.state.flight.altitude
+        V_ms = self.state.control.airspeed / 3.6
         if V_ms < 0.1:
             climb_rate = 0.0
         else:
-            v_eff = self.state.effective_airspeed_kmh or self.state.airspeed
-            alpha_eff = self.state.effective_aoa_deg or self.state.angle_of_attack
+            v_eff = self.state.wind.effective_airspeed_kmh or self.state.control.airspeed
+            alpha_eff = self.state.wind.effective_aoa_deg or self.state.control.angle_of_attack
             L, _D, _CL, _CD = compute_aero_forces(
                 alpha_eff,
                 v_eff,
@@ -445,9 +450,9 @@ class DigitalTwinEngine:
             climb_rate = self.config.climb_rate_gain * (L / self.config.lift_ref_N - 1.0)
             climb_rate = max(-V_ms, min(V_ms, climb_rate))
 
-        self.state.altitude = max(0.0, self.state.altitude + climb_rate * dt)
-        self._km_this_flight += (self.state.airspeed / 3600.0) * dt
-        self.state.km_this_flight = self._km_this_flight
+        self.state.flight.altitude = max(0.0, self.state.flight.altitude + climb_rate * dt)
+        self._km_this_flight += (self.state.control.airspeed / 3600.0) * dt
+        self.state.flight.km_this_flight = self._km_this_flight
 
     def step(self) -> bool:
         """Execute one processing step. Returns True if new data was processed."""
@@ -473,31 +478,27 @@ class DigitalTwinEngine:
         return False
 
     def _step_ground(self, dt: float) -> None:
-        self.state.angle_of_attack = 0.0
-        self.state.airspeed = 0.0
-        self.state.stepper_position = 0
-        self.state.target_angle_of_attack = 0.0
-        self.state.target_airspeed = 0.0
-        self.state.desired_angle_of_attack = 0.0
-        self.state.desired_airspeed = 0.0
-        self.state.altitude = 0.0
-        self.state.km_this_flight = 0.0
+        self.state.control.angle_of_attack = 0.0
+        self.state.control.airspeed = 0.0
+        self.state.stepper.stepper_position = 0
+        self.state.control.target_angle_of_attack = 0.0
+        self.state.control.target_airspeed = 0.0
+        self.state.control.desired_angle_of_attack = 0.0
+        self.state.control.desired_airspeed = 0.0
+        self.state.flight.altitude = 0.0
+        self.state.flight.km_this_flight = 0.0
         # Wind is gated off in ON_GROUND; clear apparent fields so the
         # HUD doesn't show stale numbers from a previous flight.
-        self.state.wind_horizontal_ms = 0.0
-        self.state.wind_vertical_ms = 0.0
-        self.state.effective_airspeed_kmh = 0.0
-        self.state.effective_aoa_deg = 0.0
+        self.state.wind.wind_horizontal_ms = 0.0
+        self.state.wind.wind_vertical_ms = 0.0
+        self.state.wind.effective_airspeed_kmh = 0.0
+        self.state.wind.effective_aoa_deg = 0.0
 
     def _step_flight(self, dt: float) -> None:
         self._update_safe_targets()
         self.dynamics.update(self.state, dt)
-
         self._update_stepper()
-
-        self._data_source.set_airspeed(self.state.airspeed)
-        self._data_source.set_angle_of_attack(self.state.angle_of_attack)
-
+        self._push_flight_state_to_source()
         self._update_altitude_km(dt)
 
     def _process_reading(self, reading: SensorReading) -> None:
@@ -508,7 +509,7 @@ class DigitalTwinEngine:
         cal = self.config.calibration
         H = self._matrices.H
 
-        if reading.raw_values is not None:
+        if isinstance(reading, RawSensorReading):
             raw = np.array(reading.raw_values, dtype=np.float64)
             off_vals = reading.offset_values if reading.offset_values is not None else []
             off = np.array(off_vals, dtype=np.float64)
@@ -517,17 +518,18 @@ class DigitalTwinEngine:
             else:
                 scale = cal.adc_to_strain_scale
             strain_vec = (raw - reading.dummy_raw - off) * scale
-        elif reading.strain_vector is not None:
-            strain_vec = np.array(reading.strain_vector, dtype=np.float64)
-        else:
-            raise ValueError("SensorReading has neither raw_values nor strain_vector")
 
-        bad_idxs = detect_bad_channels(strain_vec, cal.strain_saturation_threshold)
-        if reading.saturated_flags is not None:
-            for i, flagged in enumerate(reading.saturated_flags):
-                if flagged and i not in bad_idxs:
-                    bad_idxs.append(i)
-            bad_idxs.sort()
+            bad_idxs = detect_bad_channels(strain_vec, cal.strain_saturation_threshold)
+            if reading.saturated_flags is not None:
+                for i, flagged in enumerate(reading.saturated_flags):
+                    if flagged and i not in bad_idxs:
+                        bad_idxs.append(i)
+                bad_idxs.sort()
+        elif isinstance(reading, ProcessedSensorReading):
+            strain_vec = np.array(reading.strain_vector, dtype=np.float64)
+            bad_idxs = detect_bad_channels(strain_vec, cal.strain_saturation_threshold)
+        else:
+            raise ValueError(f"Unknown SensorReading type: {type(reading).__name__}")
 
         pre_impute = strain_vec.copy()
         strain_clean = strain_vec.copy()
@@ -541,10 +543,10 @@ class DigitalTwinEngine:
         stress = compute_stress_field(self._matrices.S, F)
         deformation = compute_deformation_field(self._matrices.U, F)
 
-        self.state.strain_vector = strain_clean.tolist()
-        self.state.forces = F.tolist()
-        self.state.stress_field = stress.tolist()
-        self.state.deformation_field = deformation.tolist()
+        self.state.structural.strain_vector = strain_clean.tolist()
+        self.state.structural.forces = F.tolist()
+        self.state.structural.stress_field = stress.tolist()
+        self.state.structural.deformation_field = deformation.tolist()
 
         has_new_bad, all_bad = self.fatigue.process(
             pre_impute_strain=pre_impute,
@@ -562,10 +564,10 @@ class DigitalTwinEngine:
             stress_re = compute_stress_field(self._matrices.S, F_re)
             deformation_re = compute_deformation_field(self._matrices.U, F_re)
 
-            self.state.strain_vector = reimputed.tolist()
-            self.state.forces = F_re.tolist()
-            self.state.stress_field = stress_re.tolist()
-            self.state.deformation_field = deformation_re.tolist()
+            self.state.structural.strain_vector = reimputed.tolist()
+            self.state.structural.forces = F_re.tolist()
+            self.state.structural.stress_field = stress_re.tolist()
+            self.state.structural.deformation_field = deformation_re.tolist()
 
             self.fatigue.reaccumulate_damage(
                 stress_re, self.state, flight_phase=self._flight_phase,
@@ -575,8 +577,8 @@ class DigitalTwinEngine:
 
     def _update_safe_targets(self) -> None:
         """Convert desired angle/speed into safe targets."""
-        desired_angle = float(self.state.desired_angle_of_attack)
-        desired_speed = float(self.state.desired_airspeed)
+        desired_angle = float(self.state.control.desired_angle_of_attack)
+        desired_speed = float(self.state.control.desired_airspeed)
 
         target_angle = max(-self.config.max_aoa, min(self.config.max_aoa, desired_angle))
         if self._flight_phase == FlightPhase.LANDING:
@@ -588,7 +590,7 @@ class DigitalTwinEngine:
 
         # Altitude recovery
         if self._flight_phase == FlightPhase.IN_FLIGHT:
-            self._altitude_recovery_active = self.state.altitude < self.config.min_safe_altitude
+            self._altitude_recovery_active = self.state.flight.altitude < self.config.min_safe_altitude
         else:
             self._altitude_recovery_active = False
 
@@ -598,25 +600,25 @@ class DigitalTwinEngine:
 
         # Damage-based stress limit reduction: 5% at damage=0.3, 15% at damage=1.0
         stress_limit = self.config.stress_limit
-        if self.state.damage > 0.3:
-            t = min((self.state.damage - 0.3) / 0.7, 1.0)
+        if self.state.damage.damage > 0.3:
+            t = min((self.state.damage.damage - 0.3) / 0.7, 1.0)
             reduction_pct = 0.05 + 0.10 * t
             stress_limit *= (1.0 - reduction_pct)
-        self.state.stress_limit_pa = stress_limit
+        self.state.structural.stress_limit_pa = stress_limit
 
         # When maintenance assist is off, bypass all stress limiting
-        if not self.state.maintenance_assist:
-            self.state.target_angle_of_attack = target_angle
-            self.state.target_airspeed = target_speed
+        if not self.state.notifications.maintenance_assist:
+            self.state.control.target_angle_of_attack = target_angle
+            self.state.control.target_airspeed = target_speed
             return
 
-        if self._matrices is not None and self.state.forces:
-            F_current = np.array(self.state.forces, dtype=np.float64)
+        if self._matrices is not None and self.state.structural.forces:
+            F_current = np.array(self.state.structural.forces, dtype=np.float64)
             F_current_mag = float(np.linalg.norm(F_current))
 
             if F_current_mag > 1e-12:
-                v_eff_cur = self.state.effective_airspeed_kmh or self.state.airspeed
-                alpha_eff_cur = self.state.effective_aoa_deg or self.state.angle_of_attack
+                v_eff_cur = self.state.wind.effective_airspeed_kmh or self.state.control.airspeed
+                alpha_eff_cur = self.state.wind.effective_aoa_deg or self.state.control.angle_of_attack
                 F_aero_current = compute_aero_force(
                     alpha_eff_cur, v_eff_cur,
                     model=self._aero_model,
@@ -646,5 +648,5 @@ class DigitalTwinEngine:
                     if target_speed == speed_floor:
                         target_angle *= stress_limit / max_stress_pred
 
-        self.state.target_angle_of_attack = target_angle
-        self.state.target_airspeed = target_speed
+        self.state.control.target_angle_of_attack = target_angle
+        self.state.control.target_airspeed = target_speed

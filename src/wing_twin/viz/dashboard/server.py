@@ -1,5 +1,5 @@
 """
-Flask web dashboard for wing twin — live monitoring + stepper control,
+Flask web dashboard for wing twin - live monitoring + stepper control,
 with historical data buffer and CSV export.
 """
 

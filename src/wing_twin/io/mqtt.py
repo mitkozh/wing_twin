@@ -26,7 +26,7 @@ from wing_twin.io.protocol import (
     TareCommand,
 )
 from wing_twin.io.logger import get_logger
-from wing_twin.types import DataSource, SensorReading, StepperState
+from wing_twin.types import DataSource, SensorReading, RawSensorReading, StepperState
 
 logger = get_logger(__name__)
 
@@ -122,27 +122,7 @@ class MqttSensorSource(DataSource):
         if not self._buffer:
             return None
         raw_vals, offset_vals, dummy_raw, saturated, ts = self._buffer.popleft()
-        return SensorReading(
-            raw_values=raw_vals,
-            offset_values=offset_vals,
-            dummy_raw=dummy_raw,
-            saturated_flags=saturated,
-            accel_z=0.0,
-            timestamp=ts,
-            gauge_id="esp32_raw",
-        )
-
-    def peek_latest(self) -> Optional[SensorReading]:
-        """Non-destructive read of the latest sensor value.
-
-        Calibration code needs to peek at sensor data without
-        consuming it from the buffer, so the engine's next
-        ``step()`` call still has data to process.
-        """
-        if not self._buffer:
-            return None
-        raw_vals, offset_vals, dummy_raw, saturated, ts = self._buffer[-1]
-        return SensorReading(
+        return RawSensorReading(
             raw_values=raw_vals,
             offset_values=offset_vals,
             dummy_raw=dummy_raw,

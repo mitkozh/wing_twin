@@ -16,25 +16,25 @@ logger = logging.getLogger(__name__)
 def _load_calibration_file() -> tuple[float, ...] | None:
     calib_path = PROJECT_ROOT / "calibration" / "strain" / "calibration_data.json"
     if not calib_path.exists():
-        logger.warning("Calibration file not found at %s — using global scale", calib_path)
+        logger.warning("Calibration file not found at %s - using global scale", calib_path)
         return None
     try:
         with open(calib_path) as f:
             data = json.load(f)
         raw = data.get("per_channel_adc_to_strain_scale")
         if raw is None or len(raw) != 9:
-            logger.warning("Invalid calibration data in %s — using global scale", calib_path)
+            logger.warning("Invalid calibration data in %s - using global scale", calib_path)
             return None
         return tuple(float(v) for v in raw)
     except (json.JSONDecodeError, OSError) as exc:
-        logger.warning("Failed to load %s: %s — using global scale", calib_path, exc)
+        logger.warning("Failed to load %s: %s - using global scale", calib_path, exc)
         return None
 
 
 def _load_stepper_calibration() -> dict[str, float | int] | None:
     calib_path = PROJECT_ROOT / "calibration" / "stepper" / "stepper_calibration.json"
     if not calib_path.exists():
-        logger.info("Stepper calibration file not found at %s — using defaults", calib_path)
+        logger.info("Stepper calibration file not found at %s - using defaults", calib_path)
         return None
     try:
         with open(calib_path) as f:
@@ -46,7 +46,7 @@ def _load_stepper_calibration() -> dict[str, float | int] | None:
             "stepper_max_frequency": data.get("stepper_max_frequency"),
         }
     except (json.JSONDecodeError, OSError, KeyError) as exc:
-        logger.warning("Failed to load %s: %s — using defaults", calib_path, exc)
+        logger.warning("Failed to load %s: %s - using defaults", calib_path, exc)
         return None
 
 
@@ -97,7 +97,7 @@ class CalibrationConfig:
 
         if self.stepper_wing_safe_limit > self.stepper_motor_max_steps:
             logger.warning(
-                "stepper_wing_safe_limit (%d) exceeds stepper_motor_max_steps (%d) — clamping",
+                "stepper_wing_safe_limit (%d) exceeds stepper_motor_max_steps (%d) - clamping",
                 self.stepper_wing_safe_limit, self.stepper_motor_max_steps,
             )
             object.__setattr__(self, "stepper_wing_safe_limit", self.stepper_motor_max_steps)
@@ -130,7 +130,7 @@ class CalibrationConfig:
                         object.__setattr__(self, key, val)
                     else:
                         logger.warning(
-                            "stepper_cal.json key '%s' has wrong type (expected %s, got %s) — skipping",
+                            "stepper_cal.json key '%s' has wrong type (expected %s, got %s) - skipping",
                             key, expected_type.__name__, type(val).__name__,
                         )
             # Re-check wing safe limit ≤ motor max after loading

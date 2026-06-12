@@ -85,7 +85,7 @@ def load_h_matrix() -> np.ndarray | None:
 def collect_stepper_sweep(session: MqttSession, positions, duration_s, data_dir):
     """Command stepper to each position and record strain at each."""
     print("\n" + "=" * 60)
-    print("Stepper Sweep — measure strain at each position")
+    print("Stepper Sweep - measure strain at each position")
     print("=" * 60)
     print("No weights needed. The strain gauges + FEA H matrix will")
     print("provide the force reference.")
@@ -101,7 +101,7 @@ def collect_stepper_sweep(session: MqttSession, positions, duration_s, data_dir)
 
         samples = session.collect_samples(duration_s)
         if not samples:
-            print("  No data received — skipping")
+            print("  No data received - skipping")
             continue
         for s in samples:
             s["_stepper_cmd"] = pos
@@ -184,7 +184,7 @@ def analyze(results_csv: Path, data_dir: Path) -> float | None:
                 channel_forces.append(strain[ch] / h_val)
 
         if not channel_forces:
-            print(f"  Stepper {cmd:5d}: no valid channels for force inference — skipping")
+            print(f"  Stepper {cmd:5d}: no valid channels for force inference - skipping")
             continue
 
         # Use median force across channels (robust to outliers)
@@ -313,7 +313,7 @@ def main():
         records = collect_stepper_sweep(session, positions, args.duration, data_dir)
 
         if not records:
-            print("No data collected — aborting.")
+            print("No data collected - aborting.")
             session.disconnect()
             return
 
@@ -376,11 +376,11 @@ def main():
     motor_max = existing.get("stepper_motor_max_steps")
     if motor_max is not None:
         if wing_limit > motor_max:
-            print(f"\n Calculated limit ({wing_limit}) exceeds motor max ({motor_max}) — clamping")
+            print(f"\n Calculated limit ({wing_limit}) exceeds motor max ({motor_max}) - clamping")
             wing_limit = motor_max
     else:
         print("\n  Motor max not yet calibrated (run range_test first)")
-        print(f"     Wing limit set to {wing_limit} — verify manually")
+        print(f"     Wing limit set to {wing_limit} - verify manually")
 
     print(f"\n  Max force:          {max_n:.2f} N")
     print(f"  Steps per Newton:   {spn:.4f}")

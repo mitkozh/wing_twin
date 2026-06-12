@@ -9,16 +9,27 @@ import numpy as np
 
 
 @dataclass
-class SensorReading:
-    """A single measurement from any sensor source."""
-    strain_vector: Optional[np.ndarray] = None
-    raw_values: Optional[np.ndarray] = None
+class RawSensorReading:
+    """Sensor reading from a physical (MQTT/ESP32) device - raw ADC values."""
+    raw_values: np.ndarray
     offset_values: Optional[np.ndarray] = None
     dummy_raw: Optional[int] = None
     saturated_flags: Optional[list[bool]] = None
     accel_z: float = 0.0
     timestamp: int = 0
+    gauge_id: str = "esp32_raw"
+
+
+@dataclass
+class ProcessedSensorReading:
+    """Sensor reading from a simulated source - already a strain vector."""
+    strain_vector: np.ndarray
+    accel_z: float = 0.0
+    timestamp: int = 0
     gauge_id: str = "primary"
+
+
+SensorReading = RawSensorReading | ProcessedSensorReading
 
 
 @dataclass
@@ -51,14 +62,14 @@ class DataSource(ABC):
     def is_connected(self) -> bool:
         pass
 
+
+class SimulatableDataSource(DataSource):
+    """A DataSource that can be driven by simulated flight conditions."""
+
+    @abstractmethod
     def set_airspeed(self, speed_kmh: float) -> None:
-        """Update the simulated airspeed driving sensor generation.
-        No-op for physical (MQTT) sources.
-        """
+        """Update the simulated airspeed driving sensor generation."""
 
+    @abstractmethod
     def set_angle_of_attack(self, angle_deg: float) -> None:
-        """Update the simulated angle of attack driving sensor generation.
-        No-op for physical (MQTT) sources.
-        """
-
-
+        """Update the simulated angle of attack driving sensor generation."""

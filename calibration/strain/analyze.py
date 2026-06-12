@@ -108,7 +108,7 @@ def compute_scale_factors(
     if 0.0 in weight_data:
         tare_raw = weight_data[0.0]
     else:
-        print("  [WARN] no tare (0g) data found — using first weight as baseline")
+        print("  [WARN] no tare (0g) data found - using first weight as baseline")
         tare_raw = weight_data[weights_g[0]]
 
     scale = np.zeros(n_channels, dtype=np.float64)
@@ -215,7 +215,7 @@ def main():
     weight_data = load_data_files(args.data_dir)
 
     if not weight_data:
-        print("No data loaded — aborting.")
+        print("No data loaded - aborting.")
         return
 
     print(f"\nLoaded {len(weight_data)} weight conditions:")

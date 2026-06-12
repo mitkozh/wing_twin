@@ -4,6 +4,7 @@ from typing import Optional
 import numpy as np
 
 from wing_twin.config.calibration import CalibrationConfig
+from wing_twin.types import RawSensorReading
 from wing_twin.io.mqtt import MqttCommandPublisher, MqttSensorSource, MqttStepperMonitor
 from wing_twin.io.logger import get_logger
 
@@ -25,7 +26,7 @@ def _wait_for_stepper_idle(
 
 def _read_strain_sample(sensor_source: MqttSensorSource) -> Optional[np.ndarray]:
     reading = sensor_source.peek_latest()
-    if reading is None or reading.raw_values is None:
+    if reading is None or not isinstance(reading, RawSensorReading):
         return None
     return reading.raw_values.astype(np.float64)
 

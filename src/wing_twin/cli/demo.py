@@ -79,7 +79,7 @@ async def run_demo_async(
                 logger.info("Auto-takeoff initiated")
 
             if auto_takeoff and engine.flight_phase.value == "landing" and duration_s <= 0:
-                if engine.state.altitude < 0.5:
+                if engine.state.flight.altitude < 0.5:
                     stop_event.set()
                     break
 
@@ -136,13 +136,13 @@ def _display_thread(engine, stop_event):
     while not stop_event.is_set():
         tick += 1
         bar_len = 30
-        filled = int(engine.state.damage * bar_len)
+        filled = int(engine.state.damage.damage * bar_len)
         bar = "#" * filled + "-" * (bar_len - filled)
-        phase = engine.state.flight_phase.upper()
-        alt = engine.state.altitude
-        km = engine.state.km_this_flight
+        phase = engine.state.flight.flight_phase.upper()
+        alt = engine.state.flight.altitude
+        km = engine.state.flight.km_this_flight
         logger.info("[%4ds] |%s| %5.1f%%  [%s]  alt=%.1fm  km=%.3f",
-                    tick, bar, engine.state.damage*100,
+                    tick, bar, engine.state.damage.damage*100,
                     phase, alt, km)
         import time
         time.sleep(1)
