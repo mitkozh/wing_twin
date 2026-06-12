@@ -6,15 +6,18 @@ Uses real sensors via MQTT - connects to the physical wing system.
 
 import argparse
 import asyncio
+import time
 from pathlib import Path
 from typing import Optional
 
 from ._lifecycle import cancel_task, finalize_recorder, publish_final_zero, setup_recorder, setup_signal_handler
 
 from wing_twin.config import PROJECT_ROOT, Config
+from wing_twin.config.calibration import CalibrationConfig
 from wing_twin.engine.engine import DigitalTwinEngine
 from wing_twin.config import EngineConfig
 from wing_twin.engine.state import EngineSnapshot
+from wing_twin.control.calibrate import calibrate_stepper
 from wing_twin.io.mqtt import MqttSource, MqttPublisher
 from wing_twin.io.websocket import WebSocketBroadcaster, EngineCommandHandler
 from wing_twin.recorder.recorder import load_engine_snapshot
@@ -47,9 +50,19 @@ async def run_production(
 
     mqtt_source = MqttSource(config.mqtt)
     engine.data_source = mqtt_source
+    mqtt_source.connect()
 
     mqtt_publisher = MqttPublisher(config.mqtt)
     mqtt_publisher.connect()
+
+    # Wait for initial stepper status, then calibrate if needed
+    calib_config = CalibrationConfig()
+    logger.info("Waiting for stepper status...")
+    for _ in range(50):
+        if mqtt_source.handler.latest_stepper is not None:
+            break
+        time.sleep(0.1)
+    calibrate_stepper(mqtt_publisher, mqtt_source.handler, config.mqtt, calib_config)
 
     broadcaster = WebSocketBroadcaster(port=config.websocket.port)
     command_handler = EngineCommandHandler(engine)
@@ -70,7 +83,7 @@ async def run_production(
                 logger.error("Engine step failed: %s", e)
                 stepped = False
 
-            reported = mqtt_source.handler.latest_esp32_stepper
+            reported = mqtt_source.handler.latest_stepper_position
             if reported is not None:
                 engine.state.esp32_reported_position = reported
             offset = mqtt_source.handler.latest_esp32_home_offset

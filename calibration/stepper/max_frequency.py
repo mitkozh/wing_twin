@@ -31,10 +31,7 @@ from pathlib import Path
 import numpy as np
 
 from calibration.stepper.mqtt_helpers import (
-    connect,
-    disconnect,
-    subscribe_sensors,
-    publish_control,
+    MqttSession,
     update_stepper_calibration,
 )
 
@@ -131,8 +128,8 @@ def run_test(
     input("Press Enter when ready...")
     print()
 
-    client = connect(mqtt_host, mqtt_port)
-    subscribe_sensors(client)
+    session = MqttSession(mqtt_host, mqtt_port)
+    session.subscribe_sensors()
     print(f"Connected to {mqtt_host}:{mqtt_port}")
     print()
 
@@ -145,47 +142,26 @@ def run_test(
         print(f"  Cycle {cycle + 1}/{NUM_CYCLES}: {direction} to {forward_pos}...", end=" ")
         sys.stdout.flush()
 
-        t_start = time.time()
-        publish_control(client, {"position": forward_pos})
-        time.sleep(SETTLE_S)
+        session.publish_control({"position": forward_pos})
+        samples = session.collect_samples(SETTLE_S * 2)
+        for s in samples:
+            s["_cmd_position"] = forward_pos
+            s["_cycle"] = cycle
 
-        # Collect position reports during and after the move
-        collected: list[dict] = []
-        recording = True
-
-        def on_msg(c, u, msg):
-            if not recording:
-                return
-            try:
-                import json as _json
-                data = _json.loads(msg.payload)
-                data["_wall_t"] = time.time()
-                data["_cmd_position"] = forward_pos
-                data["_cycle"] = cycle
-                collected.append(data)
-            except Exception:
-                pass
-
-        client.on_message = on_msg
-        t0 = time.time()
-        while time.time() - t0 < SETTLE_S * 2:
-            time.sleep(0.01)
-        recording = False
-
-        if collected:
-            actual = collected[-1].get("stepper_position", "?")
-            print(f"actual {actual} ({len(collected)} samples)")
+        if samples:
+            actual = samples[-1].get("stepper_position", "?")
+            print(f"actual {actual} ({len(samples)} samples)")
         else:
             print("no response")
 
-        all_records.extend(collected)
+        all_records.extend(samples)
 
     print("\n  Returning stepper to 0...")
-    publish_control(client, {"position": 0})
+    session.publish_control({"position": 0})
 
     if not all_records:
         print("No data recorded.")
-        disconnect(client)
+        session.disconnect()
         return
 
     # Save raw data
@@ -269,7 +245,7 @@ def run_test(
     print()
     print(f"Test data saved to: {filename}")
 
-    disconnect(client)
+    session.disconnect()
 
 
 def main():

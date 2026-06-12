@@ -16,6 +16,8 @@ static const char* SUB_TOPIC  = "wing/stepper/command";
 static const char* PUB_TOPIC  = "wing/stepper/status";
 
 static unsigned long s_lastStatusPub = 0;
+static bool          s_statusDirty   = false;
+static bool          s_prevMoving    = false;
 
 static void publish_status(void) {
     StaticJsonDocument<256> doc;
@@ -28,6 +30,7 @@ static void publish_status(void) {
     String out;
     serializeJson(doc, out);
     mqtt_publish(PUB_TOPIC, out.c_str());
+    s_statusDirty = false;
 }
 
 static void on_mqtt_message(const char* topic, const char* payload) {
@@ -41,10 +44,12 @@ static void on_mqtt_message(const char* topic, const char* payload) {
 
     if (doc.containsKey("position")) {
         stepper_set_target(doc["position"].as<long>());
+        s_statusDirty = true;
     }
 
     if (doc.containsKey("enable")) {
         stepper_enable(doc["enable"].as<bool>());
+        s_statusDirty = true;
     }
 
     if (doc.containsKey("reset_position")) {
@@ -52,6 +57,7 @@ static void on_mqtt_message(const char* topic, const char* payload) {
         stepper_save_position();
         stepper_set_dirty(false);
         Serial.printf("[MAIN] position reset to %ld\n", doc["reset_position"].as<long>());
+        s_statusDirty = true;
     }
 }
 
@@ -87,7 +93,15 @@ void loop() {
     mqtt_loop();
     stepper_loop();
 
-    if (millis() - s_lastStatusPub >= STATUS_PUBLISH_INTERVAL_MS) {
+    bool moving = stepper_is_moving();
+    if (s_prevMoving && !moving) {
+        s_statusDirty = true;
+    }
+    s_prevMoving = moving;
+
+    if (s_statusDirty) {
+        publish_status();
+    } else if (millis() - s_lastStatusPub >= STATUS_PUBLISH_INTERVAL_MS) {
         s_lastStatusPub = millis();
         publish_status();
     }

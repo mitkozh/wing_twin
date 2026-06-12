@@ -23,9 +23,9 @@ from pathlib import Path
 import paho.mqtt.client as mqtt
 
 HERE = Path(__file__).resolve().parent.parent
-SENSOR_TOPIC = "wing/sensors"
+SENSOR_TOPIC = "wing/sensor/data"
 
-_sensor_topic = "wing/sensors"
+_sensor_topic = "wing/sensor/data"
 _records: list[dict] = []
 _recording = False
 _stop_requested = False

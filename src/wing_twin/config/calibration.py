@@ -71,6 +71,15 @@ class CalibrationConfig:
     stepper_motor_max_steps: int = 2720        # physical limit of the stepper motor
     stepper_wing_safe_limit: int = 2500        # hard limit to prevent wing damage (<= motor max)
     stepper_max_frequency: float = 1000.0      # Hz (max step rate)
+    stepper_min_position: int = -500           # software min (safe retract, neg = reverse)
+    stepper_coarse_step: int = 20              # coarse search increment during zero cal
+    stepper_strain_threshold: float = 5000.0   # ADC delta that indicates contact
+    stepper_slack_threshold: float = 500.0     # ADC delta that indicates free movement
+    stepper_contact_confirm: int = 3           # consecutive above-threshold reads to confirm contact
+    stepper_calibration_num_samples: int = 10  # strain samples per baseline measurement
+    stepper_calibration_poll_s: float = 0.02   # poll interval for stepper-idle wait in seconds
+    stepper_calibration_retract_timeout_s: float = 10.0
+    stepper_calibration_move_timeout_s: float = 5.0
 
     # Aerodynamic force biases (additive corrections)
     lift_bias: float = 0.0

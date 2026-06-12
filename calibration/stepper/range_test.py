@@ -24,11 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from calibration.stepper.mqtt_helpers import (
-    connect,
-    disconnect,
-    subscribe_sensors,
-    publish_control,
-    collect_samples,
+    MqttSession,
     update_stepper_calibration,
 )
 
@@ -40,7 +36,7 @@ STEPPER_MAX = 2720
 
 
 def sweep_positions(
-    client,
+    session: MqttSession,
     positions: list[int],
     settle_s: float,
 ) -> list[dict]:
@@ -48,9 +44,9 @@ def sweep_positions(
     for pos in positions:
         print(f"  Commanding position {pos:+5d} ...", end=" ")
         sys.stdout.flush()
-        publish_control(client, {"position": pos})
+        session.publish_control({"position": pos})
         time.sleep(settle_s)
-        samples = collect_samples(client, 1.0)
+        samples = session.collect_samples(1.0)
         if samples:
             actual = samples[-1].get("stepper_position", "N/A")
             print(f"actual {actual}")
@@ -80,14 +76,14 @@ def run_test(
     input("Press Enter when ready...")
     print()
 
-    client = connect(mqtt_host, mqtt_port)
-    subscribe_sensors(client)
+    session = MqttSession(mqtt_host, mqtt_port)
+    session.subscribe_sensors()
     print(f"Connected to {mqtt_host}:{mqtt_port}")
     print()
 
     print("Phase 1: Sweep 0 -> MAX -> 0 -> MIN -> 0")
     print("-" * 50)
-    records = sweep_positions(client, [0, STEPPER_MAX, 0, STEPPER_MIN, 0], settle_s)
+    records = sweep_positions(session, [0, STEPPER_MAX, 0, STEPPER_MIN, 0], settle_s)
     print()
 
     print("Phase 2: Incremental sweep full range")
@@ -96,11 +92,11 @@ def run_test(
     full_sweep = list(range(0, STEPPER_MAX + 1, inc)) + \
                  list(range(STEPPER_MAX, STEPPER_MIN - 1, -inc)) + \
                  list(range(STEPPER_MIN, 1, inc))
-    records += sweep_positions(client, full_sweep, settle_s)
+    records += sweep_positions(session, full_sweep, settle_s)
 
     if not records:
         print("No sensor data received.")
-        disconnect(client)
+        session.disconnect()
         return
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -166,7 +162,7 @@ def run_test(
     print(f"    Run: python -m calibration.stepper.max_frequency       (stepper disconnected)")
     print(f"    Run: python -m calibration.stepper.steps_per_newton   (wing attached, weights)")
 
-    disconnect(client)
+    session.disconnect()
 
 
 def main():

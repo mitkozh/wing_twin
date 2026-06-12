@@ -13,9 +13,18 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Lock, Thread
 from typing import Optional
 
 import paho.mqtt.client as mqtt
+
+from wing_twin.config.io import (
+    MqttConfig,
+    SENSOR_DATA_TOPIC,
+    SENSOR_COMMAND_TOPIC,
+    STEPPER_COMMAND_TOPIC,
+    STEPPER_STATUS_TOPIC,
+)
 
 HERE = Path(__file__).parent
 STATIC = HERE / "static"
@@ -39,6 +48,9 @@ class DashboardState:
     home_offset: int = 0
     saturated: list[bool] = field(default_factory=lambda: [False] * 9)
     mqtt_connected: bool = False
+    esp32_connected: bool = False
+    last_esp32_seen: float = 0.0
+    stepper_last_seen: float = 0.0
     timestamp: int = 0
     record_count: int = 0
     last_tare_time: float = 0.0       # wall-clock seconds when offset last changed
@@ -47,9 +59,10 @@ class DashboardState:
 
 _state = DashboardState()
 _mqtt_client: Optional[mqtt.Client] = None
-_sensor_topic = "wing/sensors"
-_control_topic = "wing/control"
-_stepper_topic = "wing/stepper/command"
+_sensor_topic = SENSOR_DATA_TOPIC
+_control_topic = SENSOR_COMMAND_TOPIC
+_stepper_topic = STEPPER_COMMAND_TOPIC
+_stepper_status_topic = STEPPER_STATUS_TOPIC
 
 _buf: deque = deque(maxlen=_MAX_RECORDS)
 _buf_lock = threading.Lock()
@@ -60,6 +73,7 @@ _prev_offset: list[float] | None = None
 
 def _on_connect(client, userdata, flags, rc):
     client.subscribe(_sensor_topic)
+    client.subscribe(_stepper_status_topic)
     _state.mqtt_connected = True
 
 
@@ -74,11 +88,21 @@ def _on_message(client, userdata, msg):
     except (json.JSONDecodeError, UnicodeDecodeError):
         return
 
+    topic = msg.topic
     now = time.time()
+
+    # Stepper status from dedicated topic
+    if topic == _stepper_status_topic:
+        _state.stepper_last_seen = time.time()
+        _state.stepper_position = data.get("position", _state.stepper_position)
+        if "enabled" in data:
+            _state.stepper_enabled = bool(data["enabled"])
+        return
+
+    # Sensor data from wing/sensors
+    _state.last_esp32_seen = time.time()
     _state.raw = data.get("raw", _state.raw)
     _state.dummy_raw = data.get("dummy_raw", _state.dummy_raw)
-    _state.stepper_position = data.get("stepper_position", _state.stepper_position)
-    _state.home_offset = data.get("home_offset", _state.home_offset)
     _state.saturated = data.get("saturated", _state.saturated)
     _state.timestamp = data.get("timestamp", _state.timestamp)
 
@@ -143,6 +167,9 @@ def create_app(broker: str = "localhost", port: int = 1883):
 
     @app.route("/api/state")
     def api_state():
+        cfg = MqttConfig()
+        esp32_connected = (time.time() - _state.last_esp32_seen) < cfg.esp32_timeout_s
+        stepper_connected = (time.time() - _state.stepper_last_seen) < cfg.stepper_timeout_s
         return jsonify(
             {
                 "raw": _state.raw,
@@ -150,9 +177,11 @@ def create_app(broker: str = "localhost", port: int = 1883):
                 "dummy_raw": _state.dummy_raw,
                 "stepper_position": _state.stepper_position,
                 "stepper_enabled": _state.stepper_enabled,
+                "stepper_connected": stepper_connected,
                 "home_offset": _state.home_offset,
                 "saturated": _state.saturated,
                 "mqtt_connected": _state.mqtt_connected,
+                "esp32_connected": esp32_connected,
                 "timestamp": _state.timestamp,
                 "record_count": _state.record_count,
                 "last_tare_time": _state.last_tare_time,

@@ -31,7 +31,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import signal
 import sys
 import time
 from datetime import datetime, timezone
@@ -40,10 +39,7 @@ from pathlib import Path
 import numpy as np
 
 from calibration.stepper.mqtt_helpers import (
-    connect,
-    disconnect,
-    subscribe_sensors,
-    publish_control,
+    MqttSession,
     load_stepper_calibration,
     update_stepper_calibration,
 )
@@ -55,49 +51,11 @@ G = 9.81
 
 STEPPER_POSITIONS = [0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 2720]
 
-SENSOR_TOPIC = "wing/sensors"
-_records: list[dict] = []
-_recording = False
-_stop_requested = False
-
 CHANNEL_NAMES = [
     "root_0", "root_45", "root_90",
     "middle_0", "middle_45", "middle_90",
     "tip_0", "tip_45", "tip_90",
 ]
-
-
-def _signal_handler(sig, frame):
-    global _stop_requested
-    _stop_requested = True
-
-
-def _on_message(client, userdata, msg):
-    global _recording, _records
-    if not _recording:
-        return
-    try:
-        data = json.loads(msg.payload)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return
-    data["_wall_t"] = time.time()
-    _records.append(data)
-
-
-def collect_samples(client, duration_s: float) -> list[dict]:
-    global _records, _recording, _stop_requested
-    _records = []
-    _recording = True
-    _stop_requested = False
-    signal.signal(signal.SIGINT, _signal_handler)
-    t0 = time.time()
-    while time.time() - t0 < duration_s:
-        if _stop_requested:
-            print("  [interrupted]")
-            break
-        time.sleep(0.05)
-    _recording = False
-    return list(_records)
 
 
 def load_strain_calibration() -> np.ndarray | None:
@@ -125,7 +83,7 @@ def load_h_matrix() -> np.ndarray | None:
     return H.astype(np.float64)
 
 
-def collect_stepper_sweep(client, positions, duration_s, data_dir):
+def collect_stepper_sweep(session: MqttSession, positions, duration_s, data_dir):
     """Command stepper to each position and record strain at each."""
     print("\n" + "=" * 60)
     print("Stepper Sweep — measure strain at each position")
@@ -139,10 +97,10 @@ def collect_stepper_sweep(client, positions, duration_s, data_dir):
     for pos in positions:
         print(f"\n--- Stepper position {pos} ---")
         print(f"  Moving stepper to {pos}...")
-        publish_control(client, {"position": pos})
+        session.publish_control({"position": pos})
         time.sleep(0.5)
 
-        samples = collect_samples(client, duration_s)
+        samples = session.collect_samples(duration_s)
         if not samples:
             print("  No data received — skipping")
             continue
@@ -153,7 +111,7 @@ def collect_stepper_sweep(client, positions, duration_s, data_dir):
         print(f"  Collected {len(samples)} samples (actual pos: {actual})")
 
     print("\n  Returning stepper to 0...")
-    publish_control(client, {"position": 0})
+    session.publish_control({"position": 0})
 
     return all_records
 
@@ -349,16 +307,15 @@ def main():
         print()
         input("Press Enter when ready...")
 
-        client = connect(args.mqtt_host, args.mqtt_port)
-        subscribe_sensors(client)
-        client.on_message = _on_message
+        session = MqttSession(args.mqtt_host, args.mqtt_port)
+        session.subscribe_sensors()
         print(f"Connected to {args.mqtt_host}:{args.mqtt_port}")
 
-        records = collect_stepper_sweep(client, positions, args.duration, data_dir)
+        records = collect_stepper_sweep(session, positions, args.duration, data_dir)
 
         if not records:
             print("No data collected — aborting.")
-            disconnect(client)
+            session.disconnect()
             return
 
         fieldnames = [
@@ -388,7 +345,7 @@ def main():
                 w.writerow(row)
 
         print(f"\nAll data saved to {results_csv}")
-        disconnect(client)
+        session.disconnect()
 
     spn = analyze(results_csv, data_dir)
     if spn is None:
