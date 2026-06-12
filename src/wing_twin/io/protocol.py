@@ -56,7 +56,7 @@ class StepperStatusPayload:
 
 @dataclass
 class LedCommand:
-    colors: list[str]
+    colors: list[list[float]]
 
     def to_json(self) -> str:
         return json.dumps({"leds": self.colors})

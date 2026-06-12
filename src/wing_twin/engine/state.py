@@ -11,7 +11,7 @@ from typing import Optional
 
 import numpy as np
 
-from wing_twin.control.control import decide_control, decide_control_stress
+from wing_twin.control.control import heatmap_color
 from wing_twin.mesh.exporter import load_section_nodes, load_surface_node_ids
 
 
@@ -235,23 +235,22 @@ class TwinState:
             "effective_aoa_deg": round(w.effective_aoa_deg, 3),
         }
 
-    def compute_led_colors(self) -> list:
+    def compute_led_colors(self) -> list[list[float]]:
         sections = _get_section_nodes()
-        colors = []
+        colors: list[list[float]] = []
         for section_name in ["tip", "middle", "root"]:
             node_ids = sections[section_name]
             if not node_ids:
-                colors.append("green")
+                colors.append([0.0, 1.0, 0.0])
                 continue
 
             if self.stepper.heatmap_mode == "damage":
                 damages = [self.damage.node_damages.get(nid, 0.0) for nid in node_ids]
-                max_damage = max(damages)
-                color, _ = decide_control(max_damage, self.damage.confidence)
+                t = max(damages)
             else:
                 sf = self.structural.stress_field
                 if not sf or len(sf) == 0:
-                    colors.append("green")
+                    colors.append([0.0, 1.0, 0.0])
                     continue
                 max_stress = 0.0
                 for nid in node_ids:
@@ -259,9 +258,10 @@ class TwinState:
                         stress_val = abs(sf[nid])
                         if stress_val > max_stress:
                             max_stress = stress_val
-                color = decide_control_stress(max_stress, self.structural.yield_point_pa)
+                yp = self.structural.yield_point_pa
+                t = max_stress / yp if yp > 0 else 0.0
 
-            colors.append(color)
+            colors.append(list(heatmap_color(t)))
 
         return colors
 

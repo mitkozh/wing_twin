@@ -17,6 +17,9 @@
 static const char* PUBLISH_TOPIC   = "wing/sensor/data";
 static const char* SUBSCRIBE_TOPIC = "wing/sensor/command";
 
+static const float GREEN[3] = {0.0f, 1.0f, 0.0f};
+static const float RED[3]   = {1.0f, 0.0f, 0.0f};
+
 static void on_mqtt_message(const char* topic, const char* payload) {
     StaticJsonDocument<256> doc;
     DeserializationError err = deserializeJson(doc, payload);
@@ -45,18 +48,16 @@ static void on_mqtt_message(const char* topic, const char* payload) {
 
     if (doc.containsKey("leds")) {
         JsonArray leds = doc["leds"].as<JsonArray>();
-        if (leds.size() == 3 &&
-            leds[0].is<const char*>() &&
-            leds[1].is<const char*>() &&
-            leds[2].is<const char*>()) {
-            const char* c0 = leds[0].as<const char*>();
-            const char* c1 = leds[1].as<const char*>();
-            const char* c2 = leds[2].as<const char*>();
-            if (c0 && c1 && c2) {
-                char buf[64];
-                snprintf(buf, sizeof(buf), "1_%s,2_%s,3_%s", c0, c1, c2);
-                rgb_set_all(buf);
+        if (leds.size() == 3) {
+            float rgb[3][3];
+            bool ok = true;
+            for (int i = 0; i < 3 && ok; i++) {
+                if (!leds[i].is<JsonArray>()) { ok = false; break; }
+                JsonArray c = leds[i].as<JsonArray>();
+                if (c.size() != 3) { ok = false; break; }
+                for (int j = 0; j < 3; j++) rgb[i][j] = c[j].as<float>();
             }
+            if (ok) rgb_set_all(rgb[0], rgb[1], rgb[2]);
         }
     }
 }
@@ -111,7 +112,7 @@ void setup() {
     mqtt_set_callback(on_mqtt_message);
 
     watchdog_init(WATCHDOG_TIMEOUT_S);
-    rgb_set_all("1_green,2_green,3_green");
+    rgb_set_all(GREEN, GREEN, GREEN);
     Serial.println("=== Ready ===");
 }
 
@@ -125,9 +126,9 @@ void loop() {
     if (mqtt_ok != s_prev_mqtt_connected) {
         s_prev_mqtt_connected = mqtt_ok;
         if (mqtt_ok) {
-            rgb_set_all("1_green,2_green,3_green");
+            rgb_set_all(GREEN, GREEN, GREEN);
         } else {
-            rgb_set_all("1_red,2_red,3_red");
+            rgb_set_all(RED, RED, RED);
         }
     }
 

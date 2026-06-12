@@ -208,7 +208,7 @@ class MqttCommandPublisher:
             STEPPER_COMMAND_TOPIC, StepperPositionCommand(position).to_json(),
         )
 
-    def publish_led_command(self, colors: list[str]) -> None:
+    def publish_led_command(self, colors: list[list[float]]) -> None:
         self._connection.publish(
             SENSOR_COMMAND_TOPIC, LedCommand(colors).to_json(),
         )

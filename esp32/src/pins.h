@@ -18,14 +18,17 @@
 
 #define DOUT_DUMMY_GAUGE   36
 
-// RGB feedback LEDs - 3 LEDs × red+green channels
+// RGB feedback LEDs - 3 LEDs × red+green+blue channels (PWM)
 #define LED1_STATUS_GREEN  16
 #define LED1_STATUS_RED     4
+#define LED1_STATUS_BLUE   13
 
 #define LED2_STATUS_RED     5
 #define LED2_STATUS_GREEN  19
+#define LED2_STATUS_BLUE   21
 
 #define LED3_STATUS_GREEN  17
 #define LED3_STATUS_RED    22
+#define LED3_STATUS_BLUE   23
 
 #endif

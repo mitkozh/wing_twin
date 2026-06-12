@@ -1,68 +1,63 @@
 #include "rgb.h"
 #include "../pins.h"
 
-// 3 feedback LEDs, each with red+green channels.
+// 3 feedback LEDs with full RGB PWM control.
 // LED1 = tip, LED2 = span, LED3 = root.
-// Input format: "1_green,2_yellow,3_red"
+// Input: float[3] {R, G, B} each 0.0 - 1.0
 
-static void set_one(int led, const char* colour) {
-    bool g = false, r = false;
-    if      (strcmp(colour, "green")  == 0) { g = true; }
-    else if (strcmp(colour, "yellow") == 0) { g = true; r = true; }
-    else if (strcmp(colour, "red")    == 0) { r = true; }
-    switch (led) {
-        case 1: digitalWrite(LED1_STATUS_GREEN, g ? HIGH : LOW); digitalWrite(LED1_STATUS_RED, r ? HIGH : LOW); break;
-        case 2: digitalWrite(LED2_STATUS_GREEN, g ? HIGH : LOW); digitalWrite(LED2_STATUS_RED, r ? HIGH : LOW); break;
-        case 3: digitalWrite(LED3_STATUS_GREEN, g ? HIGH : LOW); digitalWrite(LED3_STATUS_RED, r ? HIGH : LOW); break;
-    }
+#define PWM_FREQ      5000
+#define PWM_RES       8       // 8-bit -> duty 0-255
+
+// LEDC channel assignment (ESP32 has 16 channels)
+#define CH_RED_1   0
+#define CH_GREEN_1 1
+#define CH_BLUE_1  2
+#define CH_RED_2   3
+#define CH_GREEN_2 4
+#define CH_BLUE_2  5
+#define CH_RED_3   6
+#define CH_GREEN_3 7
+#define CH_BLUE_3  8
+
+static void led_pwm_init(int ch, int pin) {
+    ledcSetup(ch, PWM_FREQ, PWM_RES);
+    ledcAttachPin(pin, ch);
+}
+
+static void led_pwm_set(int ch, float val) {
+    if (val < 0.0f) val = 0.0f;
+    if (val > 1.0f) val = 1.0f;
+    ledcWrite(ch, (int)(val * 255.0f));
 }
 
 void rgb_init(void) {
-    pinMode(LED1_STATUS_GREEN, OUTPUT); pinMode(LED1_STATUS_RED, OUTPUT);
-    pinMode(LED2_STATUS_RED, OUTPUT);   pinMode(LED2_STATUS_GREEN, OUTPUT);
-    pinMode(LED3_STATUS_GREEN, OUTPUT); pinMode(LED3_STATUS_RED, OUTPUT);
+    led_pwm_init(CH_RED_1,   LED1_STATUS_RED);
+    led_pwm_init(CH_GREEN_1, LED1_STATUS_GREEN);
+    led_pwm_init(CH_BLUE_1,  LED1_STATUS_BLUE);
+
+    led_pwm_init(CH_RED_2,   LED2_STATUS_RED);
+    led_pwm_init(CH_GREEN_2, LED2_STATUS_GREEN);
+    led_pwm_init(CH_BLUE_2,  LED2_STATUS_BLUE);
+
+    led_pwm_init(CH_RED_3,   LED3_STATUS_RED);
+    led_pwm_init(CH_GREEN_3, LED3_STATUS_GREEN);
+    led_pwm_init(CH_BLUE_3,  LED3_STATUS_BLUE);
+
     rgb_all_off();
 }
 
 void rgb_all_off(void) {
-    digitalWrite(LED1_STATUS_GREEN, LOW); digitalWrite(LED1_STATUS_RED, LOW);
-    digitalWrite(LED2_STATUS_RED, LOW);   digitalWrite(LED2_STATUS_GREEN, LOW);
-    digitalWrite(LED3_STATUS_GREEN, LOW); digitalWrite(LED3_STATUS_RED, LOW);
+    for (int ch = 0; ch <= 8; ch++) ledcWrite(ch, 0);
 }
 
-void rgb_set_all(const char* command) {
-    char buf[64];
-    strncpy(buf, command, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-    for (int i = 0; buf[i]; i++) buf[i] = tolower((unsigned char)buf[i]);
-
-    bool seen[4] = {false, false, false, false};
-    int  cols[4] = {0, 0, 0, 0};
-
-    char* part = strtok(buf, ",");
-    while (part) {
-        char* us = strchr(part, '_');
-        if (!us || us == part) { Serial.println("[RGB] bad command"); return; }
-        *us = '\0';
-        int n = atoi(part);
-        const char* c = us + 1;
-        if (n < 1 || n > 3 || (strcmp(c, "green") != 0 && strcmp(c, "yellow") != 0 && strcmp(c, "red") != 0)) {
-            Serial.println("[RGB] bad command"); return;
-        }
-        if (seen[n]) { Serial.println("[RGB] duplicate LED"); return; }
-        seen[n] = true;
-        if      (strcmp(c, "green")  == 0) cols[n] = 1;
-        else if (strcmp(c, "yellow") == 0) cols[n] = 2;
-        else if (strcmp(c, "red")    == 0) cols[n] = 3;
-        part = strtok(NULL, ",");
-    }
-    for (int i = 1; i <= 3; i++) {
-        if (seen[i]) {
-            const char* colour = (cols[i] == 1) ? "green" : (cols[i] == 2) ? "yellow" : "red";
-            set_one(i, colour);
-        }
-    }
-    Serial.printf("[RGB] set: %s\n", command);
+void rgb_set_all(const float led1[3], const float led2[3], const float led3[3]) {
+    led_pwm_set(CH_RED_1,   led1[0]); led_pwm_set(CH_GREEN_1, led1[1]); led_pwm_set(CH_BLUE_1, led1[2]);
+    led_pwm_set(CH_RED_2,   led2[0]); led_pwm_set(CH_GREEN_2, led2[1]); led_pwm_set(CH_BLUE_2, led2[2]);
+    led_pwm_set(CH_RED_3,   led3[0]); led_pwm_set(CH_GREEN_3, led3[1]); led_pwm_set(CH_BLUE_3, led3[2]);
+    Serial.printf("[RGB] (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
+        led1[0], led1[1], led1[2],
+        led2[0], led2[1], led2[2],
+        led3[0], led3[1], led3[2]);
 }
 
 

@@ -1,3 +1,3 @@
-from .control import decide_control, decide_control_stress
+from .control import heatmap_color
 
-__all__ = ["decide_control", "decide_control_stress"]
+__all__ = ["heatmap_color"]

@@ -78,7 +78,7 @@ def publish_final_zero(publisher, engine) -> None:
     try:
         engine.state.stepper.stepper_position = 0
         publisher.publish_stepper_position(0)
-        publisher.publish_led_command(["green", "green", "green"])
+        publisher.publish_led_command([[0.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 1.0, 0.0]])
         logger.info("Published final zero command to stepper ESP")
         logger.info("Published final LED command to main ESP")
     except Exception as exc:
