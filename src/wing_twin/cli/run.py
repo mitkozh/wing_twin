@@ -6,7 +6,6 @@ Uses real sensors via MQTT - connects to the physical wing system.
 
 import argparse
 import asyncio
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -18,7 +17,13 @@ from wing_twin.engine.engine import DigitalTwinEngine
 from wing_twin.config import EngineConfig
 from wing_twin.engine.state import EngineSnapshot
 from wing_twin.control.calibrate import calibrate_stepper
-from wing_twin.io.mqtt import MqttSource, MqttPublisher
+from wing_twin.io.mqtt import (
+    MqttCommandPublisher,
+    MqttConnection,
+    MqttSensorSource,
+    MqttStepperMonitor,
+)
+from wing_twin.io.protocol import STEPPER_COMMAND_TOPIC
 from wing_twin.io.websocket import WebSocketBroadcaster, EngineCommandHandler
 from wing_twin.recorder.recorder import load_engine_snapshot
 from wing_twin.viz.generator import generate_figures_from_recording
@@ -48,21 +53,26 @@ async def run_production(
         logger.error("Cannot start without transfer matrices")
         raise
 
-    mqtt_source = MqttSource(config.mqtt)
-    engine.data_source = mqtt_source
-    mqtt_source.connect()
+    sub_conn = MqttConnection(config.mqtt, client_id="wing-twin-sub")
+    sub_conn.connect()
 
-    mqtt_publisher = MqttPublisher(config.mqtt)
-    mqtt_publisher.connect()
+    pub_conn = MqttConnection(config.mqtt, client_id="wing-twin-pub")
+    pub_conn.set_last_will(STEPPER_COMMAND_TOPIC, {"position": 0})
+    pub_conn.connect()
 
-    # Wait for initial stepper status, then calibrate if needed
+    sensor_source = MqttSensorSource(sub_conn)
+    stepper_monitor = MqttStepperMonitor(sub_conn)
+    publisher = MqttCommandPublisher(pub_conn)
+
+    engine.data_source = sensor_source
+
     calib_config = CalibrationConfig()
     logger.info("Waiting for stepper status...")
     for _ in range(50):
-        if mqtt_source.handler.latest_stepper is not None:
+        if stepper_monitor.state.last_seen > 0:
             break
-        time.sleep(0.1)
-    calibrate_stepper(mqtt_publisher, mqtt_source.handler, config.mqtt, calib_config)
+        await asyncio.sleep(0.1)
+    calibrate_stepper(publisher, sensor_source, stepper_monitor, calib_config)
 
     broadcaster = WebSocketBroadcaster(port=config.websocket.port)
     command_handler = EngineCommandHandler(engine)
@@ -83,12 +93,9 @@ async def run_production(
                 logger.error("Engine step failed: %s", e)
                 stepped = False
 
-            reported = mqtt_source.handler.latest_stepper_position
-            if reported is not None:
-                engine.state.esp32_reported_position = reported
-            offset = mqtt_source.handler.latest_esp32_home_offset
-            if offset is not None:
-                engine.state.esp32_reported_home_offset = offset
+            engine.state.esp32_reported_position = stepper_monitor.state.position
+            if sensor_source.home_offset is not None:
+                engine.state.esp32_reported_home_offset = sensor_source.home_offset
 
             if stepped and recorder is not None:
                 try:
@@ -97,12 +104,12 @@ async def run_production(
                     logger.error("Recording failed: %s", e)
 
             loop.run_in_executor(
-                None, mqtt_publisher.publish,
-                config.mqtt.stepper_command_topic, engine.state.for_stepper_esp(),
+                None, publisher.publish_stepper_position,
+                engine.state.stepper_position,
             )
             loop.run_in_executor(
-                None, mqtt_publisher.publish,
-                config.mqtt.control_topic, engine.state.for_esp32_leds(),
+                None, publisher.publish_led_command,
+                engine.state.compute_led_colors(),
             )
             await asyncio.sleep(0.05)
             await broadcaster.broadcast()
@@ -120,9 +127,10 @@ async def run_production(
         await cancel_task(ws_task)
         await asyncio.sleep(0.1)
 
-        publish_final_zero(mqtt_publisher, config, engine)
+        publish_final_zero(publisher, engine)
         await asyncio.sleep(0.05)
-        mqtt_publisher.disconnect()
+        pub_conn.disconnect()
+        sub_conn.disconnect()
 
         finalize_recorder(recorder, engine, rec_dir)
         if recorder is not None:

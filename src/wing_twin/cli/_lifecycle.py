@@ -73,12 +73,12 @@ def setup_recorder(
     return recorder, rec_dir
 
 
-def publish_final_zero(mqtt_publisher, config, engine) -> None:
+def publish_final_zero(publisher, engine) -> None:
     """Publish a final zero command to both ESPs before shutdown."""
     try:
         engine.state.stepper_position = 0
-        mqtt_publisher.publish(config.mqtt.stepper_command_topic, {"position": 0})
-        mqtt_publisher.publish(config.mqtt.control_topic, {"leds": ["green", "green", "green"]})
+        publisher.publish_stepper_position(0)
+        publisher.publish_led_command(["green", "green", "green"])
         logger.info("Published final zero command to stepper ESP")
         logger.info("Published final LED command to main ESP")
     except Exception as exc:

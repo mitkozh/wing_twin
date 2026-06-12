@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from wing_twin.config.types import check_ge, check_gt
 

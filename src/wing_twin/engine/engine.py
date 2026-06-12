@@ -374,10 +374,8 @@ class DigitalTwinEngine:
 
         self._update_stepper()
 
-        if hasattr(self._data_source, 'set_airspeed'):
-            self._data_source.set_airspeed(self.state.airspeed)
-        if hasattr(self._data_source, 'set_angle_of_attack'):
-            self._data_source.set_angle_of_attack(self.state.angle_of_attack)
+        self._data_source.set_airspeed(self.state.airspeed)
+        self._data_source.set_angle_of_attack(self.state.angle_of_attack)
 
         self._update_altitude_km(dt)
 
@@ -428,10 +426,8 @@ class DigitalTwinEngine:
 
         self._update_stepper()
 
-        if hasattr(self._data_source, 'set_airspeed'):
-            self._data_source.set_airspeed(self.state.airspeed)
-        if hasattr(self._data_source, 'set_angle_of_attack'):
-            self._data_source.set_angle_of_attack(self.state.angle_of_attack)
+        self._data_source.set_airspeed(self.state.airspeed)
+        self._data_source.set_angle_of_attack(self.state.angle_of_attack)
 
         if alt <= touchdown_alt:
             self.state.altitude = max(0.0, self.state.altitude - 0.1 * dt)
@@ -617,10 +613,8 @@ class DigitalTwinEngine:
 
         self._update_stepper()
 
-        if hasattr(self._data_source, 'set_airspeed'):
-            self._data_source.set_airspeed(self.state.airspeed)
-        if hasattr(self._data_source, 'set_angle_of_attack'):
-            self._data_source.set_angle_of_attack(self.state.angle_of_attack)
+        self._data_source.set_airspeed(self.state.airspeed)
+        self._data_source.set_angle_of_attack(self.state.angle_of_attack)
 
         self._update_altitude_km(dt)
 
@@ -672,17 +666,15 @@ class DigitalTwinEngine:
         self.state.stress_field = stress.tolist()
         self.state.deformation_field = deformation.tolist()
 
+        from wing_twin.fea.matrices import FeaContext
+
         self.fatigue.process(
             pre_impute_strain=pre_impute,
             strain_vector=strain_clean,
             stress_field_pa=stress,
             expected_strain=expected_strain,
             twin_state=self.state,
-            H=H,
-            H_inv=self._matrices.H_inv,
-            S=self._matrices.S,
-            U=self._matrices.U,
-            cal=cal,
+            fea=FeaContext(matrices=self._matrices, calibration=cal),
             flight_phase=self._flight_phase,
         )
 

@@ -3,44 +3,42 @@ from typing import Optional
 
 import numpy as np
 
-from wing_twin.config import MqttConfig
 from wing_twin.config.calibration import CalibrationConfig
-from wing_twin.io.mqtt import MqttHandler, MqttPublisher
+from wing_twin.io.mqtt import MqttCommandPublisher, MqttSensorSource, MqttStepperMonitor
 from wing_twin.io.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 def _wait_for_stepper_idle(
-    handler: MqttHandler,
+    stepper_monitor: MqttStepperMonitor,
     timeout_s: float,
     poll_s: float,
 ) -> bool:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        if not handler.latest_stepper.moving:
+        if not stepper_monitor.state.moving:
             return True
         time.sleep(poll_s)
     return False
 
 
-def _read_strain_sample(handler: MqttHandler) -> Optional[np.ndarray]:
-    buffers = handler.sensor_buffers
-    if "esp32" not in buffers or not buffers["esp32"]:
+def _read_strain_sample(sensor_source: MqttSensorSource) -> Optional[np.ndarray]:
+    reading = sensor_source.peek_latest()
+    if reading is None or reading.raw_values is None:
         return None
-    raw_vals, offset_vals, dummy_raw, saturated, ts = buffers["esp32"][-1]
-    return raw_vals.astype(np.float64)
+    return reading.raw_values.astype(np.float64)
 
 
 def _sample_baseline(
-    handler: MqttHandler,
+    sensor_source: MqttSensorSource,
     num_samples: int,
     num_channels: int,
 ) -> Optional[np.ndarray]:
     accum = np.zeros(num_channels, dtype=np.float64)
     count = 0
     for _ in range(num_samples * 2):
-        sample = _read_strain_sample(handler)
+        sample = _read_strain_sample(sensor_source)
         if sample is not None:
             accum += sample - np.mean(sample)
             count += 1
@@ -57,16 +55,12 @@ def _max_delta(sample: np.ndarray, baseline: np.ndarray) -> float:
 
 
 def calibrate_stepper(
-    mqtt_publisher: MqttPublisher,
-    mqtt_handler: MqttHandler,
-    mqtt_config: MqttConfig,
+    publisher: MqttCommandPublisher,
+    sensor_source: MqttSensorSource,
+    stepper_monitor: MqttStepperMonitor,
     calib_config: CalibrationConfig,
 ) -> bool:
-    if not mqtt_handler.latest_stepper:
-        logger.error("No stepper state available - aborting calibration")
-        return False
-
-    if not mqtt_handler.latest_stepper.mid_move:
+    if not stepper_monitor.state.mid_move:
         logger.info("Stepper was not mid-move - skipping calibration")
         return False
 
@@ -84,13 +78,13 @@ def calibrate_stepper(
 
     # 1. Retract fully to slack position
     logger.info("Retracting to min position %d...", min_pos)
-    mqtt_publisher.publish(mqtt_config.stepper_command_topic, {"position": min_pos})
-    if not _wait_for_stepper_idle(mqtt_handler, retract_to, poll_s):
+    publisher.publish_stepper_position(min_pos)
+    if not _wait_for_stepper_idle(stepper_monitor, retract_to, poll_s):
         logger.error("Retract timeout")
         return False
 
     # 2. Sample baseline strain at slack
-    baseline = _sample_baseline(mqtt_handler, num_samples, num_channels)
+    baseline = _sample_baseline(sensor_source, num_samples, num_channels)
     if baseline is None:
         logger.error("Failed to read baseline strain")
         return False
@@ -99,12 +93,12 @@ def calibrate_stepper(
     # 3. Coarse search forward in coarse-step increments
     contact_pos = None
     for pos in range(min_pos, max_pos + 1, coarse):
-        mqtt_publisher.publish(mqtt_config.stepper_command_topic, {"position": pos})
-        if not _wait_for_stepper_idle(mqtt_handler, move_to, poll_s):
+        publisher.publish_stepper_position(pos)
+        if not _wait_for_stepper_idle(stepper_monitor, move_to, poll_s):
             logger.warning("Move timeout at position %d", pos)
             return False
 
-        sample = _read_strain_sample(mqtt_handler)
+        sample = _read_strain_sample(sensor_source)
         if sample is None:
             continue
 
@@ -129,11 +123,11 @@ def calibrate_stepper(
         if mid == low:
             break
 
-        mqtt_publisher.publish(mqtt_config.stepper_command_topic, {"position": mid})
-        if not _wait_for_stepper_idle(mqtt_handler, move_to, poll_s):
+        publisher.publish_stepper_position(mid)
+        if not _wait_for_stepper_idle(stepper_monitor, move_to, poll_s):
             return False
 
-        sample = _read_strain_sample(mqtt_handler)
+        sample = _read_strain_sample(sensor_source)
         if sample is None:
             continue
 
@@ -149,10 +143,10 @@ def calibrate_stepper(
     zero_pos = low
     logger.info("Zero position found at %d", zero_pos)
 
-    mqtt_publisher.publish(mqtt_config.stepper_command_topic, {"position": zero_pos})
-    _wait_for_stepper_idle(mqtt_handler, move_to, poll_s)
+    publisher.publish_stepper_position(zero_pos)
+    _wait_for_stepper_idle(stepper_monitor, move_to, poll_s)
 
-    mqtt_publisher.publish(mqtt_config.stepper_command_topic, {"reset_position": 0})
+    publisher.publish_stepper_reset(0)
     time.sleep(0.5)
     logger.info("Calibration complete - stepper zero set")
     return True

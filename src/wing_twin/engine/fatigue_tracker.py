@@ -17,6 +17,7 @@ from wing_twin.fatigue.fatigue import (
 )
 from wing_twin.fea.field_compute import compute_deformation_field, compute_stress_field
 from wing_twin.fea.force_reconstruct import solve_forces
+from wing_twin.fea.matrices import FeaContext
 from wing_twin.io.sensor_validation import impute_channels
 from wing_twin.config.fatigue import FatigueConfig
 from wing_twin.config.calibration import CalibrationConfig
@@ -78,16 +79,13 @@ class FatigueTracker:
         stress_field_pa: np.ndarray,
         expected_strain: np.ndarray,
         twin_state: TwinState,
-        H: Optional[np.ndarray] = None,
-        H_inv: Optional[np.ndarray] = None,
-        S: Optional[np.ndarray] = None,
-        U: Optional[np.ndarray] = None,
-        cal: Optional[CalibrationConfig] = None,
+        fea: Optional[FeaContext] = None,
         flight_phase: object = None,
     ) -> None:
         """Process one frame through confidence -> re-imputation -> damage."""
         fatigue_cfg = self.config
         sn_curve = sn_curve_for_material(fatigue_cfg.material)
+        H = fea.matrices.H if fea else None
 
         update_confidence(
             self.state, pre_impute_strain, expected_strain,
@@ -106,19 +104,18 @@ class FatigueTracker:
         new_bad = sorted(set(low_conf_idxs) - existing_bad)
         all_bad = sorted(existing_bad | set(new_bad))
 
-        if new_bad and H is not None and H_inv is not None and cal is not None:
+        if new_bad and fea is not None:
             self.state.bad_channels = all_bad
-            reimputed = impute_channels(pre_impute_strain.copy(), all_bad, H)
-            F = solve_forces(H_inv, reimputed)
-            F *= float(cal.H_matrix_scale)
-            expected_strain = H @ F
+            mat = fea.matrices
+            reimputed = impute_channels(pre_impute_strain.copy(), all_bad, mat.H)
+            F = solve_forces(mat.H_inv, reimputed)
+            F *= float(fea.calibration.H_matrix_scale)
+            expected_strain = mat.H @ F
 
-            if S is not None:
-                stress_field_pa = compute_stress_field(S, F)
-            if U is not None:
-                twin_state.deformation_field = (
-                    compute_deformation_field(U, F).tolist()
-                )
+            stress_field_pa = compute_stress_field(mat.S, F)
+            twin_state.deformation_field = (
+                compute_deformation_field(mat.U, F).tolist()
+            )
 
             twin_state.strain_vector = reimputed.tolist()
             twin_state.forces = F.tolist()

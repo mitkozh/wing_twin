@@ -1,9 +1,18 @@
-from .mqtt import MqttSource, MqttPublisher, MqttClientBase, MqttHandler
+from .mqtt import (
+    MqttCommandPublisher,
+    MqttConnection,
+    MqttSensorSource,
+    MqttStepperMonitor,
+)
 from .websocket import WebSocketBroadcaster, EngineCommandHandler
 from .simulator import SimulatorSource
 
 __all__ = [
-    "MqttSource", "MqttPublisher", "MqttClientBase", "MqttHandler",
-    "WebSocketBroadcaster", "EngineCommandHandler",
+    "MqttConnection",
+    "MqttSensorSource",
+    "MqttStepperMonitor",
+    "MqttCommandPublisher",
+    "WebSocketBroadcaster",
+    "EngineCommandHandler",
     "SimulatorSource",
 ]

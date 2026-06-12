@@ -11,7 +11,7 @@ from wing_twin.config import (
 )
 from wing_twin.engine.engine import DigitalTwinEngine
 from wing_twin.io.logger import get_logger
-from wing_twin.io.mqtt import MqttClientBase, MqttPublisher
+from wing_twin.io.mqtt import MqttCommandPublisher, MqttConnection
 from wing_twin.io.simulator import SimulatorSource
 from wing_twin.io.websocket import WebSocketBroadcaster, EngineCommandHandler
 
@@ -20,42 +20,41 @@ from ._lifecycle import cancel_task, setup_signal_handler
 logger = get_logger(__name__)
 
 
-class SimulatorMqttBridge(MqttClientBase):
+class SimulatorMqttBridge:
 
     def __init__(self, engine: DigitalTwinEngine, config: Optional[MqttConfig] = None):
-        super().__init__(config)
+        self._config = config or MqttConfig()
+        self._connection = MqttConnection(self._config)
         self._engine = engine
-        self._sensors_topic = self.config.sensors_topic
-        self._control_topic = self.config.control_topic
+        self._control_topic = self._config.control_topic
 
-    def _register_callbacks(self) -> None:
-        self._client.on_message = self._on_control
+    def connect(self) -> bool:
+        self._connection.subscribe(self._control_topic, self._on_control)
+        return self._connection.connect()
 
-    def _on_connect(self, client, userdata, flags, rc) -> None:
-        super()._on_connect(client, userdata, flags, rc)
-        if rc == 0:
-            client.subscribe(self._control_topic)
+    def disconnect(self) -> None:
+        self._connection.disconnect()
 
-    def _on_control(self, client, userdata, msg) -> None:
+    def _on_control(self, topic: str, payload: bytes) -> None:
         try:
-            payload = json.loads(msg.payload.decode())
+            data = json.loads(payload)
         except json.JSONDecodeError:
             return
 
-        cmd = payload.get("cmd", "")
+        cmd = data.get("cmd", "")
         engine = self._engine
 
         if cmd == "set_steps":
-            steps = payload.get("steps")
+            steps = data.get("steps")
             if steps is not None:
                 engine.state.stepper_position = int(steps)
-                speed = payload.get("speed", engine.state.target_airspeed)
+                speed = data.get("speed", engine.state.target_airspeed)
                 engine.state.target_airspeed = speed
 
         elif cmd == "set_flight_state":
             if engine.flight_phase.value == "in_flight":
-                angle = payload.get("angle")
-                speed = payload.get("speed")
+                angle = data.get("angle")
+                speed = data.get("speed")
                 if angle is not None:
                     engine.state.desired_angle_of_attack = float(angle)
                 if speed is not None:
@@ -68,15 +67,15 @@ class SimulatorMqttBridge(MqttClientBase):
             engine.request_landing()
 
         elif cmd == "set_heatmap_mode":
-            mode = payload.get("mode", "damage")
+            mode = data.get("mode", "damage")
             if mode in ("stress", "damage"):
                 engine.state.heatmap_mode = mode
 
         elif cmd == "set_maintenance_assist":
-            engine.state.maintenance_assist = bool(payload.get("enabled", True))
+            engine.state.maintenance_assist = bool(data.get("enabled", True))
 
     def publish_engine_state(self, engine: DigitalTwinEngine) -> None:
-        if not self._client or not self._connected:
+        if not self._connection.is_connected:
             return
 
         state = engine.state
@@ -94,7 +93,7 @@ class SimulatorMqttBridge(MqttClientBase):
         }
 
         try:
-            self._client.publish(self._sensors_topic, json.dumps(msg))
+            self._connection.publish(self._config.sensors_topic, json.dumps(msg))
         except Exception:
             pass
 
@@ -146,8 +145,9 @@ async def run_simulator(
     else:
         logger.info("MQTT bridge connected to %s:%d", mqtt_config.broker, mqtt_config.port)
 
-    mqtt_publisher = MqttPublisher(mqtt_config)
-    mqtt_publisher.connect()
+    pub_conn = MqttConnection(mqtt_config, client_id="wing-twin-sim-pub")
+    pub_conn.connect()
+    publisher = MqttCommandPublisher(pub_conn)
 
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -176,20 +176,19 @@ async def run_simulator(
                 logger.info("Auto-takeoff initiated")
 
             try:
-                stepped = engine.step()
+                engine.step()
             except Exception as e:
                 logger.error("Engine step failed: %s", e)
-                stepped = False
 
             mqtt_bridge.publish_engine_state(engine)
 
             loop.run_in_executor(
-                None, mqtt_publisher.publish,
-                mqtt_config.stepper_command_topic, engine.state.for_stepper_esp(),
+                None, publisher.publish_stepper_position,
+                engine.state.stepper_position,
             )
             loop.run_in_executor(
-                None, mqtt_publisher.publish,
-                mqtt_config.control_topic, engine.state.for_esp32_leds(),
+                None, publisher.publish_led_command,
+                engine.state.compute_led_colors(),
             )
 
             if broadcaster and broadcaster._clients:
@@ -214,7 +213,7 @@ async def run_simulator(
             await cancel_task(ws_task)
         await asyncio.sleep(0.1)
         mqtt_bridge.disconnect()
-        mqtt_publisher.disconnect()
+        pub_conn.disconnect()
 
 
 def main() -> None:

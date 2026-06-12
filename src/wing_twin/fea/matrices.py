@@ -14,9 +14,13 @@ All matrices are loaded raw from .npy files.
   - Deformation: meters (m)
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 from pathlib import Path
 from typing import NamedTuple, Optional
+
+from wing_twin.config.calibration import CalibrationConfig
 
 
 class TransferMatrices(NamedTuple):
@@ -37,6 +41,14 @@ class TransferMatrices(NamedTuple):
     @property
     def n_nodes(self) -> int:
         return self.S.shape[0]
+
+
+@dataclass
+class FeaContext:
+    """Bundles FEA matrices + calibration needed to re-impute channels
+    and recompute stress/deformation fields."""
+    matrices: TransferMatrices
+    calibration: CalibrationConfig
 
 
 def _find_project_root() -> Path:

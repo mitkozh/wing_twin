@@ -14,6 +14,79 @@ from wing_twin.io.logger import get_logger
 
 logger = get_logger(__name__)
 
+_MESH_DIR = Path(__file__).resolve().parent.parent.parent.parent / "mesh"
+_SURFACE_MESH_PATH = _MESH_DIR / "FinalMesh_surface.json"
+
+_surface_node_ids: Optional[list[int]] = None
+_section_nodes: Optional[dict[str, list[int]]] = None
+
+
+def load_surface_node_ids() -> list[int]:
+    """Lazy-load the ordered list of surface mesh node IDs."""
+    global _surface_node_ids
+    if _surface_node_ids is not None:
+        return _surface_node_ids
+
+    if not _SURFACE_MESH_PATH.exists():
+        raise FileNotFoundError(f"Surface mesh not found: {_SURFACE_MESH_PATH}")
+
+    with open(_SURFACE_MESH_PATH) as f:
+        data = json.load(f)
+
+    if "node_ids" not in data:
+        raise KeyError(f"'node_ids' key missing from {_SURFACE_MESH_PATH}")
+
+    node_ids = data["node_ids"]
+    if not node_ids:
+        raise ValueError(f"node_ids is empty in {_SURFACE_MESH_PATH}")
+
+    _surface_node_ids = node_ids
+    return _surface_node_ids
+
+
+def load_section_nodes() -> dict[str, list[int]]:
+    """Lazy-load node IDs grouped by wing section (root / middle / tip)."""
+    global _section_nodes
+    if _section_nodes is not None:
+        return _section_nodes
+
+    if not _SURFACE_MESH_PATH.exists():
+        _section_nodes = {"root": [], "middle": [], "tip": []}
+        return _section_nodes
+
+    with open(_SURFACE_MESH_PATH) as f:
+        data = json.load(f)
+
+    vertices = data.get("vertices", [])
+    node_ids = data.get("node_ids", [])
+
+    if not vertices or not node_ids or len(vertices) != len(node_ids):
+        _section_nodes = {"root": [], "middle": [], "tip": []}
+        return _section_nodes
+
+    span_min = min(v[0] for v in vertices)
+    span_max = max(v[0] for v in vertices)
+    span_range = span_max - span_min
+
+    if span_range <= 0:
+        _section_nodes = {"root": [], "middle": [], "tip": []}
+        return _section_nodes
+
+    third = span_range / 3.0
+    sections: dict[str, list[int]] = {"root": [], "middle": [], "tip": []}
+    for i, v in enumerate(vertices):
+        nid = node_ids[i]
+        pos = v[0] - span_min
+        if pos < third:
+            sections["root"].append(nid)
+        elif pos < 2 * third:
+            sections["middle"].append(nid)
+        else:
+            sections["tip"].append(nid)
+
+    _section_nodes = sections
+    return _section_nodes
+
 
 class MeshExporter:
     """Extracts surface mesh from VTK-HDF or CGNS files and exports to JSON."""

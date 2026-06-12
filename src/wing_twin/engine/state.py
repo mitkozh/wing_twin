@@ -12,83 +12,7 @@ from typing import Optional
 import numpy as np
 
 from wing_twin.control.control import decide_control, decide_control_stress
-
-
-# Lazy-loaded node ID mapping for surface mesh
-_surface_node_ids = None
-_section_nodes = None
-
-
-def _get_surface_node_ids():
-    global _surface_node_ids
-    if _surface_node_ids is None:
-        import json
-        from pathlib import Path
-        mesh_path = Path(__file__).resolve().parent.parent.parent.parent / "mesh" / "FinalMesh_surface.json"
-
-        if not mesh_path.exists():
-            raise FileNotFoundError(f"Surface mesh not found: {mesh_path}")
-
-        with open(mesh_path) as f:
-            data = json.load(f)
-
-        if "node_ids" not in data:
-            raise KeyError(f"'node_ids' key missing from {mesh_path}")
-
-        node_ids = data["node_ids"]
-        if not node_ids:
-            raise ValueError(f"node_ids is empty in {mesh_path}")
-
-        _surface_node_ids = node_ids
-
-    return _surface_node_ids
-
-
-def _get_section_nodes():
-    global _section_nodes
-    if _section_nodes is not None:
-        return _section_nodes
-
-    import json
-    from pathlib import Path
-    mesh_path = Path(__file__).resolve().parent.parent.parent.parent / "mesh" / "FinalMesh_surface.json"
-
-    if not mesh_path.exists():
-        _section_nodes = {"root": [], "middle": [], "tip": []}
-        return _section_nodes
-
-    with open(mesh_path) as f:
-        data = json.load(f)
-
-    vertices = data.get("vertices", [])
-    node_ids = data.get("node_ids", [])
-
-    if not vertices or not node_ids or len(vertices) != len(node_ids):
-        _section_nodes = {"root": [], "middle": [], "tip": []}
-        return _section_nodes
-
-    span_min = min(v[0] for v in vertices)
-    span_max = max(v[0] for v in vertices)
-    span_range = span_max - span_min
-
-    if span_range <= 0:
-        _section_nodes = {"root": [], "middle": [], "tip": []}
-        return _section_nodes
-
-    third = span_range / 3.0
-    sections = {"root": [], "middle": [], "tip": []}
-    for i, v in enumerate(vertices):
-        nid = node_ids[i]
-        pos = v[0] - span_min
-        if pos < third:
-            sections["root"].append(nid)
-        elif pos < 2 * third:
-            sections["middle"].append(nid)
-        else:
-            sections["tip"].append(nid)
-
-    _section_nodes = sections
-    return _section_nodes
+from wing_twin.mesh.exporter import load_section_nodes, load_surface_node_ids
 
 
 @dataclass
@@ -172,7 +96,7 @@ class TwinState:
 
     def for_unity(self) -> dict:
         """Format state for Unity WebSocket."""
-        node_ids = _get_surface_node_ids()
+        node_ids = load_surface_node_ids()
         n_surface = len(node_ids) if node_ids else 0
 
         has_stress = self.stress_field is not None and len(self.stress_field) > 0
@@ -267,8 +191,8 @@ class TwinState:
             "effective_aoa_deg": round(self.effective_aoa_deg, 3),
         }
 
-    def _compute_led_colors(self) -> list:
-        sections = _get_section_nodes()
+    def compute_led_colors(self) -> list:
+        sections = load_section_nodes()
         colors = []
         for section_name in ["tip", "middle", "root"]:
             node_ids = sections[section_name]
@@ -296,18 +220,6 @@ class TwinState:
             colors.append(color)
 
         return colors
-
-    def for_esp32_leds(self) -> dict:
-        """Format LED state for main ESP."""
-        return {
-            "leds": self._compute_led_colors(),
-        }
-
-    def for_stepper_esp(self) -> dict:
-        """Format position command for stepper ESP."""
-        return {
-            "position": self.stepper_position,
-        }
 
     def to_snapshot_dict(self) -> dict:
         fields_to_save = [

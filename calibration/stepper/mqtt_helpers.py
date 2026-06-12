@@ -13,7 +13,6 @@ from wing_twin.config.io import (
     STEPPER_COMMAND_TOPIC,
     STEPPER_STATUS_TOPIC,
 )
-from wing_twin.io.mqtt import Esp32State
 
 
 class MqttSession:
@@ -24,7 +23,8 @@ class MqttSession:
         self._stepper_timeout_s = stepper_timeout_s
         self._latest_stepper_pos: int | None = None
         self._latest_stepper_last_seen: float = 0.0
-        self._latest_esp32: Esp32State = Esp32State()
+        self._esp32_last_seen: float = 0.0
+        self._esp32_home_offset: int | None = None
         self._callbacks: list[Callable] = []
         self.client.on_message = self._dispatcher
         self.client.connect(host, port, 60)
@@ -40,28 +40,21 @@ class MqttSession:
             self._latest_stepper_pos = data.get("position")
             self._latest_stepper_last_seen = time.monotonic()
         elif msg.topic == SENSOR_DATA_TOPIC and "raw" in data:
-            self._latest_esp32 = Esp32State(
-                last_seen=time.monotonic(),
-                saturated=tuple(data.get("saturated", [])),
-                timestamp=data.get("timestamp", 0),
-                dummy_raw=data.get("dummy_raw", 0),
-                home_offset=data.get("home_offset"),
-            )
+            self._esp32_last_seen = time.monotonic()
+            self._esp32_home_offset = data.get("home_offset")
         for cb in self._callbacks:
             cb(_client, _userdata, msg)
-
-    # ----------------------------------------------------------------- public
 
     @property
     def latest_stepper_pos(self) -> int | None:
         return self._latest_stepper_pos
 
     @property
-    def latest_esp32(self) -> Esp32State:
-        return self._latest_esp32
+    def esp32_home_offset(self) -> int | None:
+        return self._esp32_home_offset
 
     def is_esp32_connected(self) -> bool:
-        return (time.monotonic() - self._latest_esp32.last_seen) < self._esp32_timeout_s
+        return (time.monotonic() - self._esp32_last_seen) < self._esp32_timeout_s
 
     def is_stepper_connected(self) -> bool:
         return (time.monotonic() - self._latest_stepper_last_seen) < self._stepper_timeout_s
