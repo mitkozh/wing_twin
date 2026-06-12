@@ -151,6 +151,8 @@ class FatigueTracker:
             twin_state.damage.damage = self.state.damage
             twin_state.damage.avg_damage = 0.0
 
+        twin_state.structural.cycles_histogram = dict(self.state.cycles_histogram)
+
         rem = self.life_prediction.remaining_km
         avg_flight = self.life_prediction.ema_km_per_flight
         flight_allowed = rem >= avg_flight if avg_flight > 0 else rem > 0

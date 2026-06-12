@@ -2,10 +2,14 @@
 Shared type definitions for the digital twin system.
 """
 
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import numpy as np
+
+if TYPE_CHECKING:
+    from wing_twin.config.calibration import CalibrationConfig
 
 
 @dataclass
@@ -73,3 +77,7 @@ class SimulatableDataSource(DataSource):
     @abstractmethod
     def set_angle_of_attack(self, angle_deg: float) -> None:
         """Update the simulated angle of attack driving sensor generation."""
+
+    @abstractmethod
+    def set_calibration(self, calibration: CalibrationConfig) -> None:
+        """Apply calibration (force scaling, ADC mapping, ...) to generated readings."""

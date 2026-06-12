@@ -34,7 +34,7 @@ class StructuralState:
     deformation_field: list = field(default_factory=list)
     cycles_histogram: dict = field(default_factory=dict)
     yield_point_pa: float = 80_000_000.0
-    stress_limit_pa: float = 65_000_000.0
+    stress_limit_pa: float = 45_000_000.0
 
 
 @dataclass

@@ -94,6 +94,8 @@ class SimulatorSource(SimulatableDataSource):
         self, t: float, dt: float, airspeed: float, angle_deg: float
     ) -> tuple[np.ndarray, float]:
         base_force = self._generate_force(t, dt, airspeed, angle_deg)
+        if self._calibration is not None:
+            base_force *= self._calibration.force_scale
         F = np.full(self._matrices.n_forces, base_force, dtype=np.float64)
         strain_raw = (self._matrices.H @ F).flatten()
         noise = np.random.normal(0, self.config.strain_noise_std, size=strain_raw.shape)

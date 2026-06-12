@@ -59,6 +59,10 @@ class CalibrationConfig:
     # Force reconstruction
     H_matrix_scale: float = 1.0
 
+    # Force scale - maps digital aerodynamic force to physical stepper force.
+    # E.g. 0.5 -> 80 MPa DT stress produces 40 MPa on the physical model. This is so we don't damage the model.
+    force_scale: float = 0.5
+
     # Stepper motor
     steps_per_newton: float = 204.0
     stepper_motor_max_steps: int = 2720        # physical limit of the stepper motor
@@ -89,6 +93,7 @@ class CalibrationConfig:
 
     def __post_init__(self) -> None:
         check_ge(self.adc_to_strain_scale, "CalibrationConfig.adc_to_strain_scale", 0)
+        check_ge(self.force_scale, "CalibrationConfig.force_scale", 0)
         check_ge(self.steps_per_newton, "CalibrationConfig.steps_per_newton", 0)
         check_gt(self.stepper_motor_max_steps, "CalibrationConfig.stepper_motor_max_steps", 0)
         check_gt(self.stepper_wing_safe_limit, "CalibrationConfig.stepper_wing_safe_limit", 0)

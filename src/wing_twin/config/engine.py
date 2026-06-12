@@ -25,7 +25,7 @@ class EngineConfig:
 
     min_airspeed: float = 40.0
     yield_point: float = 80_000_000.0
-    stress_limit: float = 65_000_000.0
+    stress_limit: float = 45_000_000.0
     max_aoa: float = 12.0
 
     neuralfoil_model_size: str = "xlarge"

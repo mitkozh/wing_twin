@@ -143,7 +143,7 @@ public partial class WingDigitalTwin : MonoBehaviour
     private float stressMin;
     private float stressMax;
     private float yieldPointPa = 80_000_000f;
-    private float stressLimitPa = 65_000_000f;
+    private float stressLimitPa = 45_000_000f;
 
     private Color[] vertexColors;
     private float[] meshStressValues;

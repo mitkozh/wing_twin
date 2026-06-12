@@ -20,7 +20,7 @@ public class ChartPanel : MonoBehaviour
     private int strainCount, damageCount, stressCount;
 
     private float currentYield = 80_000_000f;
-    private float currentStressLimit = 65_000_000f;
+    private float currentStressLimit = 45_000_000f;
     private float maxStrain = 1f, maxDamage = 1f, maxStress = 1f;
     private Font defaultFont;
     private GameObject chartContainer;

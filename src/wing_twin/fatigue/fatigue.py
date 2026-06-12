@@ -40,6 +40,7 @@ class FatigueState:
     per_channel_confidence: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float64))
     bad_channels: list[int] = field(default_factory=list)
     per_channel_low_frames: dict[int, int] = field(default_factory=dict)
+    cycles_histogram: dict[float, float] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     # Group cross-validation (3 groups: root, middle, tip)
@@ -461,6 +462,10 @@ def _process_single_node(
     result_dict = cc.as_dict()
     with state._lock:
         state.node_res_sigs[node_idx] = result_dict.get("res_sig", [])
+        bin_width = config.rainflow_range_bin_width
+        for sr, cnt in zip(cc.stress_range, cc.count_cycle):
+            bin_key = round(sr / bin_width) * bin_width
+            state.cycles_histogram[bin_key] = state.cycles_histogram.get(bin_key, 0.0) + cnt
 
     if len(cc.stress_range) == 0:
         return 0.0

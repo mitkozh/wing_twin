@@ -172,6 +172,8 @@ class DigitalTwinEngine:
         self._data_source.connect()
         if self._matrices is not None:
             self._num_gauges = self._matrices.n_gauges
+        if isinstance(self._data_source, SimulatableDataSource):
+            self._data_source.set_calibration(self.config.calibration)
 
     def _push_flight_state_to_source(self) -> None:
         if isinstance(self._data_source, SimulatableDataSource):
@@ -414,6 +416,7 @@ class DigitalTwinEngine:
             model=self._aero_model,
             calibration=self.config.calibration,
         )
+        F_aero *= self.config.calibration.force_scale
         self.state.stepper.stepper_position = force_to_steps(
             F_aero,
             self.config.calibration.steps_per_newton,
