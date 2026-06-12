@@ -185,6 +185,19 @@
     }
   }
 
+  /* ---- LED colour name -> RGB float array ---- */
+  const COLOR_MAP = {
+    off:     [0.0, 0.0, 0.0],
+    red:     [1.0, 0.0, 0.0],
+    orange:  [1.0, 0.5, 0.0],
+    yellow:  [1.0, 1.0, 0.0],
+    green:   [0.0, 1.0, 0.0],
+    cyan:    [0.0, 1.0, 1.0],
+    blue:    [0.0, 0.0, 1.0],
+    magenta: [1.0, 0.0, 1.0],
+    white:   [1.0, 1.0, 1.0],
+  };
+
   /* ---- send MQTT commands ---- */
   async function sendControl(payload) {
     try {
@@ -245,9 +258,12 @@
 
   /* LEDs */
   els.btnLedApply.addEventListener("click", function () {
-    const leds = [els.ledTip.value, els.ledMid.value, els.ledRoot.value];
+    const tip  = COLOR_MAP[els.ledTip.value] || [0,1,0];
+    const mid  = COLOR_MAP[els.ledMid.value] || [0,1,0];
+    const root = COLOR_MAP[els.ledRoot.value] || [0,1,0];
+    const leds = [tip, mid, root];
     sendControl({ leds: leds }).then(function (ok) {
-      if (ok) feedback("LEDs set to " + leds.join(", "));
+      if (ok) feedback("LEDs sent: tip=" + els.ledTip.value + " span=" + els.ledMid.value + " root=" + els.ledRoot.value);
     });
   });
 
