@@ -1,124 +1,114 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements">
-    <ui:Style src="../USS/MainUI.uss" />
-
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/USS/MainUI.uss?fileID=7433441132597879392&amp;guid=afd20f4daa85d094a9248b7a535181f6&amp;type=3#MainUI"/>
     <ui:VisualElement name="top-bar">
-        <ui:Label name="connection-label" text="DISCONNECTED" />
-        <ui:VisualElement name="top-bar-spacer" />
-        <ui:Button name="help-button" text="[?] Help" />
+        <ui:Label name="connection-label" text="DISCONNECTED"/>
+        <ui:VisualElement name="top-bar-spacer"/>
+        <ui:Button name="help-button" text="[?] Help"/>
     </ui:VisualElement>
-
     <ui:VisualElement name="main-area">
-        <ui:VisualElement name="view-group-1" class="view-group" />
-        <ui:VisualElement name="view-group-2" class="view-group" style="display: none;" />
-        <ui:VisualElement name="view-group-3" class="view-group" style="display: none;" />
-
+        <ui:VisualElement name="view-group-1" class="view-group"/>
+        <ui:VisualElement name="view-group-2" class="view-group" style="display: none;"/>
+        <ui:VisualElement name="view-group-3" class="view-group" style="display: none;"/>
         <ui:VisualElement name="left-container">
             <ui:VisualElement name="left-panel">
                 <ui:VisualElement name="max-damage-group">
                     <ui:VisualElement name="damage-slider" class="custom-slider">
                         <ui:VisualElement name="damage-slider-track" class="custom-slider-track">
-                            <ui:VisualElement name="damage-slider-fill" class="custom-slider-fill" />
+                            <ui:VisualElement name="damage-slider-fill" class="custom-slider-fill"/>
                         </ui:VisualElement>
                     </ui:VisualElement>
-                    <ui:Label name="damage-label" class="damage-label" text="Max Damage: 0.0%" />
+                    <ui:Label name="damage-label" text="Max Damage: 0.0%" class="damage-label"/>
                 </ui:VisualElement>
                 <ui:VisualElement name="avg-damage-group">
                     <ui:VisualElement name="avg-damage-slider" class="custom-slider">
                         <ui:VisualElement name="avg-damage-slider-track" class="custom-slider-track">
-                            <ui:VisualElement name="avg-damage-slider-fill" class="custom-slider-fill" />
+                            <ui:VisualElement name="avg-damage-slider-fill" class="custom-slider-fill"/>
                         </ui:VisualElement>
                     </ui:VisualElement>
-                    <ui:Label name="avg-damage-label" class="damage-label" text="Avg Damage: 0.0%" />
+                    <ui:Label name="avg-damage-label" text="Avg Damage: 0.0%" class="damage-label"/>
                 </ui:VisualElement>
-                <ui:Label name="confidence-label" class="conf-label" text="Confidence: 100.0%" />
-                <ui:Label name="stress-limit-label" class="conf-label" text="Stress Limit: 65.0 MPa" />
-                <ui:Toggle name="heatmap-toggle" class="heatmap-toggle" label="Stress" />
+                <ui:Label name="confidence-label" text="Confidence: 100.0%" class="conf-label"/>
+                <ui:Label name="stress-limit-label" text="Stress Limit: 65.0 MPa" class="conf-label"/>
+                <ui:Toggle name="heatmap-toggle" label="Stress" class="heatmap-toggle"/>
             </ui:VisualElement>
-
             <ui:VisualElement name="flight-metrics-panel">
-                <ui:Label name="metric-altitude" class="metric-label" text="Alt: 0.0 m" />
-                <ui:Label name="metric-distance" class="metric-label" text="Dist: 0.000 km" />
-                <ui:Label name="metric-total" class="metric-label" text="Total: 0.0 km" />
-                <ui:Label name="metric-flights" class="metric-label" text="Flights: 0" />
-                <ui:Label name="metric-remaining" class="metric-label" text="Remaining: -- km" />
+                <ui:Label name="metric-altitude" text="Alt: 0.0 m" class="metric-label"/>
+                <ui:Label name="metric-distance" text="Dist: 0.000 km" class="metric-label"/>
+                <ui:Label name="metric-total" text="Total: 0.0 km" class="metric-label"/>
+                <ui:Label name="metric-flights" text="Flights: 0" class="metric-label"/>
+                <ui:Label name="metric-remaining" text="Remaining: -- km" class="metric-label"/>
             </ui:VisualElement>
-
-            <ui:Button name="takeoff-btn" class="phase-btn" text="TAKE OFF" style="display: none;" />
-            <ui:Button name="land-btn" class="phase-btn" text="LAND" style="display: none;" />
+            <ui:Button name="takeoff-btn" text="TAKE OFF" class="phase-btn" style="display: none;"/>
+            <ui:Button name="land-btn" text="LAND" class="phase-btn" style="display: none;"/>
         </ui:VisualElement>
-
         <ui:VisualElement name="view-switch-panel">
-            <ui:Button name="view-btn-1" class="view-switch-btn" text="View 1" />
-            <ui:Button name="view-btn-2" class="view-switch-btn" text="View 2" />
-            <ui:Button name="view-btn-3" class="view-switch-btn" text="View 3" />
+            <ui:Button name="view-btn-1" text="View 1" class="view-switch-btn"/>
+            <ui:Button name="view-btn-2" text="View 2" class="view-switch-btn"/>
+            <ui:Button name="view-btn-3" text="View 3" class="view-switch-btn"/>
         </ui:VisualElement>
-
         <ui:VisualElement name="stress-legend">
-            <ui:VisualElement name="stress-bar" />
+            <ui:VisualElement name="stress-bar"/>
             <ui:VisualElement name="stress-labels">
-                <ui:Label name="stress-label-0" class="stress-label" />
-                <ui:Label name="stress-label-1" class="stress-label" />
-                <ui:Label name="stress-label-2" class="stress-label" />
-                <ui:Label name="stress-label-3" class="stress-label" />
-                <ui:Label name="stress-label-4" class="stress-label" />
-                <ui:Label name="stress-label-5" class="stress-label" />
+                <ui:Label name="stress-label-0" class="stress-label"/>
+                <ui:Label name="stress-label-1" class="stress-label"/>
+                <ui:Label name="stress-label-2" class="stress-label"/>
+                <ui:Label name="stress-label-3" class="stress-label"/>
+                <ui:Label name="stress-label-4" class="stress-label"/>
+                <ui:Label name="stress-label-5" class="stress-label"/>
             </ui:VisualElement>
         </ui:VisualElement>
-        <ui:VisualElement name="notification-container" />
+        <ui:VisualElement name="notification-container"/>
     </ui:VisualElement>
-
+    <ui:Label name="plane-speed-label" text="Current Plane Speed: 0.0" class="plane-label" style="opacity: 1; display: none; top: 100px; left: 10px; position: absolute; flex-direction: column; flex-shrink: 0; flex-grow: 0; width: auto; align-self: flex-start; justify-content: flex-start;"/>
+    <ui:Label name="plane-angle-label" text="Current Plane Angle: 0.0" enabled="false" class="plane-label" style="display: none; top: 70px; left: 10px; width: 20%; position: absolute; align-self: flex-start; opacity: 1;"/>
     <ui:VisualElement name="control-panel">
         <ui:VisualElement name="preflight-controls" style="display: none;">
-            <ui:Label name="preflight-title" class="preflight-title" text="Pre-Flight Planning" />
+            <ui:Label name="preflight-title" text="Pre-Flight Planning" class="preflight-title"/>
             <ui:VisualElement name="preflight-row" class="preflight-row">
-                <ui:Label name="preflight-label" class="preflight-field-label" text="Distance (km):" />
-                <ui:Slider name="preflight-slider" class="preflight-slider" direction="horizontal" low-value="1" high-value="550" />
-                <ui:Button name="preflight-submit-btn" class="preflight-submit-btn" text="Check" />
+                <ui:Label name="preflight-label" text="Distance (km):" class="preflight-field-label"/>
+                <ui:Slider name="preflight-slider" direction="horizontal" low-value="1" high-value="550" class="preflight-slider"/>
+                <ui:Button name="preflight-submit-btn" text="Check" class="preflight-submit-btn"/>
             </ui:VisualElement>
-            <ui:Label name="preflight-slider-value" class="preflight-slider-value" text="-- km" />
+            <ui:Label name="preflight-slider-value" text="-- km" class="preflight-slider-value"/>
         </ui:VisualElement>
         <ui:VisualElement name="inflight-controls">
-            <ui:Toggle name="maintenance-toggle" class="maintenance-toggle" label="Assist" value="true" />
+            <ui:Toggle name="maintenance-toggle" label="Assist" value="true" class="maintenance-toggle"/>
             <ui:VisualElement name="angle-group" class="slider-group">
-                <ui:Label name="angle-slider-label" class="slider-label" text="Desired Angle: 0.0° | Allowed: 0.0°" />
-                <ui:Slider name="angle-slider" class="control-slider" direction="horizontal" />
+                <ui:Label name="angle-slider-label" text="Desired Angle: 0.0° | Allowed: 0.0°" class="slider-label"/>
+                <ui:Slider name="angle-slider" direction="horizontal" class="control-slider"/>
                 <ui:VisualElement name="allowed-angle-slider" class="custom-slider compact">
                     <ui:VisualElement name="allowed-angle-track" class="custom-slider-track">
-                        <ui:VisualElement name="allowed-angle-fill" class="custom-slider-fill" />
+                        <ui:VisualElement name="allowed-angle-fill" class="custom-slider-fill"/>
                     </ui:VisualElement>
                 </ui:VisualElement>
             </ui:VisualElement>
             <ui:VisualElement name="speed-group" class="slider-group">
-                <ui:Label name="speed-slider-label" class="slider-label" text="Desired Speed: 0.0 | Allowed: 0.0 km/h" />
-                <ui:Slider name="speed-slider" class="control-slider" direction="horizontal" />
+                <ui:Label name="speed-slider-label" text="Desired Speed: 0.0 | Allowed: 0.0 km/h" class="slider-label"/>
+                <ui:Slider name="speed-slider" direction="horizontal" class="control-slider"/>
                 <ui:VisualElement name="allowed-speed-slider" class="custom-slider compact">
                     <ui:VisualElement name="allowed-speed-track" class="custom-slider-track">
-                        <ui:VisualElement name="allowed-speed-fill" class="custom-slider-fill" />
+                        <ui:VisualElement name="allowed-speed-fill" class="custom-slider-fill"/>
                     </ui:VisualElement>
                 </ui:VisualElement>
             </ui:VisualElement>
             <ui:VisualElement name="steps-group" class="slider-group">
-                <ui:Label name="steps-slider-label" class="slider-label" text="Steps: 0" />
-                <ui:Slider name="steps-slider" class="control-slider" direction="horizontal" />
+                <ui:Label name="steps-slider-label" text="Steps: 0" class="slider-label"/>
+                <ui:Slider name="steps-slider" direction="horizontal" class="control-slider"/>
             </ui:VisualElement>
         </ui:VisualElement>
     </ui:VisualElement>
-
-    <ui:Label name="plane-speed-label" class="plane-label" text="Current Plane Speed: 0.0" />
-    <ui:Label name="plane-angle-label" class="plane-label" text="Current Plane Angle: 0.0" />
-
     <ui:VisualElement name="help-panel" style="display: none;">
         <ui:VisualElement name="help-content">
-            <ui:Label class="help-title" text="Help - Keyboard Controls" />
-            <ui:Label class="help-line" text="M - Toggle Stress/Damage View" />
-            <ui:Label class="help-line" text="H - Toggle this help" />
-            <ui:Label class="help-line" text="C - Toggle Charts" />
-            <ui:Label class="help-spacer" />
-            <ui:Label class="help-section" text="Camera Controls" />
-            <ui:Label class="help-line" text="WASD - Move" />
-            <ui:Label class="help-line" text="E - Move Up" />
-            <ui:Label class="help-line" text="Q - Move Down" />
-            <ui:Button name="help-close-btn" class="help-close-btn" text="Close" />
+            <ui:Label text="Help - Keyboard Controls" class="help-title"/>
+            <ui:Label text="M - Toggle Stress/Damage View" class="help-line"/>
+            <ui:Label text="H - Toggle this help" class="help-line"/>
+            <ui:Label text="C - Toggle Charts" class="help-line"/>
+            <ui:Label class="help-spacer"/>
+            <ui:Label text="Camera Controls" class="help-section"/>
+            <ui:Label text="WASD - Move" class="help-line"/>
+            <ui:Label text="E - Move Up" class="help-line"/>
+            <ui:Label text="Q - Move Down" class="help-line"/>
+            <ui:Button name="help-close-btn" text="Close" class="help-close-btn"/>
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

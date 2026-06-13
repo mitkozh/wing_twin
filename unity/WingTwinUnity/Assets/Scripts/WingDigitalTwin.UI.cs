@@ -180,14 +180,14 @@ public partial class WingDigitalTwin : MonoBehaviour
         if (planeSpeedLabel != null)
         {
             planeSpeedLabel.style.display = DisplayStyle.Flex;
-            planeSpeedLabel.style.left = x - 80;
-            planeSpeedLabel.style.top = y - 50;
+            //planeSpeedLabel.style.left = x - 80;
+            //planeSpeedLabel.style.top = y - 50;
         }
         if (planeAngleLabel != null)
         {
             planeAngleLabel.style.display = DisplayStyle.Flex;
-            planeAngleLabel.style.left = x - 80;
-            planeAngleLabel.style.top = y - 28;
+            //planeAngleLabel.style.left = x - 80;
+            //planeAngleLabel.style.top = y - 28;
         }
     }
 
