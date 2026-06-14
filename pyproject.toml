@@ -44,7 +44,7 @@ dev = [
 [project.scripts]
 wing-real-run = "wing_twin.cli.run:main"
 wing-demo-run = "wing_twin.cli.demo:main"
-wing-simulator = "wing_twin.cli.simulator:main"
+wing-hybrid-run = "wing_twin.cli.hybrid:main"
 wing-mesh-export = "wing_twin.cli.mesh_export:main"
 wing-neuralfoil-export = "wing_twin.cli.neuralfoil_export:main"
 wing-dashboard = "wing_twin.viz.dashboard:run_dashboard"
