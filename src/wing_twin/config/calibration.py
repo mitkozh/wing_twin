@@ -13,7 +13,7 @@ from wing_twin.config.paths import PROJECT_ROOT
 logger = logging.getLogger(__name__)
 
 
-def _load_calibration_file() -> tuple[float, ...] | None:
+def _load_calibration_file() -> dict | None:
     calib_path = PROJECT_ROOT / "calibration" / "strain" / "calibration_data.json"
     if not calib_path.exists():
         logger.warning("Calibration file not found at %s - using global scale", calib_path)
@@ -25,7 +25,7 @@ def _load_calibration_file() -> tuple[float, ...] | None:
         if raw is None or len(raw) != 9:
             logger.warning("Invalid calibration data in %s - using global scale", calib_path)
             return None
-        return tuple(float(v) for v in raw)
+        return data
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Failed to load %s: %s - using global scale", calib_path, exc)
         return None
@@ -56,6 +56,7 @@ class CalibrationConfig:
     adc_to_strain_scale: float = 1.862645149230957e-9
 
     per_channel_adc_to_strain_scale: tuple[float, ...] | None = None
+    per_channel_r2: tuple[float, ...] | None = None
 
     # Force reconstruction
     H_matrix_scale: float = 1.0
@@ -92,6 +93,12 @@ class CalibrationConfig:
         "tip_0", "tip_45", "tip_90",
     )
 
+    def dead_channel_mask(self) -> list[bool]:
+        """Return a list of 9 booleans indicating dead/unreliable channels."""
+        if self.per_channel_r2 is not None:
+            return [v < 0.0 for v in self.per_channel_r2]
+        return [False] * 9
+
     def __post_init__(self) -> None:
         check_ge(self.adc_to_strain_scale, "CalibrationConfig.adc_to_strain_scale", 0)
         check_ge(self.force_scale, "CalibrationConfig.force_scale", 0)
@@ -117,7 +124,12 @@ class CalibrationConfig:
         else:
             loaded = _load_calibration_file()
             if loaded is not None:
-                object.__setattr__(self, "per_channel_adc_to_strain_scale", loaded)
+                scales = loaded.get("per_channel_adc_to_strain_scale")
+                if scales and len(scales) == 9:
+                    object.__setattr__(self, "per_channel_adc_to_strain_scale", tuple(float(v) for v in scales))
+                r2_vals = loaded.get("per_channel_r2")
+                if r2_vals and len(r2_vals) == 9:
+                    object.__setattr__(self, "per_channel_r2", tuple(float(v) for v in r2_vals))
                 logger.info("Loaded per-channel calibration from file")
 
         # Auto-load stepper calibration file, overriding defaults

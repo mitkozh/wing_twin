@@ -138,18 +138,21 @@ def compute_group_expected_ratios(H: np.ndarray) -> dict:
 def _group_consistency_score(
     observed_strain: np.ndarray,
     expected_ratios: dict,
+    dead_channel_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Compute per-group consistency scores (0–100) for the 3 section groups.
 
     Checks that sign and pairwise strain ratios within each 3-gauge triplet
-    match the expected pattern from the FEA model (H matrix).  This check is
-    force-magnitude-independent, catching drift or failure in individual gauges
-    even when the load is small.
+    match the expected pattern from the FEA model (H matrix).
     """
     groups = [(0, "root"), (3, "middle"), (6, "tip")]
     scores = np.zeros(3, dtype=np.float64)
 
     for gi, (start, name) in enumerate(groups):
+        if dead_channel_mask is not None and np.any(dead_channel_mask[start:start + 3]):
+            scores[gi] = 100.0
+            continue
+
         chunk = observed_strain[start:start + 3]
         e = expected_ratios.get(name)
         if e is None or np.any(np.isnan(chunk)):
@@ -202,10 +205,25 @@ def _force_consistency_score(
         (0, 1, 2), (3, 4, 5), (6, 7, 8),
         (0, 3, 6), (1, 4, 7), (2, 5, 8),
     ),
+    dead_channel_mask: np.ndarray | None = None,
 ) -> float:
-    """Score (0–100) how consistently different gauge subsets estimate F."""
+    """Score (0–100) how consistently different gauge subsets estimate F.
+
+    Subgroups containing a near-dead channel (masked) are skipped to
+    avoid injecting near-zero noise into the force estimate.
+    """
+    if dead_channel_mask is not None and dead_channel_mask.any():
+        _groups = tuple(
+            idxs for idxs in groups
+            if not any(dead_channel_mask[i] for i in idxs)
+        )
+    else:
+        _groups = groups
+
     F_groups = []
-    for idxs in groups:
+    for idxs in _groups:
+        if not idxs:
+            continue
         H_sub = H[list(idxs), 0]
         obs_sub = observed_strain[list(idxs)]
         H2 = float(H_sub @ H_sub)
@@ -231,7 +249,8 @@ def _compute_model_fit(
     observed_strain: np.ndarray,
     expected_strain: np.ndarray,
     noise_floor: float = 1e-10,
-    s_curve_threshold: float = 0.15,
+    s_curve_threshold: float = 0.30,
+    dead_channel_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Per-channel residual and S-curve confidence from |obs − exp| / |exp|.
 
@@ -240,7 +259,17 @@ def _compute_model_fit(
     denom = np.maximum(np.abs(expected_strain), noise_floor)
     residual = np.abs(observed_strain - expected_strain) / denom
     confidence = 100.0 / (1.0 + (residual / s_curve_threshold) ** 2)
-    score = float(np.mean(confidence))
+
+    if dead_channel_mask is not None:
+        residual = residual.copy()
+        confidence = confidence.copy()
+        residual[dead_channel_mask] = 0.0
+        confidence[dead_channel_mask] = 100.0
+        alive_count = int(np.sum(~dead_channel_mask))
+        score = float(np.sum(confidence[~dead_channel_mask]) / max(alive_count, 1))
+    else:
+        score = float(np.mean(confidence))
+
     return residual, confidence, score
 
 
@@ -250,10 +279,13 @@ def _compute_group_consistency(
     group_expected_ratios: dict,
     expected_norm: float,
     noise_floor: float = 1e-10,
+    dead_channel_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, float]:
-    """Per-group ratio consistency score, or 100 if no load / no H."""
+    """Per-group ratio consistency score, or 100 if no load / no H.
+    Groups containing dead channels are skipped (score = 100).
+    """
     if H is not None and expected_norm > noise_floor * 10:
-        scores = _group_consistency_score(observed_strain, group_expected_ratios)
+        scores = _group_consistency_score(observed_strain, group_expected_ratios, dead_channel_mask=dead_channel_mask)
         return scores, float(np.mean(scores))
     return np.full(3, 100.0, dtype=np.float64), 100.0
 
@@ -263,6 +295,7 @@ def _track_low_confidence_frames(
     per_channel_confidence: np.ndarray,
     overall_confidence: float,
     threshold: float,
+    dead_channel_mask: np.ndarray | None = None,
 ) -> None:
     """Update per-channel and overall low-confidence frame counters."""
     if overall_confidence < threshold:
@@ -271,6 +304,8 @@ def _track_low_confidence_frames(
         state.low_confidence_frames = 0
 
     for i in range(len(per_channel_confidence)):
+        if dead_channel_mask is not None and dead_channel_mask[i]:
+            continue
         if per_channel_confidence[i] < threshold:
             state.per_channel_low_frames[i] = state.per_channel_low_frames.get(i, 0) + 1
         else:
@@ -283,6 +318,7 @@ def update_confidence(
     expected_strain: np.ndarray,
     config: Optional[FatigueConfig] = None,
     H: Optional[np.ndarray] = None,
+    dead_channel_mask: Optional[np.ndarray] = None,
 ) -> float:
     """Update per-channel and overall confidence from observed vs expected strain.
     Returns the overall confidence (0–100).
@@ -305,6 +341,50 @@ def update_confidence(
     # 1  Model-fit residual
     residual, per_channel_conf, model_score = _compute_model_fit(
         observed_strain, expected_strain, noise_floor,
+        s_curve_threshold=config.s_curve_threshold,
+        dead_channel_mask=dead_channel_mask,
+    )
+    state.per_channel_residual = residual.copy()
+    state.per_channel_confidence = per_channel_conf.copy()
+
+    # 2  Group ratio consistency
+    group_scores, group_score = _compute_group_consistency(
+        observed_strain, H, state.group_expected_ratios,
+        expected_norm, noise_floor,
+        dead_channel_mask=dead_channel_mask,
+    )
+    state.group_consistency = group_scores.copy()
+
+    # 3  Force-estimate cross-validation
+    force_score = (
+        _force_consistency_score(observed_strain, H, dead_channel_mask=dead_channel_mask)
+        if H is not None else 100.0
+    )
+
+    # 4  Blended overall confidence with configurable weights
+    raw_residual = float(
+        np.linalg.norm(observed_strain - expected_strain)
+    ) / max(expected_norm, noise_floor)
+    if config.ema_alpha < 1.0:
+        state.filtered_residual = (
+            config.ema_alpha * raw_residual
+            + (1.0 - config.ema_alpha) * state.filtered_residual
+        )
+    else:
+        state.filtered_residual = raw_residual
+
+    state.confidence = float(np.clip(
+        config.confidence_weight_model * model_score
+        + config.confidence_weight_group * group_score
+        + config.confidence_weight_force * force_score,
+        0.0, 100.0,
+    ))
+
+    # 5  Low-confidence frame tracking (dead channels are never flagged)
+    _track_low_confidence_frames(
+        state, per_channel_conf, state.confidence,
+        config.confidence_threshold,
+        dead_channel_mask=dead_channel_mask,
     )
     state.per_channel_residual = residual.copy()
     state.per_channel_confidence = per_channel_conf.copy()
@@ -318,16 +398,26 @@ def update_confidence(
 
     # 3  Force-estimate cross-validation
     force_score = (
-        _force_consistency_score(observed_strain, H)
+        _force_consistency_score(observed_strain, H, dead_channel_mask=dead_channel_mask)
         if H is not None else 100.0
     )
 
     # 4  Blended overall confidence
-    state.filtered_residual = float(
+    raw_residual = float(
         np.linalg.norm(observed_strain - expected_strain)
     ) / max(expected_norm, noise_floor)
+    if config.ema_alpha < 1.0:
+        state.filtered_residual = (
+            config.ema_alpha * raw_residual
+            + (1.0 - config.ema_alpha) * state.filtered_residual
+        )
+    else:
+        state.filtered_residual = raw_residual
+
     state.confidence = float(np.clip(
-        0.30 * model_score + 0.30 * group_score + 0.40 * force_score,
+        config.confidence_weight_model * model_score
+        + config.confidence_weight_group * group_score
+        + config.confidence_weight_force * force_score,
         0.0, 100.0,
     ))
 

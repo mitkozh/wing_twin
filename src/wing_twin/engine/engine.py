@@ -2,6 +2,7 @@
 Core digital twin processing engine.
 """
 
+import logging
 import math
 from enum import Enum
 from typing import Optional
@@ -9,6 +10,8 @@ from typing import Optional
 import numpy as np
 
 from wing_twin.fea.matrices import TransferMatrices, load_transfer_matrices
+
+logger = logging.getLogger(__name__)
 from wing_twin.fea.force_reconstruct import solve_forces
 from wing_twin.fea.field_compute import compute_stress_field, compute_deformation_field
 from wing_twin.fatigue.fatigue import FatigueState, set_random_seed
@@ -149,6 +152,21 @@ class DigitalTwinEngine:
         self._channel_health = ChannelHealthTracker(
             list(self.config.calibration.channel_names),
         )
+
+        dead_mask = self.config.calibration.dead_channel_mask()
+        n_dead = sum(dead_mask)
+        n_total = len(dead_mask)
+        if n_dead > 0:
+            dead_names = [
+                self.config.calibration.channel_names[i]
+                for i, d in enumerate(dead_mask) if d
+            ]
+            logger.info(
+                "Operating with %d/%d active channels. Dead: %s",
+                n_total - n_dead, n_total, dead_names,
+            )
+        else:
+            logger.info("Operating with all %d channels active", n_total)
 
         if data_source:
             self.data_source = data_source
@@ -534,6 +552,14 @@ class DigitalTwinEngine:
         else:
             raise ValueError(f"Unknown SensorReading type: {type(reading).__name__}")
 
+        # Permanently dead channels (near-zero calibration scale) are always imputed
+        dead_idxs = [
+            i for i, dead in enumerate(cal.dead_channel_mask())
+            if dead and i not in bad_idxs
+        ]
+        bad_idxs.extend(dead_idxs)
+        bad_idxs.sort()
+
         pre_impute = strain_vec.copy()
         strain_clean = strain_vec.copy()
         if bad_idxs:
@@ -551,6 +577,8 @@ class DigitalTwinEngine:
         self.state.structural.stress_field = stress.tolist()
         self.state.structural.deformation_field = deformation.tolist()
 
+        dead_mask_np = np.array(cal.dead_channel_mask(), dtype=bool) if cal.per_channel_adc_to_strain_scale is not None else None
+
         has_new_bad, all_bad = self.fatigue.process(
             pre_impute_strain=pre_impute,
             stress_field_pa=stress,
@@ -558,6 +586,7 @@ class DigitalTwinEngine:
             twin_state=self.state,
             H=H,
             flight_phase=self._flight_phase,
+            dead_channel_mask=dead_mask_np,
         )
 
         if has_new_bad:

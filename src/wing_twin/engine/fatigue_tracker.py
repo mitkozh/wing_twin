@@ -73,6 +73,7 @@ class FatigueTracker:
         twin_state: TwinState,
         H: Optional[np.ndarray] = None,
         flight_phase: object = None,
+        dead_channel_mask: Optional[np.ndarray] = None,
     ) -> tuple[bool, list[int]]:
         """Process one frame: confidence monitoring -> damage accumulation.
 
@@ -87,6 +88,7 @@ class FatigueTracker:
         update_confidence(
             self.state, pre_impute_strain, expected_strain,
             config=fatigue_cfg, H=H,
+            dead_channel_mask=dead_channel_mask,
         )
 
         log_low_confidence_channels(

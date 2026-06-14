@@ -163,14 +163,16 @@ def compute_scale_factors(
     return scale, r2, rmse
 
 
-def save_calibration(scale: np.ndarray, weights_used: list[float]):
+def save_calibration(scale: np.ndarray, r2: np.ndarray, rmse: np.ndarray, weights_used: list[float]):
     calib_path = HERE / "strain" / "calibration_data.json"
 
     calib_data = {
-        "version": 1,
+        "version": 2,
         "calibrated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "calibrated_with": f"Weights (g): {weights_used}, hung at wing tip, using FEA H matrix",
         "per_channel_adc_to_strain_scale": [float(round(s, 22)) for s in scale],
+        "per_channel_r2": [float(round(v, 6)) for v in r2],
+        "per_channel_rmse": [float(f"{v:.6e}") if v != float("inf") else "inf" for v in rmse],
     }
 
     with open(calib_path, "w") as f:
@@ -179,6 +181,8 @@ def save_calibration(scale: np.ndarray, weights_used: list[float]):
     print(f"\n  Calibration saved to {calib_path}")
     print("  Copy the per_channel_adc_to_strain_scale values for reference:")
     print(f"    scale = {calib_data['per_channel_adc_to_strain_scale']}")
+    print(f"    r2    = {calib_data['per_channel_r2']}")
+    print(f"    rmse  = {calib_data['per_channel_rmse']}")
 
 
 def main():
@@ -225,7 +229,7 @@ def main():
     print("\nPer-channel regression...")
     scale, r2, rmse = compute_scale_factors(weight_data, H)
 
-    save_calibration(scale, sorted(weight_data.keys()))
+    save_calibration(scale, r2, rmse, sorted(weight_data.keys()))
 
     print("\nDone. Restart the engine to pick up the new calibration.")
     print("To verify: check the dashboard strain bars move proportionally to applied load.")
