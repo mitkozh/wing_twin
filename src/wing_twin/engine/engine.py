@@ -589,7 +589,7 @@ class DigitalTwinEngine:
             dead_channel_mask=dead_mask_np,
         )
 
-        if has_new_bad:
+        if has_new_bad and not self.config.fatigue.disable_confidence_imputation:
             reimputed = impute_channels(pre_impute.copy(), all_bad, H)
             F_re = solve_forces(self._matrices.H_inv, reimputed)
             F_re *= cal.H_matrix_scale
