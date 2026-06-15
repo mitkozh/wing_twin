@@ -97,8 +97,7 @@ class MeshExporter:
 
     def export_surface(self, vtkhdf_path: Path, out_json_path: Optional[Path] = None) -> dict:
         if out_json_path is None:
-            base_name = vtkhdf_path.stem
-            out_json_path = self.output_dir / f"{base_name}_surface.json"
+            out_json_path = self.output_dir / "FinalMesh_surface.json"
 
         reader = vtk.vtkHDFReader()
         reader.SetFileName(str(vtkhdf_path))
