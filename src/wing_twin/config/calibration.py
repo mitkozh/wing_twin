@@ -73,7 +73,7 @@ class CalibrationConfig:
     force_scale: float = 0.5
 
     # Stepper motor
-    steps_per_newton: float = 204.0
+    steps_per_newton: float = 183.141
     stepper_motor_max_steps: int = 2742        # physical motor limit (override via stepper_calibration_*.json)
     stepper_wing_safe_limit: int = 320         # hard limit to prevent wing damage (override via stepper_calibration_*.json)
     stepper_max_frequency: float = 1000.0      # Hz, max step rate (override via stepper_calibration_*.json)

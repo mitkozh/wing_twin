@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "calibrated_at": "2026-06-15T01:41:40Z",
+    "calibrated_at": "2026-06-15T03:50:20Z",
     "calibrated_with": "Model-based: steps_per_mm \u00d7 U_tip (FEA)",
     "steps_per_newton": 183.141,
     "stepper_motor_max_steps": 2742,
@@ -16,6 +16,5 @@
     "steps_per_mm": 19.59,
     "linear_travel_mm": 140.0,
     "deformation_m_per_N": 0.0093486998,
-    "tip_deformation_mm_per_N": 9.3487,
-    "data_points": 0
+    "tip_deformation_mm_per_N": 9.3487
 }

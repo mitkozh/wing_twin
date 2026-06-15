@@ -136,7 +136,7 @@ def compute_aero_force(
 
 def force_to_steps(
     F_newtons: float,
-    steps_per_newton: float = 204.0,
+    steps_per_newton: float = 183.141,
     max_steps: Optional[int] = None,
 ) -> int:
     if max_steps is None:
