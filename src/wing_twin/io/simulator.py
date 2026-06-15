@@ -28,6 +28,7 @@ class SimulatorSource(SimulatableDataSource):
         aero_model: Optional[NeuralFoilModel] = None,
         wind_model: Optional[WindModel] = None,
         calibration: Optional[CalibrationConfig] = None,
+        physical_model_forces: bool = True,
     ):
         self.config = config or SimulationConfig()
         self._state = SimulatorState()
@@ -37,6 +38,7 @@ class SimulatorSource(SimulatableDataSource):
         self._aero_model: Optional[NeuralFoilModel] = aero_model
         self._wind: Optional[WindModel] = wind_model
         self._calibration: Optional[CalibrationConfig] = calibration
+        self._physical_model_forces = physical_model_forces
 
     def set_airspeed(self, airspeed: float) -> None:
         with self._lock:
@@ -64,6 +66,9 @@ class SimulatorSource(SimulatableDataSource):
     def set_calibration(self, calibration: CalibrationConfig) -> None:
         self._calibration = calibration
 
+    def set_physical_model_forces(self, enabled: bool) -> None:
+        self._physical_model_forces = enabled
+
     def connect(self) -> bool:
         if self._matrices is None:
             raise RuntimeError("TransferMatrices required before connecting")
@@ -84,11 +89,14 @@ class SimulatorSource(SimulatableDataSource):
             u_w, w_w = self._wind.sample(t, dt=dt)
 
         v_eff, alpha_eff = compute_apparent_wind(airspeed, angle_deg, u_w, w_w)
-        return compute_aero_force(
+        F = compute_aero_force(
             alpha_eff, v_eff,
             model=self._aero_model,
             calibration=self._calibration,
         )
+        if self._physical_model_forces:
+            return -abs(F)
+        return F
 
     def _read(
         self, t: float, dt: float, airspeed: float, angle_deg: float

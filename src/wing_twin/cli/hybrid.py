@@ -112,6 +112,7 @@ async def run_simulator(
     record: bool = False,
     record_figures: bool = False,
     publish_sensors: bool = False,
+    physical_model_forces: bool = True,
 ) -> Optional[Path]:
     config = EngineConfig(seed=seed)
     engine = DigitalTwinEngine(config)
@@ -125,7 +126,10 @@ async def run_simulator(
         raise
 
     sim_config = SimulationConfig()
-    simulator = SimulatorSource(sim_config, wind_model=engine.wind_model)
+    simulator = SimulatorSource(
+        sim_config, wind_model=engine.wind_model,
+        physical_model_forces=physical_model_forces,
+    )
     simulator.set_matrices(engine.matrices)
     engine.data_source = simulator
 
@@ -264,6 +268,10 @@ def main() -> None:
         "--seed", type=int, default=None,
         help="Random seed for reproducible results",
     )
+    parser.add_argument(
+        "--no-physical-model", action="store_true",
+        help="Use realistic signed aero forces instead of stepper-only (downward) forces",
+    )
     args = parser.parse_args()
 
     mqtt_config = MqttConfig(broker=args.broker, port=args.port)
@@ -286,6 +294,8 @@ def main() -> None:
         logger.info("  WebSocket:    enabled (ws://localhost:8765)")
     if args.seed is not None:
         logger.info("  Random seed:  %d", args.seed)
+    if not args.no_physical_model:
+        logger.info("  Physical model: enabled (downward forces only)")
     logger.info("=" * 60)
 
     output_dir = Path(args.figures) if isinstance(args.figures, str) else PROJECT_ROOT / "figures"
@@ -301,6 +311,7 @@ def main() -> None:
                 record=args.record,
                 record_figures=bool(args.figures),
                 publish_sensors=args.publish_sensors,
+                physical_model_forces=not args.no_physical_model,
             )
         )
 
