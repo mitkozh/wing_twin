@@ -8,7 +8,7 @@ from .server import create_app
 def run_dashboard() -> None:
     parser = argparse.ArgumentParser(description="Wing Twin live dashboard")
     parser.add_argument("--broker", default="localhost", help="MQTT broker address")
-    parser.add_argument("--port", type=int, default=1883, help="MQTT broker port")
+    parser.add_argument("--port", type=int, default=1884, help="MQTT broker port")
     parser.add_argument("--web-port", type=int, default=5050, help="Dashboard HTTP port")
     parser.add_argument("--host", default="0.0.0.0", help="Dashboard bind address")
     args = parser.parse_args()

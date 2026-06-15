@@ -1,12 +1,12 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define STEPPER_MAX_SPEED        1000.0f
-#define STEPPER_ACCELERATION     600.0f
-#define STEPPER_POSITION_TOLERANCE 5
+#define STEPPER_MAX_SPEED        4000.0f
+#define STEPPER_ACCELERATION     3000.0f
+#define STEPPER_POSITION_TOLERANCE 3
 #define STEPPER_MIN_POSITION         0
-#define STEPPER_MAX_POSITION         330    /* safe wing limit, adjustable at runtime */
-#define STEPPER_ABSOLUTE_MAX_POSITION 2742  /* physical motor limit, hard hardware stop */
+#define STEPPER_MAX_POSITION         536    /* safe wing limit from calibration, adjustable at runtime */
+#define STEPPER_ABSOLUTE_MAX_POSITION 4456  /* physical motor limit from calibration, hard hardware stop */
 
 #define WIFI_TIMEOUT_MS          15000
 #define WIFI_CONNECT_COOLDOWN_MS 500
@@ -17,6 +17,6 @@
 
 #define WATCHDOG_TIMEOUT_S       5
 
-#define STATUS_PUBLISH_INTERVAL_MS 100
+#define STATUS_PUBLISH_INTERVAL_MS 50
 
 #endif

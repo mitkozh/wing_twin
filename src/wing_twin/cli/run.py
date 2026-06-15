@@ -178,7 +178,7 @@ def _resolve_data_dir(hint: Optional[str] = None) -> Optional[Path]:
 def main():
     parser = argparse.ArgumentParser(description="Wing Digital Twin Real Run")
     parser.add_argument("--broker", default="localhost", help="MQTT broker address")
-    parser.add_argument("--port", type=int, default=1883, help="MQTT broker port")
+    parser.add_argument("--port", type=int, default=1884, help="MQTT broker port")
     parser.add_argument("--record", action="store_true", help="Record data to HDF5 during run")
     parser.add_argument("--figures", nargs="?", const=True, default=False, help="Generate PNG figures (optional: output directory)")
     parser.add_argument("--figures-only", nargs="?", const=True, default=False, help="Regenerate figures from saved data (optional: data directory)")

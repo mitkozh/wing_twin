@@ -246,7 +246,7 @@ def main() -> None:
         description="Wing Digital Twin - Hybrid Run (simulated aero/strain, physical stepper/LEDs)"
     )
     parser.add_argument("--broker", default="localhost", help="MQTT broker address")
-    parser.add_argument("--port", type=int, default=1883, help="MQTT broker port")
+    parser.add_argument("--port", type=int, default=1884, help="MQTT broker port")
     parser.add_argument(
         "--auto-takeoff", action="store_true",
         help="Automatically take off on start (simulates a full flight cycle)",

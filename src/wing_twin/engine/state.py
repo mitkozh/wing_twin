@@ -82,7 +82,7 @@ class StepperHardwareState:
     stepper_position: int = 0
     esp32_reported_position: Optional[int] = None
     esp32_reported_home_offset: Optional[int] = None
-    heatmap_mode: str = "damage"
+    heatmap_mode: str = "stress"
 
 
 @dataclass

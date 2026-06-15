@@ -70,6 +70,7 @@ class CalibrationConfig:
 
     # Force scale - maps digital aerodynamic force to physical stepper force.
     # E.g. 0.5 -> 80 MPa DT stress produces 40 MPa on the physical model. This is so we don't damage the model.
+    # Lower = wider stepper range across flight envelope (0.25 gives 0-7.2 N aero across 0-536 steps).
     force_scale: float = 0.5
 
     # Stepper motor
