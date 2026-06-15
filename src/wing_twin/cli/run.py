@@ -6,8 +6,11 @@ Uses real sensors via MQTT - connects to the physical wing system.
 
 import argparse
 import asyncio
+import time
 from pathlib import Path
 from typing import Optional
+
+import numpy as np
 
 from ._lifecycle import cancel_task, finalize_recorder, publish_final_zero, setup_recorder, setup_signal_handler
 
@@ -24,6 +27,7 @@ from wing_twin.io.mqtt import (
     MqttStepperMonitor,
 )
 from wing_twin.io.protocol import STEPPER_COMMAND_TOPIC
+from wing_twin.types import RawSensorReading
 from wing_twin.io.websocket import WebSocketBroadcaster, EngineCommandHandler
 from wing_twin.recorder.recorder import load_engine_snapshot
 from wing_twin.viz.generator import generate_figures_from_recording
@@ -73,6 +77,24 @@ async def run_production(
             break
         await asyncio.sleep(0.1)
     calibrate_stepper(publisher, sensor_source, stepper_monitor, calib_config)
+
+    # Collect tare baseline at confirmed position 0 (no load)
+    logger.info("Collecting tare baseline...")
+    tare_buffer: list[np.ndarray] = []
+    tare_timeout = 5.0
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < tare_timeout and len(tare_buffer) < 100:
+        reading = sensor_source.read()
+        if reading is not None and isinstance(reading, RawSensorReading):
+            compensated = reading.raw_values - reading.dummy_raw - np.array(reading.offset_values, dtype=np.float64)
+            tare_buffer.append(compensated)
+        await asyncio.sleep(0.05)
+    if tare_buffer:
+        tare_vector = np.mean(tare_buffer, axis=0)
+        engine.set_tare(tare_vector)
+        logger.info("Tare baseline set (%d samples)", len(tare_buffer))
+    else:
+        logger.warning("No sensor readings received for tare - proceeding without tare subtraction")
 
     broadcaster = WebSocketBroadcaster(port=config.websocket.port)
     command_handler = EngineCommandHandler(engine)

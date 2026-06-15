@@ -153,6 +153,8 @@ class DigitalTwinEngine:
             list(self.config.calibration.channel_names),
         )
 
+        self._tare_vector: Optional[np.ndarray] = None
+
         dead_mask = self.config.calibration.dead_channel_mask()
         n_dead = sum(dead_mask)
         n_total = len(dead_mask)
@@ -223,6 +225,18 @@ class DigitalTwinEngine:
         matrix_path = matrix_dir or self.config.matrix_dir
         self._matrices = load_transfer_matrices(matrix_path)
         self._num_gauges = self._matrices.n_gauges
+
+    def set_tare(self, tare_vector: np.ndarray) -> None:
+        """Set the tare baseline to subtract from (raw - dummy - offset) before scaling.
+
+        Should be called with the mean of (raw - dummy - offset) sampled at
+        zero load (stepper at position 0) during startup.
+        """
+        self._tare_vector = np.asarray(tare_vector, dtype=np.float64)
+        logger.info(
+            "Tare set (%d channels, max component=%.2f)",
+            len(self._tare_vector), float(np.max(np.abs(self._tare_vector))),
+        )
 
     def reset(self, target: str = "all") -> None:
         self.fatigue.reset(target)
@@ -538,7 +552,10 @@ class DigitalTwinEngine:
                 scale = np.array(cal.per_channel_adc_to_strain_scale, dtype=np.float64)
             else:
                 scale = cal.adc_to_strain_scale
-            strain_vec = (raw - reading.dummy_raw - off) * scale
+            compensated = raw - reading.dummy_raw - off
+            if self._tare_vector is not None:
+                compensated = compensated - self._tare_vector
+            strain_vec = compensated * scale
 
             bad_idxs = detect_bad_channels(strain_vec, cal.strain_saturation_threshold)
             if reading.saturated_flags is not None:

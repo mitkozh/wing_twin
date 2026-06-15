@@ -132,6 +132,21 @@ class MqttSensorSource(DataSource):
             gauge_id="esp32_raw",
         )
 
+    def peek_latest(self) -> Optional[RawSensorReading]:
+        """Return the latest reading without consuming it."""
+        if not self._buffer:
+            return None
+        raw_vals, offset_vals, dummy_raw, saturated, ts = self._buffer[-1]
+        return RawSensorReading(
+            raw_values=raw_vals,
+            offset_values=offset_vals,
+            dummy_raw=dummy_raw,
+            saturated_flags=saturated,
+            accel_z=0.0,
+            timestamp=ts,
+            gauge_id="esp32_raw",
+        )
+
     @property
     def home_offset(self) -> Optional[int]:
         """Latest ``home_offset`` reported by the sensor ESP32."""

@@ -97,10 +97,10 @@ def compute_scale_factors(
     Per-channel linear regression.
 
     For each channel i:
-      compensated_raw[w] * scale_i = sigma_expected[w,i] = H[i,0] * (w * g)
+      compensated_raw[w] * scale_i = sigma_expected[w,i] = -H[i,0] * (w * g)
 
     Least-squares:
-      scale_i = Sigma(H[i,0] * w * g * compensated_raw[w,i]) / Sigma(compensated_raw[w,i]^2)
+      scale_i = Sigma(-H[i,0] * w * g * compensated_raw[w,i]) / Sigma(compensated_raw[w,i]^2)
     """
     weights_g = sorted(weight_data.keys())
     n_channels = 9
@@ -125,7 +125,7 @@ def compute_scale_factors(
             comp_raw = weight_data[w_g][ch] - tare_raw[ch]
             h_val = float(H[ch, 0])
             w_n = w_g / 1000.0 * G
-            expected_strain = h_val * w_n
+            expected_strain = -h_val * w_n
 
             if abs(comp_raw) < 1e-9:
                 continue
@@ -169,7 +169,7 @@ def save_calibration(scale: np.ndarray, r2: np.ndarray, rmse: np.ndarray, weight
     calib_data = {
         "version": 2,
         "calibrated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "calibrated_with": f"Weights (g): {weights_used}, hung at wing tip, using FEA H matrix",
+        "calibrated_with": f"Weights (g): {weights_used}, hung at wing tip, using FEA H matrix (negated: downward = -F)",
         "per_channel_adc_to_strain_scale": [float(round(s, 22)) for s in scale],
         "per_channel_r2": [float(round(v, 6)) for v in r2],
         "per_channel_rmse": [float(f"{v:.6e}") if v != float("inf") else "inf" for v in rmse],
