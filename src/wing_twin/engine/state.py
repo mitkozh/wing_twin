@@ -298,7 +298,7 @@ class TwinState:
         return state
 
 
-SNAPSHOT_VERSION = 2
+SNAPSHOT_VERSION = 3
 
 
 @dataclass
@@ -306,6 +306,7 @@ class EngineSnapshot:
     version: int = SNAPSHOT_VERSION
     twin: Optional[dict] = None
     fatigue: Optional[dict] = None
+    channels: Optional[dict] = None
     life: Optional[dict] = None
     flight: Optional[dict] = None
     dynamics: Optional[dict] = None
@@ -320,6 +321,7 @@ class EngineSnapshot:
             "version": self.version,
             "twin": self.twin,
             "fatigue": self.fatigue,
+            "channels": self.channels,
             "life": self.life,
             "flight": self.flight,
             "dynamics": self.dynamics,
@@ -348,6 +350,7 @@ class EngineSnapshot:
             version=version,
             twin=data.get("twin"),
             fatigue=data.get("fatigue"),
+            channels=data.get("channels"),
             life=data.get("life"),
             flight=data.get("flight"),
             dynamics=data.get("dynamics"),

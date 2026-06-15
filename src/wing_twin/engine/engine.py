@@ -15,11 +15,7 @@ logger = logging.getLogger(__name__)
 from wing_twin.fea.force_reconstruct import solve_forces
 from wing_twin.fea.field_compute import compute_stress_field, compute_deformation_field
 from wing_twin.fatigue.fatigue import FatigueState, set_random_seed
-from wing_twin.io.sensor_validation import (
-    ChannelHealthTracker,
-    detect_bad_channels,
-    impute_channels,
-)
+from wing_twin.io.channel_manager import ChannelManager
 from wing_twin.physics.aero import (
     compute_aero_force,
     compute_aero_forces,
@@ -28,7 +24,7 @@ from wing_twin.physics.aero import (
     NeuralFoilModel,
 )
 from wing_twin.physics.wind import WindModel, compute_apparent_wind
-from wing_twin.config import EngineConfig
+from wing_twin.config import EngineConfig  # noqa: E402
 from wing_twin.engine.state import TwinState, EngineSnapshot
 from wing_twin.engine.dynamics import FlightDynamics
 from wing_twin.engine.fatigue_tracker import FatigueTracker
@@ -85,7 +81,6 @@ class DigitalTwinEngine:
             if engine_snapshot.life:
                 initial_life = LifePredictionState.from_dict(engine_snapshot.life)
             tracker_snap = {
-                "prev_low_confidence": engine_snapshot.prev_low_confidence,
                 "prev_flight_blocked": engine_snapshot.prev_flight_blocked,
             }
             if engine_snapshot.dynamics:
@@ -96,7 +91,6 @@ class DigitalTwinEngine:
             initial_state=initial_fatigue,
             initial_life_prediction=initial_life,
             tracker_snapshot=tracker_snap,
-            channel_names=list(self.config.calibration.channel_names),
         )
 
         self.state.structural.yield_point_pa = self.config.yield_point
@@ -149,8 +143,14 @@ class DigitalTwinEngine:
         if self.config.seed is not None:
             set_random_seed(self.config.seed)
 
-        self._channel_health = ChannelHealthTracker(
-            list(self.config.calibration.channel_names),
+        channel_names = list(self.config.calibration.channel_names)
+        if engine_snapshot and engine_snapshot.channels:
+            self._channel_mgr = ChannelManager.from_dict(engine_snapshot.channels, channel_names)
+        else:
+            self._channel_mgr = ChannelManager(channel_names)
+        self._prev_low_conf_notified: bool = (
+            engine_snapshot.prev_low_confidence
+            if engine_snapshot else False
         )
 
         self._tare_vector: Optional[np.ndarray] = None
@@ -240,6 +240,9 @@ class DigitalTwinEngine:
 
     def reset(self, target: str = "all") -> None:
         self.fatigue.reset(target)
+        if target in ("confidence", "all"):
+            self._channel_mgr.reset_confidence()
+            self._prev_low_conf_notified = False
         if target in ("strain", "all"):
             self.state.structural.strain_vector = []
             self.state.structural.forces = []
@@ -289,6 +292,7 @@ class DigitalTwinEngine:
         return EngineSnapshot(
             twin=self.state.to_snapshot_dict(),
             fatigue=self.fatigue.state.to_dict(),
+            channels=self._channel_mgr.to_dict(),
             life=self.life_prediction_state.to_dict(),
             flight={
                 "km_this_flight": self._km_this_flight,
@@ -299,8 +303,8 @@ class DigitalTwinEngine:
                 "time_elapsed": self._time_elapsed,
             },
             dynamics=self.dynamics.to_dict(),
-            prev_low_confidence=ts["prev_low_confidence"],
-            prev_flight_blocked=ts["prev_flight_blocked"],
+            prev_low_confidence=self._prev_low_conf_notified,
+            prev_flight_blocked=ts.get("prev_flight_blocked", False),
             wind=self._wind_tracker.to_dict(),
         )
 
@@ -310,7 +314,7 @@ class DigitalTwinEngine:
         if not self.state.flight.flight_allowed:
             return False
         self.dynamics.reset()
-        self.fatigue.reset(target="confidence")
+        self._channel_mgr.reset_confidence()
         self._takeoff_timer = 0.0
         self._km_this_flight = 0.0
         self._last_flight_damage = self.state.damage.damage
@@ -536,93 +540,97 @@ class DigitalTwinEngine:
         self._push_flight_state_to_source()
         self._update_altitude_km(dt)
 
+    def _to_strain_vec(self, reading: SensorReading) -> tuple[np.ndarray, Optional[list[bool]]]:
+        """Convert a sensor reading to a strain vector + saturated flags."""
+        cal = self.config.calibration
+        if isinstance(reading, RawSensorReading):
+            raw = np.array(reading.raw_values, dtype=np.float64)
+            off = np.array(reading.offset_values or [], dtype=np.float64)
+            scale = (
+                np.array(cal.per_channel_adc_to_strain_scale, dtype=np.float64)
+                if cal.per_channel_adc_to_strain_scale is not None
+                else cal.adc_to_strain_scale
+            )
+            compensated = raw - reading.dummy_raw - off
+            if self._tare_vector is not None:
+                compensated = compensated - self._tare_vector
+            return compensated * scale, reading.saturated_flags
+        if isinstance(reading, ProcessedSensorReading):
+            return np.array(reading.strain_vector, dtype=np.float64), None
+        raise ValueError(f"Unknown SensorReading type: {type(reading).__name__}")
+
+    def _compute_fea(self, strain: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Solve forces + FEA fields from a (possibly imputed) strain vector.
+
+        Returns (forces, expected_strain, stress_field, deformation_field).
+        """
+        cal = self.config.calibration
+        H = self._matrices.H
+        F = solve_forces(self._matrices.H_inv, strain)
+        F *= cal.H_matrix_scale
+        expected = H @ F
+        stress = compute_stress_field(self._matrices.S, F)
+        deformation = compute_deformation_field(self._matrices.U, F)
+        return F, expected, stress, deformation
+
+    def _store_fea(self, strain: np.ndarray, F: np.ndarray, stress: np.ndarray, deformation: np.ndarray) -> None:
+        self.state.structural.strain_vector = strain.tolist()
+        self.state.structural.forces = F.tolist()
+        self.state.structural.stress_field = stress.tolist()
+        self.state.structural.deformation_field = deformation.tolist()
+
+    def _update_low_confidence_notification(self) -> None:
+        """Show/hide the low-confidence maintenance notification."""
+        threshold = self.config.fatigue.confidence_frames_threshold
+        low_conf = self._channel_mgr.low_confidence_frames >= threshold
+        if low_conf and not self._prev_low_conf_notified:
+            bad = self._channel_mgr.bad_indices()
+            if bad:
+                names = [self.config.calibration.channel_names[i] for i in bad]
+                msg = f"Sensor readings low confidence. Problematic channels: {', '.join(names)}."
+            else:
+                msg = "Sensor readings show low confidence."
+            self.state.add_notification("maint_low_conf", "warning", "Maintenance Required", msg)
+        elif not low_conf and self._prev_low_conf_notified:
+            self.state.dismiss_notification("maint_low_conf")
+        self._prev_low_conf_notified = low_conf
+
     def _process_reading(self, reading: SensorReading) -> None:
-        """Process a sensor reading through -> FEA -> fatigue."""
+        """Process a sensor reading through ingestion → imputation → FEA → fatigue."""
         if self._matrices is None:
             raise RuntimeError("Call load_matrices() before processing readings")
 
         cal = self.config.calibration
         H = self._matrices.H
 
-        if isinstance(reading, RawSensorReading):
-            raw = np.array(reading.raw_values, dtype=np.float64)
-            off_vals = reading.offset_values if reading.offset_values is not None else []
-            off = np.array(off_vals, dtype=np.float64)
-            if cal.per_channel_adc_to_strain_scale is not None:
-                scale = np.array(cal.per_channel_adc_to_strain_scale, dtype=np.float64)
-            else:
-                scale = cal.adc_to_strain_scale
-            compensated = raw - reading.dummy_raw - off
-            if self._tare_vector is not None:
-                compensated = compensated - self._tare_vector
-            strain_vec = compensated * scale
+        strain_vec, saturated_flags = self._to_strain_vec(reading)
+        dead_mask = cal.dead_channel_mask()
 
-            bad_idxs = detect_bad_channels(strain_vec, cal.strain_saturation_threshold)
-            if reading.saturated_flags is not None:
-                for i, flagged in enumerate(reading.saturated_flags):
-                    if flagged and i not in bad_idxs:
-                        bad_idxs.append(i)
-                bad_idxs.sort()
-        elif isinstance(reading, ProcessedSensorReading):
-            strain_vec = np.array(reading.strain_vector, dtype=np.float64)
-            bad_idxs = detect_bad_channels(strain_vec, cal.strain_saturation_threshold)
-        else:
-            raise ValueError(f"Unknown SensorReading type: {type(reading).__name__}")
+        self._channel_mgr.ingest(strain_vec, saturated_flags, dead_mask, cal.strain_saturation_threshold)
 
-        # Permanently dead channels (near-zero calibration scale) are always imputed
-        dead_idxs = [
-            i for i, dead in enumerate(cal.dead_channel_mask())
-            if dead and i not in bad_idxs
-        ]
-        bad_idxs.extend(dead_idxs)
-        bad_idxs.sort()
+        # First-pass imputation -> FEA
+        strain_clean = self._channel_mgr.impute(H)
+        F, expected_strain, stress, deformation = self._compute_fea(strain_clean)
+        self._store_fea(strain_clean, F, stress, deformation)
 
-        pre_impute = strain_vec.copy()
-        strain_clean = strain_vec.copy()
-        if bad_idxs:
-            strain_clean = impute_channels(strain_clean, bad_idxs, H)
-
-        F = solve_forces(self._matrices.H_inv, strain_clean)
-        F *= cal.H_matrix_scale
-        expected_strain = H @ F
-
-        stress = compute_stress_field(self._matrices.S, F)
-        deformation = compute_deformation_field(self._matrices.U, F)
-
-        self.state.structural.strain_vector = strain_clean.tolist()
-        self.state.structural.forces = F.tolist()
-        self.state.structural.stress_field = stress.tolist()
-        self.state.structural.deformation_field = deformation.tolist()
-
-        dead_mask_np = np.array(cal.dead_channel_mask(), dtype=bool) if cal.per_channel_adc_to_strain_scale is not None else None
-
-        has_new_bad, all_bad = self.fatigue.process(
-            pre_impute_strain=pre_impute,
-            stress_field_pa=stress,
-            expected_strain=expected_strain,
-            twin_state=self.state,
-            H=H,
-            flight_phase=self._flight_phase,
-            dead_channel_mask=dead_mask_np,
-        )
+        # Confidence tracking -> re-imputation if needed
+        dead_mask_np = np.array(dead_mask, dtype=bool) if cal.per_channel_adc_to_strain_scale is not None else None
+        has_new_bad, _ = self._channel_mgr.update_confidence(expected_strain, self.config.fatigue, H, dead_mask_np)
+        self._channel_mgr.log_low_confidence_channels(self.config.fatigue)
 
         if has_new_bad and not self.config.fatigue.disable_confidence_imputation:
-            reimputed = impute_channels(pre_impute.copy(), all_bad, H)
-            F_re = solve_forces(self._matrices.H_inv, reimputed)
-            F_re *= cal.H_matrix_scale
-            stress_re = compute_stress_field(self._matrices.S, F_re)
-            deformation_re = compute_deformation_field(self._matrices.U, F_re)
+            reimputed = self._channel_mgr.reimpute(H)
+            F_re, _, stress_re, deformation_re = self._compute_fea(reimputed)
+            self._store_fea(reimputed, F_re, stress_re, deformation_re)
+            self.fatigue.accumulate_damage(stress_re, self.state, flight_phase=self._flight_phase)
 
-            self.state.structural.strain_vector = reimputed.tolist()
-            self.state.structural.forces = F_re.tolist()
-            self.state.structural.stress_field = stress_re.tolist()
-            self.state.structural.deformation_field = deformation_re.tolist()
+        # Damage accumulation (uses latest stored stress from either pass)
+        self.fatigue.accumulate_damage(stress, self.state, flight_phase=self._flight_phase)
 
-            self.fatigue.reaccumulate_damage(
-                stress_re, self.state, flight_phase=self._flight_phase,
-            )
-
-        self._channel_health.update(self.fatigue.state.bad_channels)
+        # Sync confidence & notifications
+        self.state.damage.confidence = self._channel_mgr.confidence
+        self._update_low_confidence_notification()
+        self._channel_mgr.to_health_events()
 
     def _update_safe_targets(self) -> None:
         """Convert desired angle/speed into safe targets."""
