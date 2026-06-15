@@ -68,7 +68,7 @@ def calibrate_stepper(
     logger.info("Starting stepper calibration (binary search)...")
 
     min_pos = calib_config.stepper_min_position
-    max_pos = calib_config.stepper_motor_max_steps
+    max_pos = calib_config.stepper_wing_safe_limit
     coarse = calib_config.stepper_coarse_step
     threshold = calib_config.stepper_strain_threshold
     num_samples = calib_config.stepper_calibration_num_samples
