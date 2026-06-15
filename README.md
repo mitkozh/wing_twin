@@ -298,7 +298,7 @@ Behind the scenes, the node automatically publishes sensor data (raw strain, off
 | Parameter | Default | Description |
 |---|---|---|
 | `STEPPER_MAX_SPEED` | 1000 steps/s | Maximum stepper speed |
-| `STEPPER_MAX_POSITION` | 2720 steps | Maximum stepper travel |
+| `STEPPER_MAX_POSITION` | 2742 steps | Maximum stepper travel |
 | `HX711_NUM_ACTIVE` | 9 | Number of active strain gauge channels |
 | `PUBLISH_INTERVAL_MS` | 1000 ms | Sensor data publish interval |
 | `MQTT_POSITION_TIMEOUT_MS` | 5000 ms | Timeout before auto-zero |

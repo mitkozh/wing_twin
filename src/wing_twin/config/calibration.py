@@ -32,23 +32,30 @@ def _load_calibration_file() -> dict | None:
 
 
 def _load_stepper_calibration() -> dict[str, float | int] | None:
-    calib_path = PROJECT_ROOT / "calibration" / "stepper" / "stepper_calibration.json"
-    if not calib_path.exists():
-        logger.info("Stepper calibration file not found at %s - using defaults", calib_path)
-        return None
-    try:
-        with open(calib_path) as f:
-            data = json.load(f)
-        return {
-            "steps_per_newton": data.get("steps_per_newton"),
-            "stepper_motor_max_steps": data.get("stepper_motor_max_steps"),
-            "stepper_motor_min_steps": data.get("stepper_motor_min_steps"),
-            "stepper_wing_safe_limit": data.get("stepper_wing_safe_limit"),
-            "stepper_max_frequency": data.get("stepper_max_frequency"),
-        }
-    except (json.JSONDecodeError, OSError, KeyError) as exc:
-        logger.warning("Failed to load %s: %s - using defaults", calib_path, exc)
-        return None
+    base = PROJECT_ROOT / "calibration" / "stepper"
+    # Try empirical first (hardware-measured), fall back to model (FEA-based)
+    for filename in ("stepper_calibration_empirical.json", "stepper_calibration_model.json"):
+        calib_path = base / filename
+        if not calib_path.exists():
+            continue
+        try:
+            with open(calib_path) as f:
+                data = json.load(f)
+            vals = {
+                "steps_per_newton": data.get("steps_per_newton"),
+                "stepper_motor_max_steps": data.get("stepper_motor_max_steps"),
+                "stepper_motor_min_steps": data.get("stepper_motor_min_steps"),
+                "stepper_wing_safe_limit": data.get("stepper_wing_safe_limit"),
+                "stepper_max_frequency": data.get("stepper_max_frequency"),
+            }
+            # Skip files where all values are None (empty placeholder)
+            if any(v is not None for v in vals.values()):
+                logger.info("Loaded stepper calibration from %s (%s)", filename, data.get("calibrated_with", "?"))
+                return vals
+        except (json.JSONDecodeError, OSError, KeyError) as exc:
+            logger.warning("Failed to load %s: %s", calib_path, exc)
+    logger.info("No stepper calibration file found - using defaults")
+    return None
 
 
 @dataclass
@@ -67,9 +74,9 @@ class CalibrationConfig:
 
     # Stepper motor
     steps_per_newton: float = 204.0
-    stepper_motor_max_steps: int = 2720        # physical limit of the stepper motor (override via stepper_calibration.json)
-    stepper_wing_safe_limit: int = 2500        # hard limit to prevent wing damage, clamped to motor_max (override via stepper_calibration.json)
-    stepper_max_frequency: float = 1000.0      # Hz, max step rate (override via stepper_calibration.json)
+    stepper_motor_max_steps: int = 2742        # physical motor limit (override via stepper_calibration_*.json)
+    stepper_wing_safe_limit: int = 320         # hard limit to prevent wing damage (override via stepper_calibration_*.json)
+    stepper_max_frequency: float = 1000.0      # Hz, max step rate (override via stepper_calibration_*.json)
     stepper_min_position: int = 0              # winch: fully retracted = 0, overwritten by stepper_motor_min_steps from calibration if present
     stepper_coarse_step: int = 20              # coarse search increment during zero cal
     stepper_strain_threshold: float = 5000.0   # ADC delta that indicates contact

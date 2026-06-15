@@ -4,8 +4,9 @@
 #define STEPPER_MAX_SPEED        1000.0f
 #define STEPPER_ACCELERATION     600.0f
 #define STEPPER_POSITION_TOLERANCE 5
-#define STEPPER_MIN_POSITION     0      /* update after running `range_test.py` (winch: always 0) */
-#define STEPPER_MAX_POSITION     2720   /* update after running `range_test.py` */
+#define STEPPER_MIN_POSITION         0
+#define STEPPER_MAX_POSITION         330    /* safe wing limit, adjustable at runtime */
+#define STEPPER_ABSOLUTE_MAX_POSITION 2742  /* physical motor limit, hard hardware stop */
 
 #define WIFI_TIMEOUT_MS          15000
 #define WIFI_CONNECT_COOLDOWN_MS 500

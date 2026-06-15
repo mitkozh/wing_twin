@@ -9,6 +9,7 @@ static long s_target = 0;
 static bool s_enabled = true;
 static bool s_pos_saved = false;
 static unsigned long s_last_move_save = 0;
+static long s_effective_max_pos = STEPPER_MAX_POSITION;
 
 static const char* PREFS_NS = "stepper";
 static Preferences s_prefs;
@@ -29,10 +30,25 @@ void stepper_init(void) {
 
 void stepper_set_target(long steps) {
     if (steps < STEPPER_MIN_POSITION) steps = STEPPER_MIN_POSITION;
-    if (steps > STEPPER_MAX_POSITION) steps = STEPPER_MAX_POSITION;
+    if (steps > s_effective_max_pos) steps = s_effective_max_pos;
     s_target = steps;
     s_stepper.moveTo(steps);
     stepper_set_dirty(true);
+}
+
+void stepper_set_max_position(long pos) {
+    if (pos < STEPPER_MIN_POSITION) pos = STEPPER_MIN_POSITION;
+    if (pos > STEPPER_ABSOLUTE_MAX_POSITION) pos = STEPPER_ABSOLUTE_MAX_POSITION;
+    s_effective_max_pos = pos;
+    Serial.printf("[STEPPER] max position set to %ld\n", pos);
+}
+
+long stepper_get_max_position(void) {
+    return s_effective_max_pos;
+}
+
+long stepper_get_absolute_max_position(void) {
+    return STEPPER_ABSOLUTE_MAX_POSITION;
 }
 
 void stepper_set_max_speed(float steps_per_sec) {
@@ -75,8 +91,8 @@ void stepper_loop(void) {
     s_stepper.run();
     long pos = s_stepper.currentPosition();
 
-    if (pos <= STEPPER_MIN_POSITION || pos >= STEPPER_MAX_POSITION) {
-        long clamped = constrain(pos, STEPPER_MIN_POSITION, STEPPER_MAX_POSITION);
+    if (pos <= STEPPER_MIN_POSITION || pos >= STEPPER_ABSOLUTE_MAX_POSITION) {
+        long clamped = constrain(pos, STEPPER_MIN_POSITION, STEPPER_ABSOLUTE_MAX_POSITION);
         s_stepper.moveTo(clamped);
         s_target = clamped;
     }

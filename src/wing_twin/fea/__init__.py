@@ -1,6 +1,6 @@
 from .matrices import load_transfer_matrices, TransferMatrices
 from .force_reconstruct import solve_forces
-from .field_compute import compute_stress_field, compute_deformation_field
+from .field_compute import compute_stress_field, compute_deformation_field, compute_force_from_deformation
 
 __all__ = [
     "load_transfer_matrices",
@@ -8,4 +8,5 @@ __all__ = [
     "solve_forces",
     "compute_stress_field",
     "compute_deformation_field",
+    "compute_force_from_deformation",
 ]

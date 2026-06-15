@@ -43,7 +43,22 @@ static void on_mqtt_message(const char* topic, const char* payload) {
     Serial.printf("[MQTT] << %s\n", payload);
 
     if (doc.containsKey("position")) {
-        stepper_set_target(doc["position"].as<long>());
+        long pos = doc["position"].as<long>();
+        long maxPos = stepper_get_max_position();
+        if (pos > maxPos) {
+            Serial.printf("[MAIN] position %ld exceeds max %ld — clamped\n", pos, maxPos);
+        }
+        stepper_set_target(pos);
+        s_statusDirty = true;
+    }
+
+    if (doc.containsKey("max_position")) {
+        long newMax = doc["max_position"].as<long>();
+        if (newMax > stepper_get_absolute_max_position()) {
+            Serial.printf("[MAIN] max_position %ld exceeds absolute max %ld — clamped\n",
+                newMax, stepper_get_absolute_max_position());
+        }
+        stepper_set_max_position(newMax);
         s_statusDirty = true;
     }
 

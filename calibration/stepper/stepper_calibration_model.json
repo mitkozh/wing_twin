@@ -1,0 +1,21 @@
+{
+    "version": 1,
+    "calibrated_at": "2026-06-15T01:41:40Z",
+    "calibrated_with": "Model-based: steps_per_mm \u00d7 U_tip (FEA)",
+    "steps_per_newton": 183.141,
+    "stepper_motor_max_steps": 2742,
+    "stepper_motor_min_steps": 0,
+    "stepper_wing_safe_limit": 330,
+    "stepper_max_frequency": 1000.0,
+    "max_newtons_calibrated": 1.8,
+    "method": "model",
+    "drum_diameter_mm": 26.0,
+    "microstepping": 8,
+    "steps_per_rev": 1600,
+    "wire_per_rev_mm": 81.68,
+    "steps_per_mm": 19.59,
+    "linear_travel_mm": 140.0,
+    "deformation_m_per_N": 0.0093486998,
+    "tip_deformation_mm_per_N": 9.3487,
+    "data_points": 0
+}

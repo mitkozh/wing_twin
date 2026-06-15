@@ -1,26 +1,3 @@
-"""
-Manual stepper max-frequency test.
-
-
-    1. The stepper moves back-and-forth at increasing step rates
-    2. At each speed, you observe (listen for stall buzz, watch wire)
-    3. Press   [p]   if the move was clean (pass)
-    4. Press   [f]   if the motor stalled or skipped steps (fail)
-    5. The last passing speed is saved as stepper_max_frequency
-
-You can also note the voltage at the driver supply (VMD) when stalling
-occurs, to find the practical voltage limit.
-
-Usage:
-    python -m calibration.stepper.max_frequency --mqtt-host localhost
-
-Options:
-    --start 100       Starting speed in steps/sec (default: 100)
-    --end 2000        Ending speed in steps/sec (default: 2000)
-    --step 100        Speed increment per cycle (default: 100)
-    --move 1000       Move distance in steps per half-cycle (default: 1000)
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -33,6 +10,7 @@ from pathlib import Path
 from calibration.stepper.mqtt_helpers import (
     MqttSession,
     update_stepper_calibration,
+    EMPIRICAL_FILE,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -124,13 +102,11 @@ def run_manual(
 
         speed += step
 
-    # Return to zero
     print("\n  Returning to 0 ...")
     session.publish_control({"position": 0})
     time.sleep(1)
     session.disconnect()
 
-    # Results
     print()
     print("=" * 60)
     print("Results")
@@ -166,9 +142,9 @@ def run_manual(
             "version": 1,
             "calibrated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "stepper_max_frequency": float(recommended),
-        })
+        }, filename=EMPIRICAL_FILE)
 
-        print("  Saved to stepper_calibration.json")
+        print(f"  Saved to {EMPIRICAL_FILE}")
         print()
         print("  Update firmware config.h:")
         print(f"    #define STEPPER_MAX_SPEED  {recommended}.0f")

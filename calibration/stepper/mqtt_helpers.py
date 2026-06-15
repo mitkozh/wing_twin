@@ -14,6 +14,9 @@ from wing_twin.config.io import (
     STEPPER_STATUS_TOPIC,
 )
 
+EMPIRICAL_FILE = "stepper_calibration_empirical.json"
+MODEL_FILE = "stepper_calibration_model.json"
+
 
 class MqttSession:
     def __init__(self, host: str = "localhost", port: int = 1883,
@@ -29,7 +32,6 @@ class MqttSession:
         self.client.on_message = self._dispatcher
         self.client.connect(host, port, 60)
         self.client.loop_start()
-
 
     def _dispatcher(self, _client: mqtt.Client, _userdata, msg: mqtt.MQTTMessage) -> None:
         try:
@@ -61,11 +63,9 @@ class MqttSession:
 
     def add_callback(self, cb: Callable) -> Callable[[], None]:
         self._callbacks.append(cb)
-
         def _remove() -> None:
             if cb in self._callbacks:
                 self._callbacks.remove(cb)
-
         return _remove
 
     def subscribe_sensors(self) -> None:
@@ -80,7 +80,6 @@ class MqttSession:
 
     def collect_samples(self, duration_s: float) -> list[dict]:
         records: list[dict] = []
-
         def _collector(_c, _u, msg):
             try:
                 data = json.loads(msg.payload)
@@ -91,7 +90,6 @@ class MqttSession:
             data["_wall_t"] = time.time()
             data["stepper_position"] = self.latest_stepper_pos
             records.append(data)
-
         remove = self.add_callback(_collector)
         t0 = time.time()
         while time.time() - t0 < duration_s:
@@ -99,12 +97,7 @@ class MqttSession:
         remove()
         return records
 
-    def wait_for_stable_position(
-        self,
-        target: int,
-        timeout_s: float = 5.0,
-        tolerance: int = 5,
-    ) -> tuple[bool, int | None]:
+    def wait_for_stable_position(self, target: int, timeout_s: float = 5.0, tolerance: int = 5) -> tuple[bool, int | None]:
         t0 = time.time()
         while time.time() - t0 < timeout_s:
             pos = self.latest_stepper_pos
@@ -113,12 +106,7 @@ class MqttSession:
             time.sleep(0.05)
         return False, self.latest_stepper_pos
 
-    def command_and_wait(
-        self,
-        position: int,
-        settle_s: float = 0.5,
-        timeout_s: float = 5.0,
-    ) -> int | None:
+    def command_and_wait(self, position: int, settle_s: float = 0.5, timeout_s: float = 5.0) -> int | None:
         self.publish_control({"position": position})
         time.sleep(settle_s)
         _, actual = self.wait_for_stable_position(position, timeout_s=timeout_s)
@@ -129,35 +117,24 @@ class MqttSession:
         self.client.disconnect()
 
 
-
-def save_csv(filename: Path, records: list[dict], fieldnames: list[str]) -> None:
-    import csv
-
-    with open(filename, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(fieldnames)
-        for rec in records:
-            w.writerow([rec.get(fn, "") for fn in fieldnames])
-
-
-def load_stepper_calibration(calib_dir: Path) -> dict:
-    path = calib_dir / "stepper_calibration.json"
+def load_stepper_calibration(calib_dir: Path, filename: str = EMPIRICAL_FILE) -> dict:
+    path = calib_dir / filename
     if not path.exists():
         return {}
     with open(path) as f:
         return json.load(f)
 
 
-def save_stepper_calibration(calib_dir: Path, data: dict) -> None:
-    path = calib_dir / "stepper_calibration.json"
+def save_stepper_calibration(calib_dir: Path, data: dict, filename: str = EMPIRICAL_FILE) -> None:
+    path = calib_dir / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         json.dump(data, f, indent=4)
     print(f"  Calibration saved to {path}")
 
 
-def update_stepper_calibration(calib_dir: Path, updates: dict) -> dict:
-    existing = load_stepper_calibration(calib_dir)
+def update_stepper_calibration(calib_dir: Path, updates: dict, filename: str = EMPIRICAL_FILE) -> dict:
+    existing = load_stepper_calibration(calib_dir, filename)
     existing.update(updates)
-    save_stepper_calibration(calib_dir, existing)
+    save_stepper_calibration(calib_dir, existing, filename=filename)
     return existing
