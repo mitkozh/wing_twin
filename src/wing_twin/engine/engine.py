@@ -545,7 +545,7 @@ class DigitalTwinEngine:
         cal = self.config.calibration
         if isinstance(reading, RawSensorReading):
             raw = np.array(reading.raw_values, dtype=np.float64)
-            off = np.array(reading.offset_values or [], dtype=np.float64)
+            off = np.array(reading.offset_values if reading.offset_values is not None else [], dtype=np.float64)
             scale = (
                 np.array(cal.per_channel_adc_to_strain_scale, dtype=np.float64)
                 if cal.per_channel_adc_to_strain_scale is not None

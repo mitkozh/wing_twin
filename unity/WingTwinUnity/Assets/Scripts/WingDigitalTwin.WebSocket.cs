@@ -231,6 +231,18 @@ public partial class WingDigitalTwin : MonoBehaviour
             if (maintenanceToggle != null)
                 maintenanceToggle.SetValueWithoutNotify(maintenanceAssist);
 
+            if (!string.IsNullOrEmpty(data.heatmap_mode))
+            {
+                bool isDamageMode = data.heatmap_mode == "damage";
+                if (isDamageMode != showDamageHeatmap)
+                {
+                    showDamageHeatmap = isDamageMode;
+                    if (heatmapToggle != null)
+                        heatmapToggle.SetValueWithoutNotify(showDamageHeatmap);
+                    UpdateHeatmapToggleLabel(showDamageHeatmap);
+                }
+            }
+
             string desiredHex = "#" + ColorUtility.ToHtmlStringRGB(desiredColor);
             string allowedHex = "#" + ColorUtility.ToHtmlStringRGB(allowedColor);
 

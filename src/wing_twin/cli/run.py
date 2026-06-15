@@ -129,10 +129,13 @@ async def run_production(
                 None, publisher.publish_stepper_position,
                 engine.state.stepper.stepper_position,
             )
-            loop.run_in_executor(
-                None, publisher.publish_led_command,
-                engine.state.compute_led_colors(),
-            )
+            try:
+                led_colors = engine.state.compute_led_colors()
+                loop.run_in_executor(
+                    None, publisher.publish_led_command, led_colors,
+                )
+            except Exception as e:
+                logger.error("Failed to compute/publish LED colors: %s", e)
             await asyncio.sleep(0.05)
             await broadcaster.broadcast()
 

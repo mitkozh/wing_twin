@@ -371,6 +371,7 @@ public partial class WingDigitalTwin : MonoBehaviour
         public bool pre_flight_safe;
         public string pre_flight_warning;
         public bool maintenance_assist;
+        public string heatmap_mode;
     }
 
     [Serializable]

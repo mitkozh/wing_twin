@@ -33,7 +33,7 @@ class FatigueConfig:
     confidence_weight_force: float = 0.20
 
     # When True, low-confidence channels do NOT trigger re-imputation.
-    disable_confidence_imputation: bool = False
+    disable_confidence_imputation: bool = True
 
     damage_warning: float = 0.3
     damage_critical: float = 0.8

@@ -195,10 +195,13 @@ async def run_simulator(
                 None, publisher.publish_stepper_position,
                 engine.state.stepper.stepper_position,
             )
-            loop.run_in_executor(
-                None, publisher.publish_led_command,
-                engine.state.compute_led_colors(),
-            )
+            try:
+                led_colors = engine.state.compute_led_colors()
+                loop.run_in_executor(
+                    None, publisher.publish_led_command, led_colors,
+                )
+            except Exception as e:
+                logger.error("Failed to compute/publish LED colors: %s", e)
 
             if publish_sensors:
                 mqtt_bridge.publish_engine_state(engine)
@@ -261,8 +264,8 @@ def main() -> None:
         help="Publish synthetic sensor data to MQTT sensors topic (for dashboard testing)",
     )
     parser.add_argument(
-        "--ws", action="store_true",
-        help="Enable WebSocket server for Unity visualization",
+        "--no-ws", action="store_true",
+        help="Disable WebSocket server for Unity visualization",
     )
     parser.add_argument(
         "--seed", type=int, default=None,
@@ -290,7 +293,7 @@ def main() -> None:
         logger.info("  Figures:      enabled on exit")
     if args.publish_sensors:
         logger.info("  Sensor bridge: enabled -> %s", mqtt_config.sensors_topic)
-    if args.ws:
+    if not args.no_ws:
         logger.info("  WebSocket:    enabled (ws://localhost:8765)")
     if args.seed is not None:
         logger.info("  Random seed:  %d", args.seed)
@@ -307,7 +310,7 @@ def main() -> None:
                 mqtt_config,
                 auto_takeoff=args.auto_takeoff,
                 seed=args.seed,
-                enable_ws=args.ws,
+                enable_ws=not args.no_ws,
                 record=args.record,
                 record_figures=bool(args.figures),
                 publish_sensors=args.publish_sensors,
