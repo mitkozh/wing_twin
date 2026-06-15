@@ -15,7 +15,7 @@ STEPPER_STATUS_TOPIC = "wing/stepper/status"
 @dataclass
 class MqttConfig:
     broker: str = "localhost"
-    port: int = 1883
+    port: int = 1884
     sensors_topic: str = SENSOR_DATA_TOPIC
     control_topic: str = SENSOR_COMMAND_TOPIC
     stepper_command_topic: str = STEPPER_COMMAND_TOPIC
