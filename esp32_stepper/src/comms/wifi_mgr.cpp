@@ -51,9 +51,11 @@ void wifi_mgr_loop(void) {
         s_pending = false;
         s_retryMs = min(s_retryMs * 2, s_maxRetryMs);
     }
+    if (s_pending) return;
     if (now - s_lastAttempt < s_retryMs) return;
     Serial.printf("[WIFI] Connecting to %s...\n", WIFI_SSID);
 #ifdef WIFI_EAP_IDENTITY
+    esp_wifi_sta_wpa2_ent_enable();
     WiFi.begin(WIFI_SSID);
 #else
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
