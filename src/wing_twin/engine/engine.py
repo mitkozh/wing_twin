@@ -418,7 +418,7 @@ class DigitalTwinEngine:
 
         touchdown_alt = profile.flare_altitude_m
         if alt <= touchdown_alt:
-            self.state.flight.altitude = max(0.0, self.state.flight.altitude - 0.1 * dt)
+            self.state.flight.altitude = max(0.0, self.state.flight.altitude - 0.5 * dt)
         else:
             self._update_altitude_km(dt)
 

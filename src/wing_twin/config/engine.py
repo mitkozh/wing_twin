@@ -40,7 +40,7 @@ class EngineConfig:
     landing_touchdown_speed: float = 5.0
     landing_approach_aoa_deg: float = 5.0
     landing_flare_aoa_deg: float = 8.0
-    landing_altitude_threshold: float = 0.5
+    landing_altitude_threshold: float = 0.3
     max_landing_altitude: float = 50.0
     min_safe_altitude: float = 25.0
     altitude_recovery_aoa_deg: float = 8.0
