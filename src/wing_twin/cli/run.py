@@ -76,7 +76,7 @@ async def run_production(
         if stepper_monitor.state.last_seen > 0:
             break
         await asyncio.sleep(0.1)
-    calibrate_stepper(publisher, sensor_source, stepper_monitor, calib_config)
+    # calibrate_stepper(publisher, sensor_source, stepper_monitor, calib_config)
 
     # Collect tare baseline at confirmed position 0 (no load)
     logger.info("Collecting tare baseline...")
