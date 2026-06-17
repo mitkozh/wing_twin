@@ -19,7 +19,7 @@ MODEL_FILE = "stepper_calibration_model.json"
 
 
 class MqttSession:
-    def __init__(self, host: str = "localhost", port: int = 1883,
+    def __init__(self, host: str = "131.155.209.40", port: int = 1884,
                  esp32_timeout_s: float = 5.0, stepper_timeout_s: float = 5.0) -> None:
         self.client = mqtt.Client()
         self._esp32_timeout_s = esp32_timeout_s

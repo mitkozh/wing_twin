@@ -123,8 +123,8 @@ def collect_for_weight(
 
 def main():
     parser = argparse.ArgumentParser(description="Collect calibration sensor data")
-    parser.add_argument("--mqtt-host", default="localhost", help="MQTT broker host")
-    parser.add_argument("--mqtt-port", type=int, default=1883, help="MQTT broker port")
+    parser.add_argument("--mqtt-host", default="131.155.209.40", help="MQTT broker host")
+    parser.add_argument("--mqtt-port", type=int, default=1884, help="MQTT broker port")
     parser.add_argument(
         "--weights",
         default="0,100,200,500,1000",

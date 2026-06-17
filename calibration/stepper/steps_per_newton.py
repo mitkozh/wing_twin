@@ -227,8 +227,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Empirical steps-per-newton calibration (needs hardware)"
     )
-    parser.add_argument("--mqtt-host", default="localhost")
-    parser.add_argument("--mqtt-port", type=int, default=1883)
+    parser.add_argument("--mqtt-host", default="131.155.209.40")
+    parser.add_argument("--mqtt-port", type=int, default=1884)
     parser.add_argument("--max-newtons", type=float, default=None)
     parser.add_argument("--use-deformation", action="store_true")
     parser.add_argument("--duration", type=float, default=5.0)

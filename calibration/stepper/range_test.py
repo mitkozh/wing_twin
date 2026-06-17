@@ -91,8 +91,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Empirical stepper range calibration (needs hardware)"
     )
-    parser.add_argument("--mqtt-host", default="localhost")
-    parser.add_argument("--mqtt-port", type=int, default=1883)
+    parser.add_argument("--mqtt-host", default="131.155.209.40")
+    parser.add_argument("--mqtt-port", type=int, default=1884)
     parser.add_argument("--microstep", type=int, default=8, help="Microstepping (1, 2, 4, 8, 16, 32)")
     args = parser.parse_args()
 

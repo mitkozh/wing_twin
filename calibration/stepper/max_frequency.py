@@ -158,8 +158,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Manual stepper max-frequency test"
     )
-    parser.add_argument("--mqtt-host", default="localhost")
-    parser.add_argument("--mqtt-port", type=int, default=1883)
+    parser.add_argument("--mqtt-host", default="131.155.209.40")
+    parser.add_argument("--mqtt-port", type=int, default=1884)
     parser.add_argument("--start", type=int, default=100, help="Start speed (steps/s)")
     parser.add_argument("--end", type=int, default=2000, help="End speed (steps/s)")
     parser.add_argument("--step", type=int, default=100, help="Speed increment (steps/s)")

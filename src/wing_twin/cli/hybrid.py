@@ -245,7 +245,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Wing Digital Twin - Hybrid Run (simulated aero/strain, physical stepper/LEDs)"
     )
-    parser.add_argument("--broker", default="localhost", help="MQTT broker address")
+    parser.add_argument("--broker", default="131.155.209.40", help="MQTT broker address")
     parser.add_argument("--port", type=int, default=1884, help="MQTT broker port")
     parser.add_argument(
         "--auto-takeoff", action="store_true",

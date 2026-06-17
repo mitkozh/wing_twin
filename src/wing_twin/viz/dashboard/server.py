@@ -148,7 +148,7 @@ class _MqttThread(threading.Thread):
             pass
 
 
-def create_app(broker: str = "localhost", port: int = 1883):
+def create_app(broker: str = "131.155.209.40", port: int = 1884):
     """Build and return the Flask WSGI app."""
     from flask import Flask, jsonify, request, send_from_directory
 
@@ -258,7 +258,7 @@ def create_app(broker: str = "localhost", port: int = 1883):
     return app
 
 
-def run_dashboard(broker: str = "localhost", port: int = 1883,
+def run_dashboard(broker: str = "131.155.209.40", port: int = 1884,
                   host: str = "0.0.0.0", web_port: int = 5050) -> None:
     app = create_app(broker, port)
     print(f"[DASHBOARD] http://{host}:{web_port}")
