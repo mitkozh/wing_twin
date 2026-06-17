@@ -10,6 +10,7 @@ Plots:
 Usage:
     python -m calibration.plot                          # plot all found data
     python -m calibration.plot --type strain            # only strain calibration
+    python -m calibration.plot --type comparison        # FEA model vs empirical comparison
     python -m calibration.plot --csv <path>             # plot a specific CSV
 """
 
@@ -36,6 +37,8 @@ PROJECT_ROOT = HERE.parent
 STRAIN_DATA_DIR = HERE / "strain" / "data"
 STEPPER_DATA_DIR = HERE / "stepper" / "data"
 CALIB_DATA_PATH = HERE / "strain" / "calibration_data.json"
+MODEL_JSON = HERE / "stepper" / "stepper_calibration_model.json"
+EMPIRICAL_JSON = HERE / "stepper" / "stepper_calibration_empirical.json"
 
 CHANNEL_NAMES = [
     "root_0", "root_45", "root_90",
@@ -54,6 +57,13 @@ def load_h_matrix() -> np.ndarray | None:
 def load_calibration_data() -> dict | None:
     if CALIB_DATA_PATH.exists():
         with open(CALIB_DATA_PATH) as f:
+            return json.load(f)
+    return None
+
+
+def load_stepper_calibration_json(path: Path) -> dict | None:
+    if path.exists():
+        with open(path) as f:
             return json.load(f)
     return None
 
@@ -368,6 +378,89 @@ def plot_steps_per_newton(csv_paths: list[Path]) -> None:
     plt.show()
 
 
+# ─── Model vs Empirical comparison ───────────────────────────────────────────
+
+def plot_stepper_calibration_comparison() -> None:
+    model = load_stepper_calibration_json(MODEL_JSON)
+    empirical = load_stepper_calibration_json(EMPIRICAL_JSON)
+
+    if model is None and empirical is None:
+        print("  No stepper calibration JSON files found")
+        return
+
+    fig, axes = plt.subplots(1, 2 if empirical else 1, figsize=(14, 5))
+    ax1 = axes[0] if isinstance(axes, np.ndarray) else axes
+    ax2 = axes[1] if isinstance(axes, np.ndarray) else None
+
+    fig.suptitle("Stepper Calibration: FEA Model vs Empirical", fontsize=14)
+
+    max_force = 2.0
+    if empirical:
+        pairs = empirical.get("force_step_pairs", [])
+        if pairs:
+            max_force = max(max_force, max(p[0] for p in pairs) * 1.1)
+
+    # Left: Force vs Steps
+    if model is not None:
+        model_spn = float(model["steps_per_newton"])
+        f_lin = np.linspace(0, max_force, 200)
+        s_lin = f_lin * model_spn
+        ax1.plot(s_lin, f_lin, "b--", linewidth=2,
+                 label=f"FEA Model  ({model_spn:.1f} steps/N)")
+
+    if empirical is not None:
+        pairs = empirical.get("force_step_pairs", [])
+        if pairs:
+            forces, steps = zip(*pairs)
+            ax1.scatter(steps, forces, s=25, color="crimson",
+                        zorder=3, label="Empirical data points")
+
+        emp_spn = empirical.get("steps_per_newton")
+        if emp_spn:
+            f_lin2 = np.linspace(0, max_force, 200)
+            s_lin2 = f_lin2 * float(emp_spn)
+            r2 = empirical.get("r_squared", 0)
+            label = f"Empirical  ({emp_spn:.1f} steps/N, R\u00b2={r2:.3f})"
+            ax1.plot(s_lin2, f_lin2, "r-", linewidth=2, label=label)
+
+    ax1.set_xlabel("Stepper Position (steps)")
+    ax1.set_ylabel("Force (N)")
+    ax1.set_title("Force vs Position")
+    ax1.legend(fontsize=8)
+    ax1.grid(True, alpha=0.3)
+
+    # Right: Bar chart comparison
+    if ax2 is not None and empirical is not None:
+        labels = []
+        values = []
+        if model is not None:
+            labels.append("FEA Model")
+            values.append(float(model["steps_per_newton"]))
+        emp_spn = empirical.get("steps_per_newton")
+        if emp_spn:
+            labels.append("Empirical")
+            values.append(float(emp_spn))
+
+        colors = ["royalblue", "crimson"]
+        bars = ax2.bar(labels, values, color=colors[:len(labels)],
+                       alpha=0.7, width=0.5, edgecolor="gray")
+        ax2.set_ylabel("Steps per Newton")
+        ax2.set_title("Steps/Newton Comparison")
+        for bar, val in zip(bars, values):
+            ax2.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 5,
+                     f"{val:.1f}", ha="center", fontsize=10, fontweight="bold")
+
+        if len(values) == 2 and values[1] != 0:
+            pct = (values[1] - values[0]) / values[0] * 100
+            ax2.text(0.5, 0.95, f"Difference: {pct:+.1f}%",
+                     transform=ax2.transAxes, ha="center", fontsize=10,
+                     bbox=dict(boxstyle="round", facecolor="lightyellow"))
+        ax2.grid(True, alpha=0.3, axis="y")
+
+    plt.tight_layout()
+    plt.show()
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def plot_all() -> None:
@@ -393,6 +486,9 @@ def plot_all() -> None:
     else:
         print("No steps-per-newton CSVs found (run calibration.stepper.steps_per_newton)")
 
+    print("Plotting model vs empirical comparison...")
+    plot_stepper_calibration_comparison()
+
     if not any(files.values()):
         print("No CSV data files found anywhere.")
         print("Run calibration scripts first to generate data, e.g.:")
@@ -406,7 +502,8 @@ def main():
         sys.exit(1)
 
     parser = argparse.ArgumentParser(description="Plot calibration data")
-    parser.add_argument("--type", choices=["strain", "stepper", "all"], default="all")
+    parser.add_argument("--type", choices=["strain", "stepper", "comparison", "all"],
+                        default="all")
     parser.add_argument("--csv", type=Path, default=None, help="Plot a specific CSV file")
     args = parser.parse_args()
 
@@ -442,6 +539,9 @@ def main():
             plot_steps_per_newton(files["steps_per_newton"])
         if not any(v for k, v in files.items() if k != "strain"):
             print("No stepper CSV data found")
+        plot_stepper_calibration_comparison()
+    elif args.type == "comparison":
+        plot_stepper_calibration_comparison()
     else:
         plot_all()
 
