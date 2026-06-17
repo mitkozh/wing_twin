@@ -2,7 +2,7 @@
 #define CONFIG_H
 
 #define STEPPER_MAX_SPEED        4000.0f
-#define STEPPER_ACCELERATION     3000.0f
+#define STEPPER_ACCELERATION     15000.0f
 #define STEPPER_POSITION_TOLERANCE 3
 #define STEPPER_MIN_POSITION         0
 #define STEPPER_MAX_POSITION         1503   /* safe wing limit (1.8 N × 834.96 steps/N), adjustable at runtime */

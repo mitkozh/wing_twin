@@ -8,7 +8,6 @@ static AccelStepper s_stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
 static long s_target = 0;
 static bool s_enabled = true;
 static bool s_pos_saved = false;
-static unsigned long s_last_move_save = 0;
 static long s_effective_max_pos = STEPPER_MAX_POSITION;
 
 static const char* PREFS_NS = "stepper";
@@ -98,11 +97,8 @@ void stepper_loop(void) {
     }
 
     if (stepper_is_moving()) {
+        stepper_set_dirty(true);
         s_pos_saved = false;
-        if (millis() - s_last_move_save > 500) {
-            stepper_save_position();
-            s_last_move_save = millis();
-        }
         return;
     }
 
