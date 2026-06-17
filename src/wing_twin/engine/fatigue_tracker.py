@@ -30,6 +30,10 @@ class FatigueTracker:
     ):
         self.config = config
         self.state = initial_state or FatigueState()
+        self._smoothed_damage = (
+            tracker_snapshot.get("smoothed_damage", 0.0)
+            if tracker_snapshot else 0.0
+        )
         self._prev_flight_blocked = (
             tracker_snapshot.get("prev_flight_blocked", False)
             if tracker_snapshot else False
@@ -39,11 +43,15 @@ class FatigueTracker:
         )
 
     def tracker_snapshot(self) -> dict:
-        return {"prev_flight_blocked": self._prev_flight_blocked}
+        return {
+            "prev_flight_blocked": self._prev_flight_blocked,
+            "smoothed_damage": self._smoothed_damage,
+        }
 
     def reset(self, target: str = "all") -> None:
         if target in ("damage", "all"):
             self.state = FatigueState()
+            self._smoothed_damage = 0.0
             self._prev_flight_blocked = False
 
     def accumulate_damage(
@@ -68,15 +76,22 @@ class FatigueTracker:
     def _update_damage_metrics(self, twin_state: TwinState) -> None:
         if self.state.node_damages:
             values = list(self.state.node_damages.values())
-            twin_state.damage.damage = max(values)
+            raw_damage = max(values)
             sorted_vals = sorted(values, reverse=True)
             top_10_pct = sorted_vals[: max(1, len(sorted_vals) // 10)]
             twin_state.damage.avg_damage = (
                 sum(top_10_pct) / len(top_10_pct) if top_10_pct else 0.0
             )
         else:
-            twin_state.damage.damage = self.state.damage
+            raw_damage = self.state.damage
             twin_state.damage.avg_damage = 0.0
+
+        alpha = self.config.damage_smoothing_alpha
+        if alpha > 0:
+            self._smoothed_damage = alpha * raw_damage + (1.0 - alpha) * self._smoothed_damage
+            twin_state.damage.damage = self._smoothed_damage
+        else:
+            twin_state.damage.damage = raw_damage
 
         twin_state.structural.cycles_histogram = dict(self.state.cycles_histogram)
 

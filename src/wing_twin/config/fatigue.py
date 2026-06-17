@@ -37,6 +37,15 @@ class FatigueConfig:
 
     damage_warning: float = 0.3
     damage_critical: float = 0.8
+
+    # Per-node damage increment rate limit — prevents impossible rapid damage
+    # acceleration from spurious strain readings. Set to 0.0 to disable.
+    max_damage_increment_per_frame: float = 0.05
+
+    # EMA alpha for smoothing the displayed damage value sent to Unity
+    # (actual accumulated damage is unaffected). 0.0 = no smoothing, 1.0 = raw.
+    damage_smoothing_alpha: float = 0.05
+
     material: str = "demo"
     initial_remaining_km: float = 500.0
 
@@ -74,4 +83,6 @@ class FatigueConfig:
                 f"FatigueConfig.damage_warning ({self.damage_warning}) must be "
                 f"< damage_critical ({self.damage_critical})"
             )
+        check_ge(self.max_damage_increment_per_frame, "FatigueConfig.max_damage_increment_per_frame", 0)
+        check_range(self.damage_smoothing_alpha, "FatigueConfig.damage_smoothing_alpha", 0, 1)
         check_ge(self.initial_remaining_km, "FatigueConfig.initial_remaining_km", 0)

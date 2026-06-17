@@ -175,6 +175,8 @@ def _process_single_node(
 
     damage_per_bin = calc_pm(cc.stress_range, cc.count_cycle, sn_curve)
     node_damage = float(np.sum(damage_per_bin))
+    if config.max_damage_increment_per_frame > 0:
+        node_damage = min(node_damage, config.max_damage_increment_per_frame)
     with state._lock:
         state.node_damages[node_idx] = min(state.node_damages[node_idx] + node_damage, 1.0)
     return node_damage
