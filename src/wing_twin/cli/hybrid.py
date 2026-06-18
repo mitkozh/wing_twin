@@ -29,6 +29,8 @@ from wing_twin.io.protocol import STEPPER_COMMAND_TOPIC
 from wing_twin.io.simulator import SimulatorSource
 from wing_twin.io.websocket import WebSocketBroadcaster, EngineCommandHandler
 from wing_twin.viz.generator import generate_figures_from_recording
+from wing_twin.recorder.recorder import load_engine_snapshot
+from wing_twin.engine.state import EngineSnapshot
 
 from ._lifecycle import (
     cancel_task,
@@ -113,9 +115,10 @@ async def run_simulator(
     record_figures: bool = False,
     publish_sensors: bool = False,
     physical_model_forces: bool = True,
+    resume_snapshot: Optional[EngineSnapshot] = None,
 ) -> Optional[Path]:
     config = EngineConfig(seed=seed)
-    engine = DigitalTwinEngine(config)
+    engine = DigitalTwinEngine(config, engine_snapshot=resume_snapshot)
 
     logger.info("Loading transfer matrices...")
     try:
@@ -275,6 +278,10 @@ def main() -> None:
         "--no-physical-model", action="store_true",
         help="Use realistic signed aero forces instead of stepper-only (downward) forces",
     )
+    parser.add_argument(
+        "--resume", type=str, default=None,
+        help="Resume from prior run directory",
+    )
     args = parser.parse_args()
 
     mqtt_config = MqttConfig(broker=args.broker, port=args.port)
@@ -299,6 +306,20 @@ def main() -> None:
         logger.info("  Random seed:  %d", args.seed)
     if not args.no_physical_model:
         logger.info("  Physical model: enabled (downward forces only)")
+
+    resume_snapshot = None
+    if args.resume:
+        resume_snapshot = load_engine_snapshot(Path(args.resume))
+
+    if resume_snapshot is not None:
+        dmg = (resume_snapshot.fatigue or {}).get("damage", 0.0)
+        n_cyc = len((resume_snapshot.fatigue or {}).get("cycles", []))
+        n_flt = (resume_snapshot.life or {}).get("total_flights", 0)
+        total_km = (resume_snapshot.life or {}).get("total_km_flown", 0.0)
+        logger.info("  Resuming from prior run (D=%.4f, %d cycles, %d flights, %.1f km)", dmg, n_cyc, n_flt, total_km)
+        km_resume = (resume_snapshot.flight or {}).get("km_this_flight", 0.0)
+        if km_resume > 0:
+            logger.info("  Aborted flight recovered (%.3f km)", km_resume)
     logger.info("=" * 60)
 
     output_dir = Path(args.figures) if isinstance(args.figures, str) else PROJECT_ROOT / "figures"
@@ -315,6 +336,7 @@ def main() -> None:
                 record_figures=bool(args.figures),
                 publish_sensors=args.publish_sensors,
                 physical_model_forces=not args.no_physical_model,
+                resume_snapshot=resume_snapshot,
             )
         )
 
