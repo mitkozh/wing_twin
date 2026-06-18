@@ -21,16 +21,16 @@ class BasePlotter(ABC):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        plt.style.use("dark_background")
+        plt.style.use("default")
         matplotlib.rcParams.update({
-            "font.family": "monospace",
-            "axes.facecolor": "#1e1e2e",
-            "figure.facecolor": "#111118",
-            "axes.edgecolor": "#555566",
-            "axes.labelcolor": "#cccccc",
-            "xtick.color": "#aaaaaa",
-            "ytick.color": "#aaaaaa",
-            "grid.color": "#333344",
+            "font.family": "sans-serif",
+            "axes.facecolor": "#ffffff",
+            "figure.facecolor": "#ffffff",
+            "axes.edgecolor": "#333333",
+            "axes.labelcolor": "#222222",
+            "xtick.color": "#222222",
+            "ytick.color": "#222222",
+            "grid.color": "#dddddd",
             "grid.linewidth": 0.5,
             "axes.titlesize": 11,
             "axes.labelsize": 9,
@@ -58,19 +58,23 @@ class BasePlotter(ABC):
 
     def _parse_cycles(self, cycles):
         if not cycles:
-            return np.array([]), np.array([])
+            return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+
+        if isinstance(cycles, dict):
+            items = sorted(cycles.items())
+            return np.array([k for k, _ in items], dtype=np.float64), np.array([v for _, v in items], dtype=np.float64)
 
         if isinstance(cycles[0], (list, tuple, np.ndarray)) and len(cycles[0]) == 2:
-            ranges_arr = np.array([c[0] for c in cycles])
-            counts_arr = np.array([c[1] for c in cycles])
-            unique_ranges, _ = np.unique(ranges_arr, return_counts=True)
+            ranges_arr = np.array([c[0] for c in cycles], dtype=np.float64)
+            counts_arr = np.array([c[1] for c in cycles], dtype=np.float64)
+            if len(ranges_arr) == 0:
+                return np.array([]), np.array([])
+            unique_ranges, inverse = np.unique(ranges_arr, return_inverse=True)
             total_counts = np.zeros_like(unique_ranges)
-            for r, c in zip(ranges_arr, counts_arr):
-                idx = np.searchsorted(unique_ranges, r)
-                total_counts[idx] += c
+            np.add.at(total_counts, inverse, counts_arr)
             return unique_ranges, total_counts
 
-        rngs = np.asarray(cycles)
+        rngs = np.asarray(cycles, dtype=np.float64)
         if rngs.ndim == 2 and rngs.shape[1] == 3:
             return rngs[:, 1], rngs[:, 2]
-        return np.asarray(cycles), np.ones(len(cycles))
+        return rngs, np.ones(len(rngs), dtype=np.float64)

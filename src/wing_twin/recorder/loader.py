@@ -17,8 +17,11 @@ class RecordingData(NamedTuple):
     strain: Optional[np.ndarray]
     times: Optional[np.ndarray]
     damage: Optional[np.ndarray]
+    confidence: Optional[np.ndarray]
+    angle_of_attack: Optional[np.ndarray]
+    airspeed: Optional[np.ndarray]
     stress_field: Optional[np.ndarray]
-    deformation_field: Optional[np.ndarray]
+    stress_field_times: Optional[np.ndarray]
     cycles: list
 
 
@@ -38,30 +41,39 @@ class DataLoader:
 
     def load_tuple(self) -> RecordingData:
         data = self.load()
-        if data is None:
-            return RecordingData(None, None, None, None, None, [])
+        has_h5 = data is not None
 
-        scalars = data.get("observations/scalars")
+        if not has_h5 and not (self.data_dir / "state.json").exists():
+            return RecordingData(None, None, None, None, None, None, None, None, [])
+
+        scalars = data.get("observations/scalars") if has_h5 else None
+        times = data.get("observations/timestamps", None) if has_h5 else None
+
         strain = scalars[:, 0] if scalars is not None and scalars.size > 0 else None
         damage = scalars[:, 1] if scalars is not None and scalars.size > 0 and scalars.ndim > 1 and scalars.shape[1] > 1 else None
-        times = data.get("observations/timestamps", None)
+        confidence = scalars[:, 2] if scalars is not None and scalars.size > 0 and scalars.ndim > 1 and scalars.shape[1] > 2 else None
+        angle_of_attack = scalars[:, 3] if scalars is not None and scalars.size > 0 and scalars.ndim > 1 and scalars.shape[1] > 3 else None
+        airspeed = scalars[:, 4] if scalars is not None and scalars.size > 0 and scalars.ndim > 1 and scalars.shape[1] > 4 else None
 
-        stress_field = data.get("fields/stress", None)
+        stress_field = data.get("fields/stress", None) if has_h5 else None
         if stress_field is not None and stress_field.size == 0:
             stress_field = None
 
-        deformation_field = data.get("fields/deformation", None)
-        if deformation_field is not None and deformation_field.size == 0:
-            deformation_field = None
+        stress_field_times = data.get("fields/timestamps", None) if has_h5 else None
+        if stress_field_times is not None and stress_field_times.size == 0:
+            stress_field_times = None
 
-        cycles = _load_cycles(data, self.data_dir)
+        cycles = _load_cycles(data or {}, self.data_dir)
 
         return RecordingData(
             strain=strain,
             times=times,
             damage=damage,
+            confidence=confidence,
+            angle_of_attack=angle_of_attack,
+            airspeed=airspeed,
             stress_field=stress_field,
-            deformation_field=deformation_field,
+            stress_field_times=stress_field_times,
             cycles=cycles,
         )
 
@@ -72,11 +84,17 @@ def _load_cycles(data: dict, data_dir: Path) -> list:
     if ranges is not None and counts is not None and ranges.size > 0:
         return list(zip(ranges.tolist(), counts.tolist()))
 
-    fatigue_path = data_dir / "fatigue_state.json"
-    if fatigue_path.exists():
+    state_path = data_dir / "state.json"
+    if state_path.exists():
         import json
-        with open(fatigue_path) as f:
-            fatigue_data = json.load(f)
-        return [tuple(c) for c in fatigue_data.get("cycles", [])]
+        with open(state_path) as f:
+            snapshot = json.load(f)
+        cycles = (
+            snapshot.get("twin", {})
+            .get("structural", {})
+            .get("cycles_histogram", {})
+        )
+        if cycles:
+            return [(float(k), float(v)) for k, v in cycles.items()]
 
     return []

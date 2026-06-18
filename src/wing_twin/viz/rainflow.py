@@ -29,7 +29,7 @@ class RainflowPlotter(BasePlotter):
             else:
                 bar_width = 0.8
 
-            ax.bar(rngs, cnts, width=bar_width, color="#aa88ff", alpha=0.8, edgecolor="#ffffff44")
+            ax.bar(rngs, cnts, width=bar_width, color="#7755cc", alpha=0.8, edgecolor="#33333344")
             ax.set_xlabel("Stress Range (MPa)")
             ax.set_ylabel("Cycle Count")
             ax.set_title(f"Rainflow Cycle Histogram  ({len(rngs)} bins, {total_cycles:.1f} total cycles)")

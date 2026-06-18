@@ -32,14 +32,14 @@ class DamagePlotter(BasePlotter):
 
         fig, ax = plt.subplots(figsize=(10, 4))
 
-        ax.fill_between(times, 0, damage_warning, alpha=0.15, color="#22cc66", label="SAFE")
-        ax.fill_between(times, damage_warning, damage_critical, alpha=0.15, color="#ccaa22", label="WARNING")
+        ax.fill_between(times, 0, damage_warning, alpha=0.15, color="#33aa55", label="SAFE")
+        ax.fill_between(times, damage_warning, damage_critical, alpha=0.15, color="#ddaa22", label="WARNING")
         ax.fill_between(times, damage_critical, 1.0, alpha=0.15, color="#cc3322", label="CRITICAL")
 
-        ax.axhline(damage_warning, color="#ccaa22", linestyle="--", linewidth=1, alpha=0.8)
+        ax.axhline(damage_warning, color="#ddaa22", linestyle="--", linewidth=1, alpha=0.8)
         ax.axhline(damage_critical, color="#cc3322", linestyle="--", linewidth=1, alpha=0.8)
 
-        ax.plot(times, damage, color="#66ddff", linewidth=2, label="Accumulated damage D")
+        ax.plot(times, damage, color="#2266cc", linewidth=2, label="Accumulated damage D")
 
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Damage D")
@@ -59,7 +59,7 @@ class DamagePlotter(BasePlotter):
 
         ax.text(0.98, 0.05, f"Final D = {final_d:.4f} ({status})", transform=ax.transAxes,
                 fontsize=10, ha="right", va="bottom", color=color, fontweight="bold",
-                bbox=dict(boxstyle="round", facecolor="#222233", alpha=0.8))
+                bbox=dict(boxstyle="round", facecolor="#ffffff", edgecolor="#cccccc", alpha=0.9))
 
         fig.tight_layout()
         path = self.output_dir / filename

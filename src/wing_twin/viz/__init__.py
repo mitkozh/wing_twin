@@ -3,10 +3,13 @@ from .strain import StrainPlotter
 from .damage import DamagePlotter
 from .rainflow import RainflowPlotter
 from .sn_curve import SnCurvePlotter
-from .fields import StressFieldPlotter, DeformationFieldPlotter
+from .stress_time import StressOverTimePlotter
+from .confidence import ConfidencePlotter
+from .flight_profile import FlightProfilePlotter
 
 __all__ = [
     "VisualizationGenerator", "generate_figures_from_recording",
     "StrainPlotter", "DamagePlotter", "RainflowPlotter",
-    "SnCurvePlotter", "StressFieldPlotter", "DeformationFieldPlotter",
+    "SnCurvePlotter", "StressOverTimePlotter",
+    "ConfidencePlotter", "FlightProfilePlotter",
 ]

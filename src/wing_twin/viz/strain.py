@@ -26,11 +26,11 @@ class StrainPlotter(BasePlotter):
         strain = np.array(strain_history[:min_len])
 
         fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(times, strain, color="#7ab8f5", linewidth=0.6, alpha=0.8, label="Strain")
+        ax.plot(times, strain, color="#3377cc", linewidth=0.6, alpha=0.8, label="Strain")
 
         window = max(1, len(strain) // 10)
         envelope = np.array([np.max(strain[max(0, i-window):i+1]) for i in range(len(strain))])
-        ax.plot(times, envelope, color="#ff9966", linewidth=0.8, alpha=0.5, label="Peak envelope")
+        ax.plot(times, envelope, color="#dd6622", linewidth=0.8, alpha=0.6, label="Peak envelope")
 
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Strain")
@@ -41,8 +41,8 @@ class StrainPlotter(BasePlotter):
 
         textstr = f"mean={np.mean(strain):.1e}  max={np.max(strain):.1e}  std={np.std(strain):.1e}"
         ax.text(0.02, 0.95, textstr, transform=ax.transAxes, fontsize=8,
-                verticalalignment="top", color="#aaaaaa",
-                bbox=dict(boxstyle="round", facecolor="#222233", alpha=0.8))
+                verticalalignment="top", color="#555555",
+                bbox=dict(boxstyle="round", facecolor="#eeeeee", alpha=0.9))
 
         fig.tight_layout()
         path = self.output_dir / filename
