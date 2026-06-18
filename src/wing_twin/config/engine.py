@@ -36,6 +36,8 @@ class EngineConfig:
     # Flight lifecycle parameters
     takeoff_speed: float = 70.0
     takeoff_climb_angle: float = 10.0
+    takeoff_cruise_aoa_deg: float = 3.0
+    takeoff_transition_altitude_m: float = 24.0
     landing_approach_speed: float = 55.0
     landing_touchdown_speed: float = 5.0
     landing_approach_aoa_deg: float = 5.0

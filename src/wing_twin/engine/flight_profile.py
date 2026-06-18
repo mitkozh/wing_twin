@@ -10,6 +10,8 @@ class TakeoffProfile:
     takeoff_climb_angle_deg: float = 10.0
     reference_speed_kmh: float = 110.0
     max_aoa_deg: float = 12.0
+    cruise_aoa_deg: float = 5.0
+    transition_altitude_m: float = 24.0
 
 
 @dataclass
@@ -24,12 +26,17 @@ class LandingProfile:
     reference_speed_kmh: float = 110.0
 
 
-def takeoff_desired(timer: float, profile: TakeoffProfile) -> tuple[float, float]:
-    """Return (desired_angle_deg, desired_speed_kmh) for the given takeoff timer."""
+def takeoff_desired(
+    timer: float, altitude_m: float, profile: TakeoffProfile,
+) -> tuple[float, float]:
+    """Return (desired_angle_deg, desired_speed_kmh) for the given takeoff timer
+    and current altitude."""
     V_to = profile.takeoff_speed_kmh
     climb = profile.takeoff_climb_angle_deg
     V_ref = profile.reference_speed_kmh
     max_a = profile.max_aoa_deg
+    cruise_a = profile.cruise_aoa_deg
+    trans_alt = profile.transition_altitude_m
 
     if timer < 3.0:
         frac = timer / 3.0
@@ -42,7 +49,7 @@ def takeoff_desired(timer: float, profile: TakeoffProfile) -> tuple[float, float
     else:
         frac = min((timer - 5.0) / 5.0, 1.0)
         speed = V_to + (V_ref - V_to) * frac
-        angle = climb
+        angle = cruise_a if altitude_m >= trans_alt else climb
 
     angle = max(-max_a, min(max_a, angle))
     speed = max(0.0, min(V_ref, speed))

@@ -375,8 +375,12 @@ class DigitalTwinEngine:
             takeoff_climb_angle_deg=self.config.takeoff_climb_angle,
             reference_speed_kmh=self.config.reference_speed,
             max_aoa_deg=self.config.max_aoa,
+            cruise_aoa_deg=self.config.takeoff_cruise_aoa_deg,
+            transition_altitude_m=self.config.takeoff_transition_altitude_m,
         )
-        desired_angle, desired_speed = takeoff_desired(self._takeoff_timer, profile)
+        desired_angle, desired_speed = takeoff_desired(
+            self._takeoff_timer, self.state.flight.altitude, profile,
+        )
 
         self.state.control.desired_angle_of_attack = desired_angle
         self.state.control.desired_airspeed = desired_speed
