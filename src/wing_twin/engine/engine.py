@@ -427,6 +427,7 @@ class DigitalTwinEngine:
             self._update_altitude_km(dt)
 
         if self.state.flight.altitude <= 0.01 and self.state.control.airspeed < self.config.landing_touchdown_speed:
+            completed_km = self._km_this_flight
             self.state.flight.altitude = 0.0
             self.state.control.airspeed = 0.0
             self.state.control.angle_of_attack = 0.0
@@ -436,7 +437,7 @@ class DigitalTwinEngine:
             self.state.add_notification(
                 "flight_completed", "info", "Flight Complete",
                 f"Flight {self.state.flight.flight_number} completed. "
-                f"{self._km_this_flight:.2f} km flown.",
+                f"{completed_km:.2f} km flown.",
             )
 
     def _update_stepper(self) -> None:
