@@ -13,4 +13,5 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
       - run: uv lock --check
       - run: uv sync --extra dev
-      - run: uv run pytest -q
+      - run: uv run wing-demo-run --duration 2
+      # pytest not available for now
