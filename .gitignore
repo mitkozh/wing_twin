@@ -32,6 +32,12 @@ recordings/
 *.log
 .env
 
+# Local calibration results (rig-specific, regenerate via calibration/README.md)
+calibration/strain/data/
+calibration/strain/calibration_data.json
+calibration/stepper/data/
+calibration/stepper/stepper_calibration_*.json
+
 # OS
 .DS_Store
 Thumbs.db
@@ -86,9 +92,6 @@ crashlytics-build.properties
 
 # opencode
 opencode.json
-
-# Will update later
-docs/
 
 # ESP32
 esp32/src/secrets.h
