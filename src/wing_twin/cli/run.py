@@ -15,11 +15,9 @@ import numpy as np
 from ._lifecycle import cancel_task, finalize_recorder, publish_final_zero, setup_recorder, setup_signal_handler
 
 from wing_twin.config import PROJECT_ROOT, Config
-from wing_twin.config.calibration import CalibrationConfig
 from wing_twin.engine.engine import DigitalTwinEngine
 from wing_twin.config import EngineConfig
 from wing_twin.engine.state import EngineSnapshot
-from wing_twin.control.calibrate import calibrate_stepper
 from wing_twin.io.mqtt import (
     MqttCommandPublisher,
     MqttConnection,
@@ -70,13 +68,12 @@ async def run_production(
 
     engine.data_source = sensor_source
 
-    calib_config = CalibrationConfig()
     logger.info("Waiting for stepper status...")
     for _ in range(50):
         if stepper_monitor.state.last_seen > 0:
             break
         await asyncio.sleep(0.1)
-    # calibrate_stepper(publisher, sensor_source, stepper_monitor, calib_config)
+    # calibrate_stepper(publisher, sensor_source, stepper_monitor, CalibrationConfig())
 
     # Collect tare baseline at confirmed position 0 (no load)
     logger.info("Collecting tare baseline...")

@@ -10,8 +10,6 @@ from typing import Optional
 import numpy as np
 
 from wing_twin.fea.matrices import TransferMatrices, load_transfer_matrices
-
-logger = logging.getLogger(__name__)
 from wing_twin.fea.force_reconstruct import solve_forces
 from wing_twin.fea.field_compute import compute_stress_field, compute_deformation_field
 from wing_twin.fatigue.fatigue import FatigueState, set_random_seed
@@ -37,6 +35,8 @@ from wing_twin.engine.flight_profile import (
 )
 from wing_twin.fatigue.life_prediction import LifePredictionState
 from wing_twin.types import DataSource, RawSensorReading, ProcessedSensorReading, SensorReading, SimulatableDataSource
+
+logger = logging.getLogger(__name__)
 
 
 class FlightPhase(str, Enum):

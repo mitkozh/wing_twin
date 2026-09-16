@@ -5,7 +5,6 @@ Calibration configuration for physical model parameters.
 import json
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 
 from wing_twin.config.types import check_ge, check_gt
 from wing_twin.config.paths import PROJECT_ROOT

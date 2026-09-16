@@ -98,7 +98,7 @@ def _on_message(client, userdata, msg):
             _state.stepper_enabled = bool(data["enabled"])
         return
 
-    # Sensor data from wing/sensors
+    # Sensor data from wing/sensor/data
     _state.last_esp32_seen = time.time()
     _state.raw = data.get("raw", _state.raw)
     _state.dummy_raw = data.get("dummy_raw", _state.dummy_raw)
@@ -199,8 +199,7 @@ def create_app(broker: str = "131.155.209.40", port: int = 1884):
         c = _mqtt_client
         if c is None or not c.is_connected():
             return jsonify({"ok": False, "error": "MQTT not connected"}), 503
-        # Route stepper commands to wing/stepper/command, others to wing/control
-        # calibrate stays on wing/control (main ESP orchestrates it over MQTT)
+        # Route stepper commands to wing/stepper/command, others to wing/sensor/command
         stepper_keys = {"position", "stepper_enable", "reset_position"}
         if stepper_keys & data.keys():
             topic = _stepper_topic
