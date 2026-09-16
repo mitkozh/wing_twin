@@ -1,0 +1,17 @@
+# Normalize line endings, keep Unity YAML files mergeable
+* text=auto
+*.unity text merge=unityyamlmerge
+*.prefab text merge=unityyamlmerge
+*.asset text merge=unityyamlmerge
+*.meta text
+
+# Binary: never diff
+*.png binary
+*.jpg binary
+*.gif binary
+*.mp4 binary
+*.fbx binary
+*.obj binary
+*.vtkhdf binary
+*.npy binary
+*.h5 binary
