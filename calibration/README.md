@@ -8,11 +8,12 @@ interactive physical setup (hanging weights, disconnecting the stepper, etc.).
 
 ## Test Order
 
-### Phase 0 — Prerequisites
+### Phase 0: Prerequisites
 
-- MQTT broker running (Mosquitto on port 1883)
+- MQTT broker running (defaults to port 1884, see `mosquitto_project.conf`)
 - ESP32 powered, connected to WiFi and MQTT
-- ESP32 publishing `wing/sensors`, subscribing `wing/control`
+- Sensor ESP32 publishing `wing/sensor/data`, subscribing `wing/sensor/command`
+- Stepper ESP32 publishing `wing/stepper/status`, subscribing `wing/stepper/command`
 
 ### 1. Strain Gauge Calibration (recommended before stepper tests)
 
@@ -25,21 +26,21 @@ python -m calibration.strain.analyze       # save per-channel calibration
 
 You will need: a set of known weights (e.g. 0g, 100g, 200g, 500g, 1000g).
 
-### 2. Stepper Range — motor physical limits
+### 2. Stepper range: motor limits
 
 **Setup:** Stepper disconnected from wing (no mechanical load).
 
-Two methods — one requires no hardware:
+Two methods, one needs no hardware:
 
 | Method | Script | Requires | Saves to |
 |---|---|---|---|
 | **Model** | `python -m calibration.stepper.range_model` | Nothing (pure geometry) | `stepper_calibration_model.json` |
 | **Empirical** | `python -m calibration.stepper.range_test` | MQTT + ESP32 + ruler | `stepper_calibration_empirical.json` |
 
-Drive system: **direct-drive winch** — motor shaft has a stepped drum
+Drive system: **direct-drive winch**. The motor shaft has a stepped drum
 (16/26/40 mm), fishing wire wraps directly around it. No belts, no gears.
 
-**Model method:** geometry only — `--drum-diameter 26 --travel 140`:
+**Model method:** geometry only (`--drum-diameter 26 --travel 140`):
 ```
 steps per rev    = 200 × microstep
 wire per rev     = π × drum_diameter
@@ -55,7 +56,7 @@ layers on the drum.
 
 Update `esp32_stepper/src/config.h` after any geometry change:
 ```c
-#define STEPPER_ABSOLUTE_MAX_POSITION 2742  /* physical motor limit — update when drum/travel changes */
+#define STEPPER_ABSOLUTE_MAX_POSITION 2742  /* physical motor limit, update when drum/travel changes */
 #define STEPPER_MIN_POSITION             0
 ```
 
@@ -63,7 +64,7 @@ Update `esp32_stepper/src/config.h` after any geometry change:
 adjustable at runtime via MQTT: `{"max_position": <steps>}`.
 The engine sets it automatically; calibration scripts raise it temporarily.
 
-### 3. Stepper Max Frequency — reliable step rate
+### 3. Stepper max frequency: reliable step rate
 
 **Setup:** Stepper still disconnected from wing.
 
@@ -75,7 +76,7 @@ Commands rapid back-and-forth moves; operator presses `p` (pass) or `f`
 (fail) at each speed. Last passing speed is saved to
 `stepper_calibration_empirical.json`.
 
-### 4. Steps-per-Newton — force vs steps
+### 4. Steps per newton: force vs steps
 
 **Setup:** Reconnect stepper to wing. No weights needed.
 
@@ -128,8 +129,8 @@ Two JSON files coexist in `calibration/stepper/`:
 
 | File | Source | When active |
 |---|---|---|
-| `stepper_calibration_empirical.json` | Hardware runs (`range_test`, `max_frequency`, `steps_per_newton`) | Preferred — overrides model when values are non-null |
-| `stepper_calibration_model.json` | FEA/geometry (`range_model`, `steps_per_newton_model`) | Active fallback — used when empirical is empty |
+| `stepper_calibration_empirical.json` | Hardware runs (`range_test`, `max_frequency`, `steps_per_newton`) | Preferred, overrides model when values are non-null |
+| `stepper_calibration_model.json` | FEA/geometry (`range_model`, `steps_per_newton_model`) | Fallback, used when empirical is empty |
 
 | Field | Model Source | Empirical Source | Description |
 |---|---|---|---|
@@ -137,7 +138,7 @@ Two JSON files coexist in `calibration/stepper/`:
 | `stepper_motor_max_steps` | `range_model` | `range_test` | Physical max steps (fully wound) |
 | `stepper_motor_min_steps` | `range_model` | `range_test` | Physical min (always 0 for winch) |
 | `stepper_wing_safe_limit` | `steps_per_newton_model` | `steps_per_newton` | Hard limit to protect wing (≤ motor max) |
-| `stepper_max_frequency` | — | `max_frequency` | Max reliable step rate in Hz |
+| `stepper_max_frequency` | - | `max_frequency` | Max reliable step rate in Hz |
 | `steps_per_mm` | `range_model` | `range_test` | Calculated steps-per-mm |
 | `drum_diameter_mm` | `range_model` | `range_test` | Drum diameter for reference |
 | `microstepping` | `range_model` | `range_test` | TB6600 microstepping setting |
@@ -152,14 +153,15 @@ Re-run the test. Partial CSVs in `calibration/stepper/data/` can be
 deleted.
 
 ### MQTT connection failed
-- Verify Mosquitto: `netstat -an | findstr 1883`
+- Verify Mosquitto: `netstat -an | findstr 1884`
 - Check ESP32 LEDs
-- Verify `mosquitto_project.conf` matches scripts (default 1883)
-- Try: `python -c "import paho.mqtt.client as mqtt; c=mqtt.Client(); c.connect('localhost',1883,60)"`
+- Verify `mosquitto_project.conf` matches scripts (default broker
+  `131.155.209.40:1884`, override with `--broker`/`--port`)
+- Try: `python -c "import paho.mqtt.client as mqtt; c=mqtt.Client(); c.connect('localhost',1884,60)"`
 
 ### No sensor data during collection
-- Check ESP32 publishing `wing/sensors` with MQTT Explorer
-- Verify topic strings match config
+- Check ESP32 publishing `wing/sensor/data` with MQTT Explorer
+- Verify topic strings match `src/wing_twin/io/protocol.py`
 - Check ESP32 MQTT connection (green LEDs)
 
 ### Calibration file corrupt
@@ -188,11 +190,11 @@ python -m calibration.stepper.steps_per_newton \
 ## Quick Reference
 
 ```bash
-# Model-based (no hardware) — run anytime
+# Model-based (no hardware), run anytime
 python -m calibration.stepper.range_model --drum-diameter 26 --travel 140
 python -m calibration.stepper.steps_per_newton_model --max-newtons 1.75
 
-# Empirical (needs hardware) — recommended order
+# Empirical (needs hardware), run in this order
 python -m calibration.strain.collect
 python -m calibration.strain.analyze
 python -m calibration.stepper.range_test           # disconnect wing
